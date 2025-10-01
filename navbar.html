@@ -1,0 +1,17 @@
+<nav class="bg-blue-600 p-4 text-white flex justify-between">
+  <div class="font-bold text-xl">CarGo Rentals</div>
+  <div class="flex space-x-4">
+    <a href="/index.html" class="hover:text-gray-200">Home</a>
+    <a href="/booking.html" class="hover:text-gray-200">Book</a>
+    <a href="/history.html" class="hover:text-gray-200">History</a>
+    <a href="/admin.html" class="hover:text-gray-200">Admin</a>
+    <button onclick="logout()" class="hover:text-gray-200">Logout</button>
+  </div>
+</nav>
+
+<script>
+function logout() {
+  localStorage.removeItem('customer_id');
+  window.location.href = '/login.html';
+}
+</script>
