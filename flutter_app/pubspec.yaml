@@ -1,0 +1,16 @@
+name: flutter_app
+description: A minimal Flutter web frontend for A6 Cars
+publish_to: 'none'
+version: 0.0.1
+environment:
+  sdk: '>=2.18.0 <3.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^0.13.0
+  qr_code_scanner: ^0.7.0
+  qr_flutter: ^4.0.0
+
+flutter:
+  uses-material-design: true

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Register | CarGo Rentals</title>
+  <title>Register | A6 Cars</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 flex justify-center items-center h-screen">
@@ -19,17 +19,25 @@
 </div>
 
 <script>
-document.getElementById('registerForm').addEventListener('submit', function(e) {
+document.getElementById('registerForm').addEventListener('submit', async function(e) {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(this).entries());
-  fetch('/api/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  }).then(res => res.json()).then(data => {
-    alert(data.message);
+  try {
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      alert(json.message || 'Registration failed');
+      return;
+    }
+    alert(json.message || 'Registered');
     window.location.href = '/login.html';
-  });
+  } catch (err) {
+    alert('Registration failed: ' + (err.message || 'Network error'));
+  }
 });
 </script>
 

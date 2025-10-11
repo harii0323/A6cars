@@ -2,17 +2,58 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Home | CarGo Rentals</title>
+  <title>Home | A6 Cars</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 p-6">
 
 <div id="navbar"></div>
 <script>
-  fetch('/navbar.html').then(res => res.text()).then(html => document.getElementById('navbar').innerHTML = html);
+  fetch('/navbar.html').then(res => res.text()).then(html => { document.getElementById('navbar').innerHTML = html; setupNavbar(); });
 </script>
 
-<h1 class="text-3xl font-bold text-center text-blue-700 mt-10">Welcome to CarGo Rentals!</h1>
+<script>
+function setupNavbar(){
+  try{
+    const logoutBtn = document.getElementById('nav-logout');
+  if(logoutBtn) logoutBtn.onclick = ()=>{ localStorage.removeItem('customer_id'); localStorage.removeItem('customer_name'); window.location.href='/signup.html'; };
+    const adminLink = document.getElementById('nav-admin');
+    // if admin session present, show admin only and hide book/history
+    const isAdmin = !!sessionStorage.getItem('adminLoggedIn');
+  if(isAdmin){ if(adminLink) adminLink.style.display='inline'; document.getElementById('nav-book').style.display='none'; document.getElementById('nav-history').style.display='none'; document.getElementById('nav-home').style.display='none'; }
+    else { if(adminLink) adminLink.style.display='none'; }
+    // show customer name when logged in
+    try { const name = localStorage.getItem('customer_name'); const user = document.getElementById('nav-user'); if (name && user) { user.innerText = 'Hello, ' + name; user.classList.remove('hidden'); } } catch(e){}
+  }catch(e){}
+}
+// run after navbar loads
+setTimeout(setupNavbar,120);
+</script>
 
+<script>
+  // if not logged in (no customer_id) redirect to signup landing
+  try {
+  const cid = localStorage.getItem('customer_id');
+  const admin = sessionStorage.getItem('adminLoggedIn');
+  if (admin) { window.location.href = '/admin.html'; }
+  if (!cid && !admin) window.location.href = '/signup.html';
+  } catch(e){}
+</script>
+
+<!-- spacer for fixed navbar -->
+<div class="h-20"></div>
+
+<div class="flex justify-center mt-6">
+  <div class="bg-white p-6 rounded shadow w-2/3 text-center">
+  <h1 class="text-3xl font-bold text-blue-700">Welcome to A6 Cars!</h1>
+    <p class="mt-2 text-gray-600">Find and book cars in a few clicks.</p>
+    <div class="mt-4">
+      <a href="/booking.html" class="bg-blue-600 text-white px-4 py-2 rounded">Start Booking</a>
+    </div>
+  </div>
+</div>
+</h1>
+
+<!-- registration moved to landing page -->
 </body>
 </html>
