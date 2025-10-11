@@ -40,7 +40,6 @@ document.addEventListener('DOMContentLoaded', () => {
       document.getElementById('admin-dashboard').classList.remove('hidden');
       // show all panels collapsed by default
       loadTransactions();
-      try { if (typeof videoStream === 'undefined' || !videoStream) startScan(); } catch(e){}
     }
   } catch(e){}
 });
@@ -249,9 +248,8 @@ document.getElementById('admin-login-btn').addEventListener('click', function() 
     document.getElementById('admin-dashboard').classList.remove('hidden');
     // start loading data
     loadTransactions();
-    // ensure scanner starts when dashboard visible
-    console.debug('Admin logged in, starting scanner if available');
-    if (typeof videoStream === 'undefined' || !videoStream) startScan();
+  // scanner will start only when admin opens the Verify panel
+  console.debug('Admin logged in; scanner will start on Verify panel open');
   }).catch(err => {
     msg.innerText = err.message || 'Invalid admin ID or password.';
   });
@@ -260,7 +258,7 @@ document.getElementById('admin-login-btn').addEventListener('click', function() 
 // logout
 document.getElementById('admin-logout').addEventListener('click', () => {
   // stop camera if running
-  try{ if (typeof videoStream !== 'undefined' && videoStream) { videoStream.getTracks().forEach(t=>t.stop()); videoStream = null; } }catch(e){}
+  try{ stopScan(); }catch(e){}
   // clear token state
   window.adminToken = null;
   try { sessionStorage.removeItem('adminToken'); } catch(e){}
@@ -366,11 +364,25 @@ document.getElementById('page-size').addEventListener('change', (e) => { loadTra
 document.getElementById('btn-apply-filters').addEventListener('click', () => { loadTransactions(1, currentPageSize); });
 document.getElementById('btn-clear-filters').addEventListener('click', () => { document.getElementById('admin-search').value=''; document.getElementById('filter-start').value=''; document.getElementById('filter-end').value=''; loadTransactions(1, currentPageSize); });
 
-// Camera-based QR scanning (uses browser MediaDevices + a lightweight JS QR library if available). We'll try using the built-in BarcodeDetector if present, otherwise fall back to instructing admin to paste token.
+// Camera-based QR scanning (uses browser MediaDevices + a lightweight JS QR library if available).
+// Camera access is requested only when admin opens the Verify panel. Use stopScan() to stop and release camera.
 let videoStream = null;
-document.getElementById('stop-scan').addEventListener('click', () => {
-  if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; document.getElementById('scan-status').innerText = 'Stopped'; }
-});
+function stopScan(){
+  try{
+    const video = document.getElementById('video');
+    if (videoStream) {
+      videoStream.getTracks().forEach(t => t.stop());
+      videoStream = null;
+    }
+    if (video) {
+      try{ video.pause(); } catch(e){}
+      try{ video.srcObject = null; } catch(e){}
+    }
+    const status = document.getElementById('scan-status'); if (status) status.innerText = 'Stopped';
+  }catch(e){}
+}
+
+document.getElementById('stop-scan').addEventListener('click', () => stopScan());
 
 async function startScan() {
   const video = document.getElementById('video');
@@ -417,8 +429,7 @@ async function startScan() {
   }
 }
 
-// start camera when scanner section appears
-document.getElementById('scanner').addEventListener('mouseenter', () => { if (typeof videoStream === 'undefined' || !videoStream) startScan(); });
+// Do not auto-start camera on hover; camera will be requested explicitly when Verify panel is opened.
 
 // Menu interactions: scroll into view and toggle active state
 function setActiveMenu(id) {
@@ -440,6 +451,8 @@ function showOnly(idToShow) {
     if (!el) return;
     if (id === idToShow) el.classList.remove('hidden'); else el.classList.add('hidden');
   });
+  // if verify panel is not shown, ensure camera is stopped and released
+  try { if (idToShow !== 'col-verify') stopScan(); } catch(e){}
 }
 
 
@@ -450,7 +463,7 @@ const safeOn = (id, fn) => { const el = document.getElementById(id); if (el) el.
 safeOn('menu-add', () => { showOnly('col-addcar'); const c = document.getElementById('col-addcar'); if (c) c.scrollIntoView({behavior:'smooth'}); setActiveMenu('menu-add'); });
 safeOn('menu-verify', () => { showOnly('col-verify'); const c = document.getElementById('col-verify'); if (c) c.scrollIntoView({behavior:'smooth'}); setActiveMenu('menu-verify'); setTimeout(()=>{ if (typeof videoStream === 'undefined' || !videoStream) startScan(); }, 100); });
 safeOn('menu-trans', () => { showOnly('col-transactions'); const c = document.getElementById('col-transactions'); if (c) c.scrollIntoView({behavior:'smooth'}); setActiveMenu('menu-trans'); loadTransactions(1,currentPageSize); });
-safeOn('menu-all', () => { ['col-addcar','col-verify','col-transactions','col-carmanage'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('hidden'); }); const dash = document.getElementById('admin-dashboard'); if (dash) dash.scrollIntoView({behavior:'smooth'}); setActiveMenu('menu-all'); setTimeout(()=>{ if (typeof videoStream === 'undefined' || !videoStream) startScan(); },100); loadTransactions(1,currentPageSize); });
+safeOn('menu-all', () => { ['col-addcar','col-verify','col-transactions','col-carmanage'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('hidden'); }); const dash = document.getElementById('admin-dashboard'); if (dash) dash.scrollIntoView({behavior:'smooth'}); setActiveMenu('menu-all'); loadTransactions(1,currentPageSize); });
 safeOn('menu-carmanage', () => { showOnly('col-carmanage'); const c = document.getElementById('col-carmanage'); if (c) c.scrollIntoView({behavior:'smooth'}); setActiveMenu('menu-carmanage'); loadCarList(); });
 
 document.getElementById('export-csv').addEventListener('click', () => {
