@@ -1,44 +1,35 @@
 pipeline {
-  agent any
-  environment {
-    NODE_ENV = 'production'
-  }
-  stages {
-    stage('Checkout') {
-      steps {
-        checkout scm
-      }
+    agent any
+
+    stages {
+        stage('Build') {
+            steps {
+                script {
+                    // Detect OS
+                    def isWindows = isUnix() == false
+
+                    // Example build step that runs differently on Windows/Linux
+                    if (isWindows) {
+                        echo "Running on Windows"
+                        bat 'build.bat'
+                    } else {
+                        echo "Running on Linux/Unix"
+                        sh './build.sh'
+                    }
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh 'echo "Running tests on Linux"'
+                    } else {
+                        bat 'echo Running tests on Windows'
+                    }
+                }
+            }
+        }
     }
-    stage('Install') {
-      steps {
-        sh 'npm ci'
-      }
-    }
-    stage('Lint') {
-      steps {
-        echo 'No linter configured - skipping'
-      }
-    }
-    stage('Test') {
-      steps {
-        echo 'No tests configured - skipping'
-      }
-    }
-    stage('Build') {
-      steps {
-        echo 'No build step for this simple app - skipping'
-      }
-    }
-    stage('Deploy') {
-      steps {
-        echo 'Deployment is environment-specific. Use a post-build job or script.'
-      }
-    }
-  }
-  post {
-    always {
-      archiveArtifacts artifacts: 'server.log', allowEmptyArchive: true
-      junit allowEmptyResults: true, testResults: '**/test-results.xml'
-    }
-  }
 }
