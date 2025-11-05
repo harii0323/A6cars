@@ -17,7 +17,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(
   cors({
     origin: [
-      'https://a6cars-frontend.onrender.com', // ✅ Your frontend URL
+      'https://a6cars-frontend.onrender.com', // ✅ your frontend Render app
       'http://localhost:5173' // for local testing
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -165,7 +165,31 @@ app.get('/api/cars', async (req, res) => {
   }
 });
 
-// ===== Booking API (Protected) =====
+// ===== Fetch Cars with Bookings (for frontend) =====
+app.get('/api/cars-with-bookings', async (req, res) => {
+  try {
+    const cars = await db.query('SELECT * FROM cars');
+    const bookings = await db.query('SELECT car_id, start_date, end_date FROM bookings');
+
+    // merge booking data into cars
+    const merged = cars.rows.map(car => {
+      const booked_ranges = bookings.rows
+        .filter(b => b.car_id === car.id)
+        .map(b => ({
+          start_date: b.start_date,
+          end_date: b.end_date
+        }));
+      return { ...car, booked_ranges };
+    });
+
+    res.json(merged);
+  } catch (err) {
+    console.error('Cars-with-bookings Error:', err);
+    res.status(500).json({ error: 'Failed to load cars with bookings' });
+  }
+});
+
+// ===== Auth Middleware =====
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   if (!authHeader || !authHeader.startsWith('Bearer '))
@@ -181,6 +205,7 @@ function requireAuth(req, res, next) {
   }
 }
 
+// ===== Booking API =====
 app.post('/api/book', requireAuth, async (req, res) => {
   const { car_id, customer_id, start_date, end_date } = req.body;
   const userId = req.user?.id;
@@ -192,19 +217,38 @@ app.post('/api/book', requireAuth, async (req, res) => {
   const sql = `
     INSERT INTO bookings (car_id, customer_id, start_date, end_date)
     VALUES ($1, $2, $3, $4)
+    RETURNING id
   `;
   try {
-    await db.query(sql, [car_id, cid, start_date, end_date]);
-    res.json({ message: 'Booking successful!' });
+    const result = await db.query(sql, [car_id, cid, start_date, end_date]);
+    const bookingId = result.rows[0].id;
+
+    // Mock bill calculation
+    const days = Math.ceil(
+      (new Date(end_date) - new Date(start_date)) / (1000 * 60 * 60 * 24)
+    );
+    const rateResult = await db.query('SELECT daily_rate FROM cars WHERE id=$1', [car_id]);
+    const daily_rate = rateResult.rows[0]?.daily_rate || 0;
+    const subtotal = days * daily_rate;
+    const discount = subtotal > 5000 ? subtotal * 0.05 : 0;
+    const total = subtotal - discount;
+
+    const bill = { days, daily_rate, subtotal, discount, total };
+
+    res.json({
+      message: 'Booking successful!',
+      payment_id: bookingId,
+      bill
+    });
   } catch (err) {
     console.error('Booking Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ===== QR Payment Token =====
+// ===== Payment Confirmation =====
 app.post('/api/pay', (req, res) => {
-  const { booking_id } = req.body;
+  const { payment_id } = req.body;
   const qrToken = crypto.randomBytes(16).toString('hex');
   res.json({ message: 'Payment successful!', qr_token: qrToken });
 });
@@ -217,4 +261,3 @@ app.get('/', (req, res) => {
 // ===== Start Server =====
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
-
