@@ -29,14 +29,18 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
       body: JSON.stringify(data)
     });
 
-    const json = await res.json();
+    // Some responses may be empty or plain text (esp. on 4xx/5xx). Read as text and try to parse JSON safely.
+    const text = await res.text();
+    let json = {};
+    try { json = text ? JSON.parse(text) : {}; } catch (e) { /* non-JSON response */ }
 
     if (!res.ok) {
-      alert(json.message || 'Login failed');
+      // show any message returned, else the raw text, else a generic message
+      alert(json.message || text || 'Login failed');
       return;
     }
 
-    // ✅ Save token & email for session use
+    // ✅ Save token & email for session use (if present)
     if (json.token) {
       localStorage.setItem('auth_token', json.token);
       localStorage.setItem('email', data.email);

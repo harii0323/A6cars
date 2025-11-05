@@ -237,9 +237,13 @@ document.getElementById('admin-login-btn').addEventListener('click', function() 
     headers: { 'Content-Type': 'application/json' },
     // server expects `email` and `password` — send `email` instead of `id`
     body: JSON.stringify({ email: id, password: pass })
-  }).then(res => {
-    if (res.ok) return res.json();
-    return res.json().then(j => { throw new Error(j.message || 'Login failed'); });
+  }).then(async res => {
+    // Read body as text then parse if possible to avoid json parse errors on empty responses
+    const txt = await res.text();
+    let j = {};
+    try { j = txt ? JSON.parse(txt) : {}; } catch(e) { /* non-json body */ }
+    if (!res.ok) throw new Error(j.message || txt || 'Login failed');
+    return j;
   }).then((j) => {
   // store token in sessionStorage for this browser session and keep admin on this page
     window.adminToken = j.token;
