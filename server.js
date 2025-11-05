@@ -13,24 +13,22 @@ const app = express();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// ===== CORS (Allow Netlify frontend) =====
-app.use(cors({
-  origin: [
-    'https://lustrous-daffodil-e493e1.netlify.app',
-    'http://localhost:5173' // for local testing
-  ],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true,
-}));
+// ===== CORS (Allow frontend hosted on Render) =====
+app.use(
+  cors({
+    origin: [
+      'https://a6cars-frontend.onrender.com', // ✅ Your frontend URL
+      'http://localhost:5173' // for local testing
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    credentials: true
+  })
+);
 
 // ===== PostgreSQL Database Connection =====
-// Prefer a single DATABASE_URL (connection string) if provided, otherwise
-// fall back to individual DB_* environment variables. Always enable
-// ssl.rejectUnauthorized=false for Render-managed Postgres compatibility.
 let poolConfig;
+
 if (process.env.DATABASE_URL) {
-  // Only enable SSL for non-local hosts (Render DB). Local URLs (localhost/127.0.0.1)
-  // typically do not support SSL.
   const useSsl = !/localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL);
   poolConfig = { connectionString: process.env.DATABASE_URL };
   if (useSsl) poolConfig.ssl = { rejectUnauthorized: false };
@@ -41,7 +39,7 @@ if (process.env.DATABASE_URL) {
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
     database: process.env.DB_NAME,
-    port: process.env.DB_PORT || 5432,
+    port: process.env.DB_PORT || 5432
   };
   poolConfig.ssl = useSsl ? { rejectUnauthorized: false } : false;
 }
@@ -69,9 +67,8 @@ app.post('/api/register', async (req, res) => {
     `;
     await db.query(sql, [name, email, phone, hashedPassword]);
     res.json({ message: 'Registered successfully!' });
-
   } catch (error) {
-    if (error.code === '23505') { // duplicate email
+    if (error.code === '23505') {
       return res.status(400).json({ message: 'Email already registered' });
     }
     console.error('Register Error:', error);
@@ -99,10 +96,13 @@ app.post('/api/login', async (req, res) => {
       { expiresIn: '2h' }
     );
 
-  // Return token plus minimal user info so frontends can store customer id/name locally
-  const resp = { message: 'Login successful', token, user: { id: user.id, name: user.name, email: user.email } };
-  console.log('Login response:', resp);
-  res.json(resp);
+    const resp = {
+      message: 'Login successful',
+      token,
+      customer: { id: user.id, name: user.name, email: user.email }
+    };
+    console.log('Login response:', resp);
+    res.json(resp);
   } catch (err) {
     console.error('Login Error:', err);
     res.status(500).json({ error: err.message });
@@ -115,7 +115,7 @@ app.post('/api/admin/login', (req, res) => {
 
   if (email === process.env.ADMIN_EMAIL && password === process.env.ADMIN_PASS) {
     const token = jwt.sign({ role: 'admin' }, process.env.JWT_SECRET || 'secret', {
-      expiresIn: '2h',
+      expiresIn: '2h'
     });
     return res.json({ message: 'Admin logged in', token });
   }
@@ -131,7 +131,8 @@ function requireAdmin(req, res, next) {
   try {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
-    if (decoded.role !== 'admin') return res.status(403).json({ message: 'Not an admin' });
+    if (decoded.role !== 'admin')
+      return res.status(403).json({ message: 'Not an admin' });
     next();
   } catch (err) {
     res.status(403).json({ message: 'Invalid token' });
@@ -164,29 +165,29 @@ app.get('/api/cars', async (req, res) => {
   }
 });
 
-// ===== Booking API =====
-// ===== Auth middleware for customers =====
+// ===== Booking API (Protected) =====
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ message: 'Missing or invalid Authorization header' });
+  if (!authHeader || !authHeader.startsWith('Bearer '))
+    return res.status(401).json({ message: 'Missing or invalid Authorization header' });
+
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
     req.user = decoded;
-    return next();
+    next();
   } catch (err) {
     return res.status(401).json({ message: 'Invalid token' });
   }
 }
 
-// Protected booking endpoint: require a valid JWT and ensure the booking is for the authenticated user
 app.post('/api/book', requireAuth, async (req, res) => {
   const { car_id, customer_id, start_date, end_date } = req.body;
-  // enforce that the authenticated user id matches the customer_id if provided
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ message: 'Invalid user' });
   const cid = customer_id ? Number(customer_id) : userId;
-  if (cid !== userId) return res.status(403).json({ message: 'Cannot book for another user' });
+  if (cid !== userId)
+    return res.status(403).json({ message: 'Cannot book for another user' });
 
   const sql = `
     INSERT INTO bookings (car_id, customer_id, start_date, end_date)
@@ -202,10 +203,10 @@ app.post('/api/book', requireAuth, async (req, res) => {
 });
 
 // ===== QR Payment Token =====
-app.post('/api/payment', (req, res) => {
+app.post('/api/pay', (req, res) => {
   const { booking_id } = req.body;
-  const paymentToken = crypto.randomBytes(16).toString('hex');
-  res.json({ message: 'Payment successful!', paymentToken });
+  const qrToken = crypto.randomBytes(16).toString('hex');
+  res.json({ message: 'Payment successful!', qr_token: qrToken });
 });
 
 // ===== Default Route =====
@@ -216,3 +217,4 @@ app.get('/', (req, res) => {
 // ===== Start Server =====
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+
