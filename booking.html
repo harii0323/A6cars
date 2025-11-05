@@ -10,46 +10,55 @@
 </head>
 <body class="bg-gray-100 p-6">
 
-<!-- Navbar -->
+<!-- ✅ Navbar -->
 <div id="navbar"></div>
 <script>
-  fetch('https://a6cars-backend.onrender.com/api/booking')
+  // Load navbar HTML file locally
+  fetch('/navbar.html')
     .then(res => res.text())
-    .then(html => { document.getElementById('navbar').innerHTML = html; setupNavbar(); })
+    .then(html => {
+      document.getElementById('navbar').innerHTML = html;
+      setupNavbar();
+    })
     .catch(() => console.error('Navbar load failed'));
 </script>
 
 <script>
-function setupNavbar(){
-  try{
+function setupNavbar() {
+  try {
     const logoutBtn = document.getElementById('nav-logout');
-    if(logoutBtn) logoutBtn.onclick = ()=>{
+    if (logoutBtn) logoutBtn.onclick = () => {
       // clear full session on logout
       localStorage.removeItem('customer_id');
       localStorage.removeItem('customer_name');
       localStorage.removeItem('auth_token');
       sessionStorage.removeItem('adminLoggedIn');
-      window.location.href='/login.html';
+      window.location.href = '/login.html';
     };
+
     const adminLink = document.getElementById('nav-admin');
     const isAdmin = !!sessionStorage.getItem('adminLoggedIn');
-    if(isAdmin){
-      if(adminLink) adminLink.style.display='inline';
-      document.getElementById('nav-book').style.display='none';
-      document.getElementById('nav-history').style.display='none';
-      document.getElementById('nav-home').style.display='none';
+    if (isAdmin) {
+      if (adminLink) adminLink.style.display = 'inline';
+      document.getElementById('nav-book').style.display = 'none';
+      document.getElementById('nav-history').style.display = 'none';
+      document.getElementById('nav-home').style.display = 'none';
     } else {
-      if(adminLink) adminLink.style.display='none';
+      if (adminLink) adminLink.style.display = 'none';
     }
+
     const name = localStorage.getItem('customer_name');
     const user = document.getElementById('nav-user');
-    if (name && user) { user.innerText = 'Hello, ' + name; user.classList.remove('hidden'); }
-  }catch(e){}
+    if (name && user) {
+      user.innerText = 'Hello, ' + name;
+      user.classList.remove('hidden');
+    }
+  } catch (e) {}
 }
-setTimeout(setupNavbar,120);
+setTimeout(setupNavbar, 120);
 </script>
 
-<!-- spacer for fixed navbar -->
+<!-- Spacer for fixed navbar -->
 <div class="h-20"></div>
 
 <!-- Title Section -->
@@ -69,13 +78,20 @@ if (!customer_id) {
   window.location.href = '/login.html';
 }
 
-// API helper (use local paths while developing, otherwise point to deployed backend)
+// ✅ Backend API URL
 const BACKEND_URL = 'https://a6cars-backend.onrender.com';
-function api(path){ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return path; return BACKEND_URL + path; }
+function api(path) {
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    return path;
+  return BACKEND_URL + path;
+}
 
-// ✅ Fetch available cars with bookings from backend
+// ✅ Fetch cars with bookings
 fetch(api('/api/cars-with-bookings'), {
-  headers: (() => { const t = localStorage.getItem('auth_token'); return t ? { 'Authorization': 'Bearer ' + t } : {}; })()
+  headers: (() => {
+    const t = localStorage.getItem('auth_token');
+    return t ? { 'Authorization': 'Bearer ' + t } : {};
+  })()
 })
   .then(res => res.json())
   .then(data => {
@@ -100,15 +116,18 @@ fetch(api('/api/cars-with-bookings'), {
       `;
       container.appendChild(div);
 
-      // Use merged booked ranges
       const bookings = car.booked_ranges || [];
       const info = document.getElementById(`booked-info-${car.id}`);
       info.dataset.bookings = JSON.stringify(bookings);
 
-      const ranges = bookings.map(b => ({ start: new Date(b.start_date), end: new Date(b.end_date) })).sort((a,b) => a.start - b.start);
-      const disabledRanges = ranges.map(m => ({ from: m.start, to: m.end }));
+      const ranges = bookings.map(b => ({
+        start: new Date(b.start_date),
+        end: new Date(b.end_date)
+      })).sort((a, b) => a.start - b.start);
 
+      const disabledRanges = ranges.map(m => ({ from: m.start, to: m.end }));
       let fpEnd;
+
       const fpStart = flatpickr(document.getElementById(`start-${car.id}`), {
         dateFormat: 'd/m/Y',
         minDate: 'today',
@@ -137,6 +156,7 @@ fetch(api('/api/cars-with-bookings'), {
     document.getElementById('cars').innerHTML = `<p class="text-center text-red-600">Error loading cars: ${err.message}</p>`;
   });
 
+// ✅ Booking function
 function bookCar(car_id) {
   const start = document.getElementById(`start-${car_id}`).value;
   const end = document.getElementById(`end-${car_id}`).value;
@@ -152,8 +172,9 @@ function bookCar(car_id) {
   function parseDMY(str) {
     const parts = str.split('/');
     if (parts.length !== 3) return null;
-    return new Date(parts[2], parts[1]-1, parts[0]);
+    return new Date(parts[2], parts[1] - 1, parts[0]);
   }
+
   const s = parseDMY(start);
   const e = parseDMY(end);
   if (s > e) { alert('Start date must be before end date.'); return; }
@@ -188,57 +209,8 @@ function bookCar(car_id) {
     btn.innerText = 'Book';
     if (!data) { alert('Booking failed.'); return; }
 
-    if (data.bill && data.payment_id) {
-      const bill = data.bill;
-      const upi = `upi://pay?pa=8179134484@pthdfc&pn=${encodeURIComponent('A6 Cars')}&am=${bill.total}`;
-      const upiQrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(upi);
-
-      const w = window.open('', '_blank', 'width=420,height=640');
-      if (!w) {
-        alert('Please allow popups to view payment QR.');
-        window.location.href = '/history.html';
-        return;
-      }
-
-      w.document.title = 'Pay Now - A6 Cars';
-      w.document.body.innerHTML = `
-        <div style="font-family: Arial; padding:20px; text-align:center;">
-          <h3>Pay ₹${bill.total}</h3>
-          <p>Please scan this UPI QR to pay.</p>
-          <img src="${upiQrUrl}" alt="UPI QR" style="width:220px;height:220px;" />
-          <div style="margin-top:12px;"><a href="${upiQrUrl}" download="payment-qr.png" class="bg-gray-200 p-2 rounded border">Download QR</a></div>
-          <div style="margin-top:12px;">
-            <button id="paid-btn" style="background:#16a34a;color:#fff;padding:8px 12px;border-radius:6px;border:none;margin-right:8px;">I Paid</button>
-            <button id="cancel-pay" style="background:#ef4444;color:#fff;padding:8px 12px;border-radius:6px;border:none;">Cancel</button>
-          </div>
-        </div>
-      `;
-
-      w.document.getElementById('paid-btn').addEventListener('click', () => {
-        fetch('https://a6cars-backend.onrender.com/api/pay', {
-          method: 'POST',
-          headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ payment_id: data.payment_id })
-        })
-        .then(r => r.json())
-        .then(pj => {
-          if (pj.qr_token) {
-            const verUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(pj.qr_token);
-            w.document.body.innerHTML = `<h3>Payment successful</h3><p>Show this QR at pickup for verification</p><img src="${verUrl}" alt="QR" style="width:220px;height:220px;" /><div style="margin-top:12px;"><a href="${verUrl}" download="verification-qr.png" class="bg-gray-200 p-2 rounded border">Download Verification QR</a></div>`;
-            setTimeout(() => { try { w.close(); } catch(e){}; window.location.href = '/history.html'; }, 2000);
-          } else {
-            alert('Payment failed.');
-          }
-        })
-        .catch(() => alert('Payment verification failed.'));
-      });
-
-      w.document.getElementById('cancel-pay').addEventListener('click', () => { w.close(); window.location.href = '/history.html'; });
-
-    } else {
-      alert(data.message || 'Booking completed successfully!');
-      window.location.href = '/history.html';
-    }
+    alert(data.message || 'Booking completed successfully!');
+    window.location.href = '/history.html';
   })
   .catch(err => {
     btn.disabled = false;
