@@ -13,15 +13,17 @@ const app = express();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// ===== CORS =====
+// ===== CORS Setup =====
+// Allow requests from your frontend + local dev
 app.use(
   cors({
     origin: [
-      'https://a6cars-frontend.onrender.com',
-      'https://lustrous-daffodil-e493e1.netlify.app',
-      'http://localhost:5173'
+      'https://a6cars-frontend.onrender.com', // your Render frontend
+      'https://lustrous-daffodil-e493e1.netlify.app', // previous Netlify
+      'http://localhost:5173' // local dev
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
   })
 );
@@ -29,19 +31,19 @@ app.use(
 // ===== PostgreSQL Database Connection =====
 let poolConfig;
 if (process.env.DATABASE_URL) {
-  const useSsl = !/localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL);
-  poolConfig = { connectionString: process.env.DATABASE_URL };
-  if (useSsl) poolConfig.ssl = { rejectUnauthorized: false };
+  poolConfig = {
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false } // Required by Render PostgreSQL
+  };
 } else {
-  const useSsl = process.env.DB_HOST && !/localhost|127\.0\.0\.1/.test(process.env.DB_HOST);
   poolConfig = {
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
     database: process.env.DB_NAME,
-    port: process.env.DB_PORT || 5432
+    port: process.env.DB_PORT || 5432,
+    ssl: false
   };
-  poolConfig.ssl = useSsl ? { rejectUnauthorized: false } : false;
 }
 
 const db = new Pool(poolConfig);
@@ -54,12 +56,10 @@ db.connect()
 app.post('/api/register', async (req, res) => {
   try {
     const { name, email, phone, password } = req.body;
-
     if (!name || !email || !password)
       return res.status(400).json({ message: 'Please fill all required fields' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const sql = `
       INSERT INTO customers (name, email, phone, password)
       VALUES ($1, $2, $3, $4)
@@ -79,9 +79,8 @@ app.post('/api/register', async (req, res) => {
 // ===== Login API =====
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
-  const sql = 'SELECT * FROM customers WHERE email = $1';
   try {
-    const result = await db.query(sql, [email]);
+    const result = await db.query('SELECT * FROM customers WHERE email = $1', [email]);
     if (result.rows.length === 0)
       return res.status(401).json({ message: 'User not found' });
 
@@ -103,7 +102,7 @@ app.post('/api/login', async (req, res) => {
     });
   } catch (err) {
     console.error('Login Error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Server error during login' });
   }
 });
 
@@ -172,7 +171,7 @@ function requireAuth(req, res, next) {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
     req.user = decoded;
-    return next();
+    next();
   } catch (err) {
     return res.status(401).json({ message: 'Invalid token' });
   }
@@ -186,11 +185,11 @@ app.post('/api/book', requireAuth, async (req, res) => {
   const cid = customer_id ? Number(customer_id) : userId;
   if (cid !== userId) return res.status(403).json({ message: 'Cannot book for another user' });
 
-  const sql = `
-    INSERT INTO bookings (car_id, customer_id, start_date, end_date)
-    VALUES ($1, $2, $3, $4)
-  `;
   try {
+    const sql = `
+      INSERT INTO bookings (car_id, customer_id, start_date, end_date)
+      VALUES ($1, $2, $3, $4)
+    `;
     await db.query(sql, [car_id, cid, start_date, end_date]);
     res.json({ message: 'Booking successful!' });
   } catch (err) {
@@ -209,10 +208,8 @@ app.post('/api/payment', (req, res) => {
 // ===== Booking History API =====
 app.get('/api/history/:customer_id', async (req, res) => {
   const { customer_id } = req.params;
-
-  if (!customer_id || isNaN(customer_id)) {
+  if (!customer_id || isNaN(customer_id))
     return res.status(400).json({ message: 'Invalid customer ID' });
-  }
 
   const sql = `
     SELECT 
@@ -233,7 +230,7 @@ app.get('/api/history/:customer_id', async (req, res) => {
     const result = await db.query(sql, [customer_id]);
     res.json(result.rows);
   } catch (err) {
-    console.error('❌ History Fetch Error:', err);
+    console.error('History Fetch Error:', err);
     res.status(500).json({ error: 'Failed to load booking history' });
   }
 });
