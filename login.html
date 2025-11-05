@@ -22,8 +22,11 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
   const data = Object.fromEntries(new FormData(this).entries());
 
   try {
-    // use relative URL so local/dev server is used when running locally
-    const res = await fetch('/api/login', {
+    // API base helper: if running on localhost use relative path, otherwise use deployed backend URL
+    const BACKEND_URL = 'https://a6cars-backend.onrender.com';
+    function api(path){ if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return path; return BACKEND_URL + path; }
+
+    const res = await fetch(api('/api/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
