@@ -6,7 +6,7 @@
     <a id="nav-book" href="/booking.html" class="hover:text-gray-200">Book</a>
     <a id="nav-history" href="/history.html" class="hover:text-gray-200">History</a>
     <a id="nav-admin" href="/admin.html" class="hover:text-gray-200" style="display:none">Admin</a>
-  <button id="nav-logout" type="button" onclick="(function(){ try{ localStorage.removeItem('customer_id'); }catch(e){}; window.location.href='/signup.html'; })()" class="hover:text-gray-200">Logout</button>
+  <button id="nav-logout" type="button" class="hover:text-gray-200">Logout</button>
   </div>
 </nav>
 
@@ -50,5 +50,29 @@
       close.onclick = () => overlay.remove();
       document.body.appendChild(overlay);
     }
+  } catch(e) {}
+</script>
+
+<script>
+  // Wire up logout and display username whenever the navbar is injected
+  try {
+    const showSession = () => {
+      try {
+        const name = localStorage.getItem('customer_name');
+        const userEl = document.getElementById('nav-user');
+        if (name && userEl) { userEl.innerText = 'Hello, ' + name; userEl.classList.remove('hidden'); }
+        const logoutBtn = document.getElementById('nav-logout');
+        if (logoutBtn) {
+          logoutBtn.onclick = () => {
+            // clear full session storage and redirect to login
+            try { localStorage.removeItem('customer_id'); localStorage.removeItem('customer_name'); localStorage.removeItem('auth_token'); } catch(e) {}
+            try { sessionStorage.removeItem('adminLoggedIn'); } catch(e) {}
+            window.location.href = '/login.html';
+          };
+        }
+      } catch(e) { /* ignore */ }
+    };
+    // run immediately and also once after a short delay (since pages inject navbar HTML)
+    showSession(); setTimeout(showSession, 200);
   } catch(e) {}
 </script>

@@ -165,16 +165,38 @@ app.get('/api/cars', async (req, res) => {
 });
 
 // ===== Booking API =====
-app.post('/api/book', async (req, res) => {
+// ===== Auth middleware for customers =====
+function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization || req.headers.Authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return res.status(401).json({ message: 'Missing or invalid Authorization header' });
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
+    req.user = decoded;
+    return next();
+  } catch (err) {
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+}
+
+// Protected booking endpoint: require a valid JWT and ensure the booking is for the authenticated user
+app.post('/api/book', requireAuth, async (req, res) => {
   const { car_id, customer_id, start_date, end_date } = req.body;
+  // enforce that the authenticated user id matches the customer_id if provided
+  const userId = req.user?.id;
+  if (!userId) return res.status(401).json({ message: 'Invalid user' });
+  const cid = customer_id ? Number(customer_id) : userId;
+  if (cid !== userId) return res.status(403).json({ message: 'Cannot book for another user' });
+
   const sql = `
     INSERT INTO bookings (car_id, customer_id, start_date, end_date)
     VALUES ($1, $2, $3, $4)
   `;
   try {
-    await db.query(sql, [car_id, customer_id, start_date, end_date]);
+    await db.query(sql, [car_id, cid, start_date, end_date]);
     res.json({ message: 'Booking successful!' });
   } catch (err) {
+    console.error('Booking Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
