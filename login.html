@@ -20,26 +20,30 @@
 document.getElementById('loginForm').addEventListener('submit', async function(e) {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(this).entries());
+
   try {
     const res = await fetch('https://a6cars-backend.onrender.com/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
+
     const json = await res.json();
+
     if (!res.ok) {
-      // show server message when available
       alert(json.message || 'Login failed');
       return;
     }
-    if (!json.customer || !json.customer.id) {
-      alert('Login failed: unexpected server response');
-      return;
+
+    // ✅ Save token & email for session use
+    if (json.token) {
+      localStorage.setItem('auth_token', json.token);
+      localStorage.setItem('email', data.email);
     }
-    localStorage.setItem('customer_id', json.customer.id);
-    try { localStorage.setItem('customer_name', json.customer.name || ''); } catch(e){}
+
     alert(json.message || 'Login successful');
     window.location.href = '/booking.html';
+
   } catch (err) {
     alert('Login failed: ' + (err.message || 'Network error'));
   }
