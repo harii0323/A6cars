@@ -13,12 +13,13 @@ const app = express();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// ===== CORS (Allow frontend hosted on Render) =====
+// ===== CORS =====
 app.use(
   cors({
     origin: [
-      'https://a6cars-frontend.onrender.com', // ✅ your frontend Render app
-      'http://localhost:5173' // for local testing
+      'https://a6cars-frontend.onrender.com',
+      'https://lustrous-daffodil-e493e1.netlify.app',
+      'http://localhost:5173'
     ],
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
@@ -27,7 +28,6 @@ app.use(
 
 // ===== PostgreSQL Database Connection =====
 let poolConfig;
-
 if (process.env.DATABASE_URL) {
   const useSsl = !/localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL);
   poolConfig = { connectionString: process.env.DATABASE_URL };
@@ -96,13 +96,11 @@ app.post('/api/login', async (req, res) => {
       { expiresIn: '2h' }
     );
 
-    const resp = {
+    res.json({
       message: 'Login successful',
       token,
-      customer: { id: user.id, name: user.name, email: user.email }
-    };
-    console.log('Login response:', resp);
-    res.json(resp);
+      user: { id: user.id, name: user.name, email: user.email }
+    });
   } catch (err) {
     console.error('Login Error:', err);
     res.status(500).json({ error: err.message });
@@ -131,8 +129,7 @@ function requireAdmin(req, res, next) {
   try {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
-    if (decoded.role !== 'admin')
-      return res.status(403).json({ message: 'Not an admin' });
+    if (decoded.role !== 'admin') return res.status(403).json({ message: 'Not an admin' });
     next();
   } catch (err) {
     res.status(403).json({ message: 'Invalid token' });
@@ -165,31 +162,7 @@ app.get('/api/cars', async (req, res) => {
   }
 });
 
-// ===== Fetch Cars with Bookings (for frontend) =====
-app.get('/api/cars-with-bookings', async (req, res) => {
-  try {
-    const cars = await db.query('SELECT * FROM cars');
-    const bookings = await db.query('SELECT car_id, start_date, end_date FROM bookings');
-
-    // merge booking data into cars
-    const merged = cars.rows.map(car => {
-      const booked_ranges = bookings.rows
-        .filter(b => b.car_id === car.id)
-        .map(b => ({
-          start_date: b.start_date,
-          end_date: b.end_date
-        }));
-      return { ...car, booked_ranges };
-    });
-
-    res.json(merged);
-  } catch (err) {
-    console.error('Cars-with-bookings Error:', err);
-    res.status(500).json({ error: 'Failed to load cars with bookings' });
-  }
-});
-
-// ===== Auth Middleware =====
+// ===== Auth middleware for customers =====
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization || req.headers.Authorization;
   if (!authHeader || !authHeader.startsWith('Bearer '))
@@ -199,7 +172,7 @@ function requireAuth(req, res, next) {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
     req.user = decoded;
-    next();
+    return next();
   } catch (err) {
     return res.status(401).json({ message: 'Invalid token' });
   }
@@ -211,46 +184,58 @@ app.post('/api/book', requireAuth, async (req, res) => {
   const userId = req.user?.id;
   if (!userId) return res.status(401).json({ message: 'Invalid user' });
   const cid = customer_id ? Number(customer_id) : userId;
-  if (cid !== userId)
-    return res.status(403).json({ message: 'Cannot book for another user' });
+  if (cid !== userId) return res.status(403).json({ message: 'Cannot book for another user' });
 
   const sql = `
     INSERT INTO bookings (car_id, customer_id, start_date, end_date)
     VALUES ($1, $2, $3, $4)
-    RETURNING id
   `;
   try {
-    const result = await db.query(sql, [car_id, cid, start_date, end_date]);
-    const bookingId = result.rows[0].id;
-
-    // Mock bill calculation
-    const days = Math.ceil(
-      (new Date(end_date) - new Date(start_date)) / (1000 * 60 * 60 * 24)
-    );
-    const rateResult = await db.query('SELECT daily_rate FROM cars WHERE id=$1', [car_id]);
-    const daily_rate = rateResult.rows[0]?.daily_rate || 0;
-    const subtotal = days * daily_rate;
-    const discount = subtotal > 5000 ? subtotal * 0.05 : 0;
-    const total = subtotal - discount;
-
-    const bill = { days, daily_rate, subtotal, discount, total };
-
-    res.json({
-      message: 'Booking successful!',
-      payment_id: bookingId,
-      bill
-    });
+    await db.query(sql, [car_id, cid, start_date, end_date]);
+    res.json({ message: 'Booking successful!' });
   } catch (err) {
     console.error('Booking Error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ===== Payment Confirmation =====
-app.post('/api/pay', (req, res) => {
-  const { payment_id } = req.body;
-  const qrToken = crypto.randomBytes(16).toString('hex');
-  res.json({ message: 'Payment successful!', qr_token: qrToken });
+// ===== Payment API =====
+app.post('/api/payment', (req, res) => {
+  const { booking_id } = req.body;
+  const paymentToken = crypto.randomBytes(16).toString('hex');
+  res.json({ message: 'Payment successful!', paymentToken });
+});
+
+// ===== Booking History API =====
+app.get('/api/history/:customer_id', async (req, res) => {
+  const { customer_id } = req.params;
+
+  if (!customer_id || isNaN(customer_id)) {
+    return res.status(400).json({ message: 'Invalid customer ID' });
+  }
+
+  const sql = `
+    SELECT 
+      b.id AS booking_id,
+      c.brand, 
+      c.model, 
+      c.year,
+      c.location,
+      b.start_date, 
+      b.end_date
+    FROM bookings b
+    JOIN cars c ON b.car_id = c.id
+    WHERE b.customer_id = $1
+    ORDER BY b.start_date DESC
+  `;
+
+  try {
+    const result = await db.query(sql, [customer_id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ History Fetch Error:', err);
+    res.status(500).json({ error: 'Failed to load booking history' });
+  }
 });
 
 // ===== Default Route =====
