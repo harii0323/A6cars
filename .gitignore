@@ -1,0 +1,7 @@
+# Ignore runtime artifacts
+node_modules/
+.env
+.env.local
+server.log
+server.pid
+.DS_Store
