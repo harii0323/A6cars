@@ -2,64 +2,62 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Login | A6 Cars</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100 flex justify-center items-center h-screen">
 
-  <div class="bg-white p-8 rounded shadow-lg w-96">
-    <h2 class="text-2xl font-bold mb-6 text-center text-blue-700">Login to A6 Cars</h2>
-    <form id="loginForm" class="space-y-4">
-      <input type="email" name="email" placeholder="Email" required class="w-full p-2 border rounded focus:outline-blue-500">
-      <input type="password" name="password" placeholder="Password" required class="w-full p-2 border rounded focus:outline-blue-500">
-      <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white w-full p-2 rounded">Login</button>
-    </form>
-    <p class="text-center text-sm text-gray-600 mt-4">
-      Don't have an account? 
-      <a href="/register.html" class="text-blue-600 hover:underline">Register here</a>
-    </p>
-  </div>
+<div class="bg-white p-8 rounded shadow-lg w-96">
+  <h2 class="text-2xl font-bold mb-6 text-center">Login</h2>
+  <form id="loginForm" class="space-y-4">
+    <input type="email" name="email" placeholder="Email" required class="w-full p-2 border rounded">
+    <input type="password" name="password" placeholder="Password" required class="w-full p-2 border rounded">
+    <button type="submit" class="bg-blue-600 text-white w-full p-2 rounded">Login</button>
+  </form>
+</div>
 
-  <script>
-    document.getElementById('loginForm').addEventListener('submit', async function (e) {
-      e.preventDefault();
-      const data = Object.fromEntries(new FormData(this).entries());
+<script>
+  // 🔧 Detect environment (local or live)
+  const BACKEND_URL =
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://localhost:3000'
+      : 'https://a6cars-backend.onrender.com';
 
-      try {
-        // Determine backend API URL dynamically
-        const BACKEND_URL = 'https://a6cars-backend.onrender.com';
-        const api = path => (location.hostname === 'localhost' ? path : BACKEND_URL + path);
+  document.getElementById('loginForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(this).entries());
 
-        const res = await fetch(api('/api/login'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
 
-        const text = await res.text();
-        let json = {};
-        try { json = text ? JSON.parse(text) : {}; } catch (e) { }
+      const text = await res.text();
+      let json = {};
+      try { json = text ? JSON.parse(text) : {}; } catch {}
 
-        if (!res.ok) {
-          alert(json.message || text || 'Login failed');
-          return;
-        }
-
-        // ✅ Save login details locally
-        if (json.token) localStorage.setItem('auth_token', json.token);
-        if (json.user) {
-          localStorage.setItem('customer_id', String(json.user.id));
-          localStorage.setItem('customer_name', json.user.name || json.user.email || data.email);
-        }
-
-        alert(json.message || 'Login successful!');
-        window.location.href = '/booking.html';
-      } catch (err) {
-        alert('Login failed: ' + (err.message || 'Network error'));
+      if (!res.ok) {
+        alert(json.message || 'Login failed');
+        return;
       }
-    });
-  </script>
+
+      // ✅ Save login details
+      if (json.token) localStorage.setItem('auth_token', json.token);
+      if (json.user) {
+        localStorage.setItem('customer_id', json.user.id);
+        localStorage.setItem('customer_name', json.user.name || json.user.email);
+      }
+
+      alert('Login successful!');
+      window.location.href = '/booking.html';
+
+    } catch (err) {
+      alert('Login failed: ' + (err.message || 'Network error'));
+    }
+  });
+</script>
 
 </body>
 </html>
