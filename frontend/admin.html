@@ -1,72 +1,42 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Admin Panel | A6 Cars</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Simple lightbox modal */
+    .lb-backdrop { background: rgba(0,0,0,0.7); }
+  </style>
 </head>
-<body class="bg-gray-100 flex items-center justify-center min-h-screen">
+<body class="bg-gray-100 min-h-screen">
 
+<!-- navbar loader -->
 <div id="navbar"></div>
-
 <script>
-  fetch('/navbar.html')
-    .then(res => res.text())
-    .then(html => { document.getElementById('navbar').innerHTML = html; setupNavbar(); });
+  // load navbar.html from same origin
+  fetch('/navbar.html').then(r => r.text()).then(html => { document.getElementById('navbar').innerHTML = html; try{ setupNavbar(); }catch(e){} });
 </script>
 
+<!-- backend base -->
 <script>
-  // API base selector: when running on localhost use relative paths, otherwise point to deployed backend
-  const BACKEND_URL = 'https://a6cars.onrender.com'; // change to your Render backend URL if different
+  // Change BACKEND_URL if needed
+  const BACKEND_URL = 'https://a6cars.onrender.com';
   function api(path) {
+    // if local dev, use relative path
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return path;
     return BACKEND_URL + path;
   }
 </script>
 
-<script>
-function setupNavbar(){
-  try{
-    const logoutBtn = document.getElementById('nav-logout');
-  if(logoutBtn) logoutBtn.onclick = ()=>{ sessionStorage.removeItem('adminLoggedIn'); window.location.href='/signup.html'; };
-    const adminLink = document.getElementById('nav-admin');
-    // show admin link and hide book/history when admin present
-    const isAdmin = !!sessionStorage.getItem('adminLoggedIn');
-  if(isAdmin){ if(adminLink) adminLink.style.display='inline'; document.getElementById('nav-book').style.display='none'; document.getElementById('nav-history').style.display='none'; document.getElementById('nav-home').style.display='none'; }
-    else { if(adminLink) adminLink.style.display='none'; }
-  }catch(e){}
-}
-
-// If admin session already exists (sessionStorage), show the dashboard immediately
-document.addEventListener('DOMContentLoaded', () => {
-  try {
-    const token = sessionStorage.getItem('adminToken');
-    const isAdmin = sessionStorage.getItem('adminLoggedIn');
-    if (isAdmin && token) {
-      window.adminToken = token;
-      document.getElementById('admin-login').classList.add('hidden');
-      document.getElementById('admin-dashboard').classList.remove('hidden');
-      // show all panels collapsed by default
-      loadTransactions();
-    }
-  } catch(e){}
-});
-setTimeout(setupNavbar,120);
-</script>
-
-<!-- debug handlers removed for production UI -->
-<script>
-  // prevent direct access to admin dashboard without entering credentials on this page
-  try { localStorage.removeItem('adminToken'); } catch(e){}
-</script>
 <!-- spacer for fixed navbar -->
 <div class="h-20"></div>
 
-<!-- NEW: Modern admin layout: sidebar + content -->
-<div class="min-h-[70vh] flex bg-gray-100">
+<!-- Main admin layout -->
+<div class="min-h-[70vh] flex">
   <!-- Sidebar -->
-  <aside class="w-72 bg-white shadow-md px-4 py-6">
+  <aside class="w-80 bg-white shadow-md px-5 py-6">
     <div class="flex items-center gap-3 mb-6">
       <div class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded">A6</div>
       <div>
@@ -74,17 +44,18 @@ setTimeout(setupNavbar,120);
         <div class="text-sm text-gray-500">Control Panel</div>
       </div>
     </div>
+
     <nav class="space-y-2">
       <button id="menu-add" class="w-full text-left px-3 py-2 rounded hover:bg-blue-50">Add Cars</button>
       <button id="menu-carmanage" class="w-full text-left px-3 py-2 rounded hover:bg-blue-50">Manage Cars</button>
       <button id="menu-verify" class="w-full text-left px-3 py-2 rounded hover:bg-blue-50">Verify Payment</button>
-      <button id="menu-trans" class="w-full text-left px-3 py-2 rounded hover:bg-blue-50">Business Details</button>
+      <button id="menu-trans" class="w-full text-left px-3 py-2 rounded hover:bg-blue-50">Transactions</button>
       <button id="menu-all" class="w-full text-left px-3 py-2 rounded hover:bg-blue-50">Show All</button>
     </nav>
 
     <div class="mt-6 border-t pt-4">
       <div class="text-sm text-gray-600 mb-2">Filters</div>
-      <input id="admin-search" placeholder="Search" class="w-full border px-2 py-1 rounded mb-2" />
+      <input id="admin-search" placeholder="Search (customer/car/brand)" class="w-full border px-2 py-1 rounded mb-2" />
       <div class="flex gap-2 mb-2">
         <input id="filter-start" type="date" class="border px-2 py-1 rounded w-1/2" />
         <input id="filter-end" type="date" class="border px-2 py-1 rounded w-1/2" />
@@ -100,7 +71,7 @@ setTimeout(setupNavbar,120);
     </div>
   </aside>
 
-  <!-- Main content -->
+  <!-- Content -->
   <main class="flex-1 p-6">
     <div class="bg-white rounded-lg shadow p-6">
       <div class="flex items-center justify-between mb-6">
@@ -111,49 +82,57 @@ setTimeout(setupNavbar,120);
         <div class="text-right text-sm text-gray-500">Welcome, Admin</div>
       </div>
 
-      <!-- Login box (keeps same ID) -->
-      <div id="admin-login" class="space-y-4 max-w-md mx-auto">
-        <input id="admin-id" type="text" placeholder="Admin ID" class="w-full p-3 border rounded" value="">
+      <!-- Admin login box -->
+      <div id="admin-login" class="space-y-4 max-w-xl mx-auto">
+        <input id="admin-id" type="text" placeholder="Admin Email" class="w-full p-3 border rounded" value="">
         <input id="admin-pass" type="password" placeholder="Password" class="w-full p-3 border rounded" value="">
-        <div class="flex gap-2 items-center">
+        <div class="flex items-center gap-2">
           <button id="admin-login-btn" type="button" class="bg-green-600 text-white px-4 py-2 rounded">Login</button>
           <div id="admin-login-msg" class="text-sm text-red-600"></div>
         </div>
       </div>
 
-      <!-- Dashboard area (keeps same ID) -->
+      <!-- full dashboard -->
       <div id="admin-dashboard" class="hidden mt-6">
+        <!-- stats -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div class="p-4 bg-gradient-to-r from-blue-50 to-white rounded-lg shadow-sm">
+          <div class="p-4 rounded shadow-sm bg-gradient-to-r from-blue-50 to-white">
             <div class="text-sm text-gray-500">Total Bookings</div>
             <div id="stat-bookings" class="text-2xl font-bold">—</div>
           </div>
-          <div class="p-4 bg-gradient-to-r from-green-50 to-white rounded-lg shadow-sm">
+          <div class="p-4 rounded shadow-sm bg-gradient-to-r from-yellow-50 to-white">
             <div class="text-sm text-gray-500">Pending Payments</div>
             <div id="stat-pending" class="text-2xl font-bold">—</div>
           </div>
-          <div class="p-4 bg-gradient-to-r from-yellow-50 to-white rounded-lg shadow-sm">
+          <div class="p-4 rounded shadow-sm bg-gradient-to-r from-green-50 to-white">
             <div class="text-sm text-gray-500">Available Cars</div>
             <div id="stat-cars" class="text-2xl font-bold">—</div>
           </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div id="col-addcar" class="p-4 border rounded hidden bg-white">
-            <h3 class="text-lg font-semibold mb-3">Add Car</h3>
-            <form id="addCarForm" class="space-y-3">
+          <!-- Add Car (col) -->
+          <div id="col-addcar" class="p-4 border rounded bg-white hidden">
+            <h3 class="text-lg font-semibold mb-3">Add Car (multiple images)</h3>
+            <form id="addCarForm" enctype="multipart/form-data" class="space-y-3">
               <input type="text" name="brand" placeholder="Brand" required class="w-full p-2 border rounded">
               <input type="text" name="model" placeholder="Model" required class="w-full p-2 border rounded">
               <input type="number" name="year" placeholder="Year" required class="w-full p-2 border rounded">
               <input type="number" step="0.01" name="daily_rate" placeholder="Daily Rate (INR)" required class="w-full p-2 border rounded">
               <input type="text" name="location" placeholder="Location" required class="w-full p-2 border rounded">
+              <label class="text-sm text-gray-600">Upload images (JPG/JPEG) — you can select multiple</label>
+              <input type="file" name="images" id="images-input" accept=".jpg,.jpeg" multiple required class="w-full p-2 border rounded bg-gray-50">
+              <div id="images-preview" class="flex gap-2 mt-2 flex-wrap"></div>
               <button type="submit" class="bg-blue-600 text-white w-full p-2 rounded">Add Car</button>
             </form>
           </div>
 
-          <div id="col-carmanage" class="p-4 border rounded hidden bg-white lg:col-span-2">
+          <!-- Car manage (col) -->
+          <div id="col-carmanage" class="p-4 border rounded bg-white hidden lg:col-span-2">
             <h3 class="text-lg font-semibold mb-3">Manage Cars</h3>
             <div id="car-list" class="space-y-3"></div>
+
+            <!-- bookings panel -->
             <div id="car-bookings-panel" class="hidden mt-4 bg-gray-50 p-3 rounded">
               <div class="flex items-center justify-between mb-2">
                 <h4 class="font-medium">Bookings for <span id="car-bookings-title"></span></h4>
@@ -168,36 +147,38 @@ setTimeout(setupNavbar,120);
             </div>
           </div>
 
-          <div id="col-verify" class="p-4 border rounded hidden bg-white">
+          <!-- Verify Payment (col) -->
+          <div id="col-verify" class="p-4 border rounded bg-white hidden">
             <h3 class="text-lg font-semibold mb-3">Verify Payment</h3>
             <div id="qr-verify" class="mb-4"><div id="qr-result" class="mt-4 text-sm"></div></div>
             <div id="scanner" class="mt-4">
-              <h4 class="font-medium mb-2">Scan with Camera</h4>
+              <h4 class="font-medium mb-2">Camera Scanner</h4>
               <video id="video" width="100%" height="220" style="border:1px solid #ccc"></video>
               <div id="scan-status" class="text-sm mt-2"></div>
-              <div class="mt-2">
-                <button id="stop-scan" type="button" class="bg-red-600 text-white p-2 rounded">Stop Scan</button>
-              </div>
+              <div class="mt-2"><button id="stop-scan" class="bg-red-600 text-white p-2 rounded">Stop Scan</button></div>
             </div>
           </div>
 
-          <div id="col-transactions" class="p-4 border rounded hidden bg-white lg:col-span-3">
+          <!-- Transactions (col) -->
+          <div id="col-transactions" class="p-4 border rounded bg-white hidden lg:col-span-3">
             <div class="flex items-center justify-between">
               <h3 class="text-lg font-semibold">Transactions</h3>
               <div class="flex items-center gap-2">
-                <button id="export-csv" type="button" class="bg-gray-700 text-white px-3 py-1 rounded">Export CSV</button>
+                <button id="export-csv" class="bg-gray-700 text-white px-3 py-1 rounded">Export CSV</button>
               </div>
             </div>
             <div class="mt-3 overflow-auto">
               <table id="tx-table" class="w-full text-left border-collapse text-sm">
-                <thead class="bg-gray-50"><tr><th class="border px-2 py-1">Payment ID</th><th class="border px-2 py-1">Customer</th><th class="border px-2 py-1">Car</th><th class="border px-2 py-1">From</th><th class="border px-2 py-1">To</th><th class="border px-2 py-1">Amount</th><th class="border px-2 py-1">Paid</th><th class="border px-2 py-1">Verified</th></tr></thead>
+                <thead class="bg-gray-50">
+                  <tr><th class="border px-2 py-1">Payment ID</th><th class="border px-2 py-1">Customer</th><th class="border px-2 py-1">Car</th><th class="border px-2 py-1">From</th><th class="border px-2 py-1">To</th><th class="border px-2 py-1">Amount</th><th class="border px-2 py-1">Paid</th><th class="border px-2 py-1">Verified</th></tr>
+                </thead>
                 <tbody id="tx-body"></tbody>
               </table>
             </div>
             <div class="mt-3 flex items-center gap-2">
-              <button id="prev-page" type="button" class="px-2 py-1 bg-gray-200 rounded">Prev</button>
+              <button id="prev-page" class="px-2 py-1 bg-gray-200 rounded">Prev</button>
               <span id="page-info">Page 1</span>
-              <button id="next-page" type="button" class="px-2 py-1 bg-gray-200 rounded">Next</button>
+              <button id="next-page" class="px-2 py-1 bg-gray-200 rounded">Next</button>
               <select id="page-size" class="border px-2 py-1 rounded">
                 <option value="10">10</option>
                 <option value="20" selected>20</option>
@@ -211,344 +192,257 @@ setTimeout(setupNavbar,120);
   </main>
 </div>
 
+<!-- Lightbox modal for images -->
+<div id="lightbox" class="fixed inset-0 hidden items-center justify-center z-50">
+  <div id="lb-backdrop" class="absolute inset-0 lb-backdrop"></div>
+  <div class="relative z-50 max-w-3xl w-full mx-4">
+    <div class="bg-white rounded p-4">
+      <div class="flex justify-between items-center mb-2">
+        <div id="lb-title" class="font-semibold">Images</div>
+        <button id="lb-close" class="bg-red-500 text-white px-2 py-1 rounded">Close</button>
+      </div>
+      <div id="lb-images" class="flex gap-2 overflow-x-auto"></div>
+    </div>
+  </div>
+</div>
+
+<!-- jsQR fallback -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+
 <script>
-document.getElementById('addCarForm').addEventListener('submit', function(e) {
-  e.preventDefault();
-  const formData = new FormData(this);
-  const data = Object.fromEntries(formData.entries());
+/* ---------------------------
+   Helper & Auth utilities
+   --------------------------- */
+function getAdminToken(){
+  try { return sessionStorage.getItem('adminToken') || ''; } catch(e) { return ''; }
+}
+function setAdminToken(token){
+  try { sessionStorage.setItem('adminToken', token); sessionStorage.setItem('adminLoggedIn', '1'); window.adminToken = token; } catch(e){}
+}
 
-  // Admin endpoint requires authorization and the server route is /api/admin/addcar
-  fetch(api('/api/admin/addcar'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAdminToken() },
-    body: JSON.stringify(data)
-  })
-  .then(res => res.json())
-  .then(data => {
-    alert(data.message);
-    this.reset();
-  });
-});
-// paging state needs to be declared early to avoid TDZ when loadTransactions is called
-var currentPage = 1;
-var currentPageSize = 20;
-
-// Admin login handling (client-side)
-// ensure adminToken is not auto-restored — admin must login each session
-try { localStorage.removeItem('adminToken'); } catch(e){}
-
-document.getElementById('admin-login-btn').addEventListener('click', function() {
-  const id = document.getElementById('admin-id').value;
-  const pass = document.getElementById('admin-pass').value;
+/* ---------------------------
+   Admin login
+   --------------------------- */
+document.getElementById('admin-login-btn').addEventListener('click', async () => {
+  const email = document.getElementById('admin-id').value.trim();
+  const password = document.getElementById('admin-pass').value;
   const msg = document.getElementById('admin-login-msg');
-    fetch(api('/api/admin/login'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    // server expects `email` and `password` — send `email` instead of `id`
-    body: JSON.stringify({ email: id, password: pass })
-  }).then(async res => {
-    // Read body as text then parse if possible to avoid json parse errors on empty responses
+  msg.innerText = '';
+  try {
+    if (!email || !password) throw new Error('Enter credentials');
+    const res = await fetch(api('/api/admin/login'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
     const txt = await res.text();
     let j = {};
-    try { j = txt ? JSON.parse(txt) : {}; } catch(e) { /* non-json body */ }
+    try { j = txt ? JSON.parse(txt) : {}; } catch(e){}
     if (!res.ok) throw new Error(j.message || txt || 'Login failed');
-    return j;
-  }).then((j) => {
-  // store token in sessionStorage for this browser session and keep admin on this page
-    window.adminToken = j.token;
-    try { sessionStorage.setItem('adminLoggedIn', '1'); sessionStorage.setItem('adminToken', j.token); } catch(e){}
-    msg.innerText = '';
-    // show dashboard in-place (do not redirect) so token remains available for subsequent API calls
+    setAdminToken(j.token);
+    // show dashboard
     document.getElementById('admin-login').classList.add('hidden');
     document.getElementById('admin-dashboard').classList.remove('hidden');
-    // start loading data
-    loadTransactions();
-  // scanner will start only when admin opens the Verify panel
-  console.debug('Admin logged in; scanner will start on Verify panel open');
-  }).catch(err => {
-    msg.innerText = err.message || 'Invalid admin ID or password.';
-  });
+    // default show all
+    document.getElementById('col-addcar').classList.remove('hidden');
+    loadTransactions(1, 20); loadCarList(); loadStats();
+  } catch (err) {
+    msg.innerText = err.message || 'Login failed';
+  }
 });
 
-// logout
+/* ---------------------------
+   Logout
+   --------------------------- */
 document.getElementById('admin-logout').addEventListener('click', () => {
-  // stop camera if running
-  try{ stopScan(); }catch(e){}
-  // clear token state
+  try { stopScan(); } catch(e){}
+  sessionStorage.removeItem('adminToken'); sessionStorage.removeItem('adminLoggedIn');
   window.adminToken = null;
-  try { sessionStorage.removeItem('adminToken'); } catch(e){}
-  try { localStorage.removeItem('adminToken'); } catch(e){}
-  try { sessionStorage.removeItem('adminLoggedIn'); } catch(e){}
-  // reset UI to login view and hide dashboard panels
-  document.getElementById('admin-login').classList.remove('hidden');
+  // reset UI
   document.getElementById('admin-dashboard').classList.add('hidden');
-  ['col-addcar','col-verify','col-transactions'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.add('hidden'); });
-  // clear filters and reset page info
-  try { document.getElementById('admin-search').value=''; document.getElementById('filter-start').value=''; document.getElementById('filter-end').value=''; } catch(e){}
-  try { document.getElementById('page-info').innerText = 'Page 1 / 1'; } catch(e){}
-  // redirect back to signup landing
-  try { window.location.href = '/signup.html'; } catch(e){}
+  document.getElementById('admin-login').classList.remove('hidden');
+  ['col-addcar','col-carmanage','col-verify','col-transactions'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
 });
 
-// helper to get a trimmed admin token from either window or localStorage
-function getAdminToken(){
-  try{ return (window.adminToken || sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken') || '').toString().trim(); }catch(e){ return ''; }
-  }
-
-
-function buildFiltersQuery(params={}){
-  const q = document.getElementById('admin-search').value.trim();
-  const start = document.getElementById('filter-start').value;
-  const end = document.getElementById('filter-end').value;
-  if (q) params.q = q;
-  if (start) params.start_date = start;
-  if (end) params.end_date = end;
-  return Object.keys(params).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(params[k])).join('&');
-}
-
-function loadTransactions(page=1,pageSize=20) {
-  currentPage = page;
-  currentPageSize = pageSize;
-  const token = getAdminToken();
-  // if no token, show login and don't call protected endpoint
-  if (!token) {
-    try { document.getElementById('admin-login').classList.remove('hidden'); document.getElementById('admin-dashboard').classList.add('hidden'); } catch(e){}
-    return Promise.resolve({ page:1, pageSize:20, total:0, data: [] });
-  }
-  const qStr = buildFiltersQuery({ page, pageSize });
-  return fetch(api(`/api/admin/transactions?${qStr}`), { headers: { 'Authorization': 'Bearer ' + token } }).then(r => {
-    if (r.status === 401) {
-      // invalid token - clear and force login flow
-      try{ sessionStorage.removeItem('adminToken'); sessionStorage.removeItem('adminLoggedIn'); localStorage.removeItem('adminToken'); }catch(e){}
-      window.adminToken = null;
-      try{ document.getElementById('admin-login').classList.remove('hidden'); document.getElementById('admin-dashboard').classList.add('hidden'); }catch(e){}
-      return Promise.resolve({ page:1, pageSize:20, total:0, data: [] });
-    }
-    return r.json();
-  }).then(resp => {
-    const list = resp.data || [];
-    const body = document.getElementById('tx-body');
-    body.innerHTML = '';
-    (list || []).forEach(tx => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td class="border px-2 py-1">${tx.payment_id}</td><td class="border px-2 py-1">${tx.name} (${tx.email})</td><td class="border px-2 py-1">${tx.brand} ${tx.model}</td><td class="border px-2 py-1">${(new Date(tx.start_date)).toLocaleDateString()}</td><td class="border px-2 py-1">${(new Date(tx.end_date)).toLocaleDateString()}</td><td class="border px-2 py-1">₹${tx.amount}</td><td class="border px-2 py-1">${tx.paid==1?'Yes':'No'}</td><td class="border px-2 py-1">${tx.verified==1?'Yes':'No'}</td>`;
-      body.appendChild(tr);
-    });
-    document.getElementById('page-info').innerText = `Page ${resp.page} / ${Math.max(1, Math.ceil((resp.total||0)/resp.pageSize))}`;
-    // populate dashboard stats
-    try { loadStats(); } catch(e){}
-    // update stats from transactions response
-    try {
-      // total payments/bookings
-      const statB = document.getElementById('stat-bookings'); if (statB) statB.innerText = resp.total || 0;
-      // count pending payments on this page (best-effort); fetch a larger page for accurate pending count via loadStats
-      const pendingOnPage = (resp.data || []).filter(p => p.paid==0).length;
-      const statP = document.getElementById('stat-pending'); if (statP) statP.innerText = pendingOnPage;
-  // refresh cars count
-  fetch(api('/api/cars'), { headers: { 'Authorization': 'Bearer ' + token } }).then(r2 => r2.json()).then(cars => { const statC = document.getElementById('stat-cars'); if (statC) statC.innerText = (Array.isArray(cars)?cars.length:0); }).catch(()=>{});
-    } catch(e){}
-  }).catch(()=>{});
-}
-
-// Load dashboard stats: total bookings, pending payments, available cars
-function loadStats(){
-  const token = getAdminToken();
-  if (!token) return;
-  // fetch a large page size to approximate pending payments; fallback to separate queries if needed
-  fetch(api('/api/admin/transactions?page=1&pageSize=1000'), { headers: { 'Authorization': 'Bearer ' + token } })
-    .then(r => { if (!r.ok) throw new Error('Unauthorized'); return r.json(); })
-    .then(j => {
-      const total = j.total || (Array.isArray(j.data)? j.data.length : 0);
-      const pending = (j.data || []).filter(p => p.paid==0).length;
-      const statB = document.getElementById('stat-bookings'); if (statB) statB.innerText = total;
-      const statP = document.getElementById('stat-pending'); if (statP) statP.innerText = pending;
-    }).catch(()=>{
-      // ignore
-    });
-
-  fetch(api('/api/cars'), { headers: { 'Authorization': 'Bearer ' + token } }).then(r => r.json()).then(cars => {
-    const statC = document.getElementById('stat-cars'); if (statC) statC.innerText = (Array.isArray(cars)?cars.length:0);
-  }).catch(()=>{});
-}
-
-// pagination controls
-document.getElementById('prev-page').addEventListener('click', () => { if (currentPage>1) loadTransactions(currentPage-1, currentPageSize); });
-document.getElementById('next-page').addEventListener('click', () => { loadTransactions(currentPage+1, currentPageSize); });
-document.getElementById('page-size').addEventListener('change', (e) => { loadTransactions(1, parseInt(e.target.value)); });
-
-document.getElementById('btn-apply-filters').addEventListener('click', () => { loadTransactions(1, currentPageSize); });
-document.getElementById('btn-clear-filters').addEventListener('click', () => { document.getElementById('admin-search').value=''; document.getElementById('filter-start').value=''; document.getElementById('filter-end').value=''; loadTransactions(1, currentPageSize); });
-
-// Camera-based QR scanning (uses browser MediaDevices + a lightweight JS QR library if available).
-// Camera access is requested only when admin opens the Verify panel. Use stopScan() to stop and release camera.
-let videoStream = null;
-function stopScan(){
-  try{
-    const video = document.getElementById('video');
-    if (videoStream) {
-      videoStream.getTracks().forEach(t => t.stop());
-      videoStream = null;
-    }
-    if (video) {
-      try{ video.pause(); } catch(e){}
-      try{ video.srcObject = null; } catch(e){}
-    }
-    const status = document.getElementById('scan-status'); if (status) status.innerText = 'Stopped';
-  }catch(e){}
-}
-
-document.getElementById('stop-scan').addEventListener('click', () => stopScan());
-
-async function startScan() {
-  const video = document.getElementById('video');
-  document.getElementById('scan-status').innerText = 'Starting camera...';
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    video.srcObject = stream;
-    videoStream = stream;
-    video.play();
-    document.getElementById('scan-status').innerText = 'Scanning...';
-
-    // Use BarcodeDetector if available (supported in some browsers)
-    if (window.BarcodeDetector) {
-      const detector = new BarcodeDetector({formats: ['qr_code']});
-      const scanLoop = async () => {
-        try {
-          const faces = await detector.detect(video);
-          if (faces && faces.length) {
-            const token = faces[0].rawValue;
-            videoStream.getTracks().forEach(t => t.stop());
-            videoStream = null;
-            document.getElementById('scan-status').innerText = 'Found token';
-            // call verify endpoint with auth
-            fetch(api('/api/admin/verify-qr'), { method: 'POST', headers: {'Content-Type':'application/json','Authorization':'Bearer ' + window.adminToken}, body: JSON.stringify({ qr_token: token }) }).then(r => r.json()).then(j => {
-              const result = document.getElementById('qr-result');
-              if (j.booking) {
-                result.innerText = `Verified! Booking ID: ${j.booking.id} (${j.booking.start_date} - ${j.booking.end_date})\nCar: ${j.car.brand} ${j.car.model}\nCustomer: ${j.customer.name} (${j.customer.email})\nAmount: ₹${j.amount}`;
-                loadTransactions();
-              } else {
-                result.innerText = j.message || 'Not found';
-              }
-            }).catch(()=>{ document.getElementById('qr-result').innerText = 'Verify failed'; });
-            return;
-          }
-        } catch (e) {}
-        requestAnimationFrame(scanLoop);
-      };
-      requestAnimationFrame(scanLoop);
-    } else {
-      document.getElementById('scan-status').innerText = 'Camera started — please pause and paste token if automatic scanning not supported.';
-    }
-  } catch (e) {
-    document.getElementById('scan-status').innerText = 'Camera start failed';
-  }
-}
-
-// Do not auto-start camera on hover; camera will be requested explicitly when Verify panel is opened.
-
-// Menu interactions: scroll into view and toggle active state
-function setActiveMenu(id) {
-  ['menu-add','menu-verify','menu-trans','menu-all'].forEach(k => {
+/* ---------------------------
+   Menu wiring
+   --------------------------- */
+function setActiveMenu(key){
+  ['menu-add','menu-carmanage','menu-verify','menu-trans','menu-all'].forEach(k => {
     const el = document.getElementById(k);
     if (!el) return;
-    if (k === id) {
-      el.classList.remove('bg-gray-100'); el.classList.add('bg-blue-100'); el.classList.add('text-blue-800');
-    } else {
-      el.classList.remove('bg-blue-100'); el.classList.remove('text-blue-800'); el.classList.add('bg-gray-100'); el.classList.remove('text-gray-800');
-    }
+    if (k === key) { el.classList.add('bg-blue-100','text-blue-800'); } else { el.classList.remove('bg-blue-100','text-blue-800'); }
   });
 }
+document.getElementById('menu-add').addEventListener('click', () => { showOnly('col-addcar'); setActiveMenu('menu-add'); });
+document.getElementById('menu-carmanage').addEventListener('click', () => { showOnly('col-carmanage'); loadCarList(); setActiveMenu('menu-carmanage'); });
+document.getElementById('menu-verify').addEventListener('click', () => { showOnly('col-verify'); setActiveMenu('menu-verify'); startScan(); });
+document.getElementById('menu-trans').addEventListener('click', () => { showOnly('col-transactions'); loadTransactions(1, currentPageSize); setActiveMenu('menu-trans'); });
+document.getElementById('menu-all').addEventListener('click', () => { ['col-addcar','col-carmanage','col-verify','col-transactions'].forEach(id=>{ const el=document.getElementById(id); if (el) el.classList.remove('hidden'); }); setActiveMenu('menu-all'); loadCarList(); loadTransactions(1,currentPageSize); });
 
-
-function showOnly(idToShow) {
-  ['col-addcar','col-verify','col-transactions','col-carmanage'].forEach(id => {
+function showOnly(idToShow){
+  ['col-addcar','col-carmanage','col-verify','col-transactions'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
     if (id === idToShow) el.classList.remove('hidden'); else el.classList.add('hidden');
   });
-  // if verify panel is not shown, ensure camera is stopped and released
-  try { if (idToShow !== 'col-verify') stopScan(); } catch(e){}
+  if (idToShow !== 'col-verify') stopScan();
 }
 
+/* ---------------------------
+   Add Car (multiple images)
+   --------------------------- */
+const imagesInput = document.getElementById('images-input');
+const imagesPreview = document.getElementById('images-preview');
 
-// (Removed dynamic small 'Manage Cars' button insertion — using sidebar button)
-
-// safe event listener attachments
-const safeOn = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
-safeOn('menu-add', () => { showOnly('col-addcar'); const c = document.getElementById('col-addcar'); if (c) c.scrollIntoView({behavior:'smooth'}); setActiveMenu('menu-add'); });
-safeOn('menu-verify', () => { showOnly('col-verify'); const c = document.getElementById('col-verify'); if (c) c.scrollIntoView({behavior:'smooth'}); setActiveMenu('menu-verify'); setTimeout(()=>{ if (typeof videoStream === 'undefined' || !videoStream) startScan(); }, 100); });
-safeOn('menu-trans', () => { showOnly('col-transactions'); const c = document.getElementById('col-transactions'); if (c) c.scrollIntoView({behavior:'smooth'}); setActiveMenu('menu-trans'); loadTransactions(1,currentPageSize); });
-safeOn('menu-all', () => { ['col-addcar','col-verify','col-transactions','col-carmanage'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('hidden'); }); const dash = document.getElementById('admin-dashboard'); if (dash) dash.scrollIntoView({behavior:'smooth'}); setActiveMenu('menu-all'); loadTransactions(1,currentPageSize); });
-safeOn('menu-carmanage', () => { showOnly('col-carmanage'); const c = document.getElementById('col-carmanage'); if (c) c.scrollIntoView({behavior:'smooth'}); setActiveMenu('menu-carmanage'); loadCarList(); });
-
-document.getElementById('export-csv').addEventListener('click', () => {
-  const token = getAdminToken();
-  const qStr = buildFiltersQuery();
-  const url = api(`/api/admin/transactions.csv${qStr?('?'+qStr):''}`);
-  fetch(url, { headers: { 'Authorization': 'Bearer ' + token } }).then(r => {
-    if (r.status === 401) throw new Error('Unauthorized');
-    if (!r.ok) throw new Error('Export failed');
-    return r.blob();
-  }).then(b => {
-    const url = URL.createObjectURL(b);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'transactions.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  }).catch(()=> alert('Export failed'));
+imagesInput && imagesInput.addEventListener('change', function(){
+  imagesPreview.innerHTML = '';
+  const files = this.files;
+  if (!files || !files.length) return;
+  Array.from(files).forEach(f => {
+    const url = URL.createObjectURL(f);
+    const img = document.createElement('img');
+    img.src = url;
+    img.className = 'w-28 h-20 object-cover rounded border';
+    imagesPreview.appendChild(img);
+  });
 });
 
-// jsQR fallback loader
-const jsQrScript = document.createElement('script');
-jsQrScript.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
-// Car management logic
-function loadCarList() {
+document.getElementById('addCarForm').addEventListener('submit', async function(e){
+  e.preventDefault();
+  const token = getAdminToken();
+  if (!token) { alert('Please login as admin.'); return; }
+  const fd = new FormData(this);
+
+  // append files (already included by using form element with file inputs named 'images')
+  // but ensure we use 'images' multiple:
+  const fileInput = document.querySelector('#images-input');
+  if (fileInput && fileInput.files && fileInput.files.length){
+    // remove default images keys added by form if any, and append properly
+    // (FormData already includes file input entries with name 'images', so this is safe)
+  } else {
+    alert('Select at least one image (jpg).');
+    return;
+  }
+
+  try {
+    const res = await fetch(api('/api/admin/addcar'), {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + token },
+      body: fd
+    });
+    const txt = await res.text();
+    let j = {};
+    try { j = txt ? JSON.parse(txt) : {}; } catch(e){}
+    if (!res.ok) throw new Error(j.message || txt || 'Add car failed');
+    alert(j.message || 'Car added');
+    this.reset();
+    imagesPreview.innerHTML = '';
+    loadCarList();
+  } catch(err){
+    console.error(err);
+    alert(err.message || 'Failed to add car');
+  }
+});
+
+/* ---------------------------
+   Load car list (with images)
+   --------------------------- */
+async function loadCarList(){
   const token = getAdminToken();
   if (!token) return;
-  fetch(api('/api/cars'), { headers: { 'Authorization': 'Bearer ' + token } })
-    .then(r => r.json())
-    .then(list => {
-      const carListDiv = document.getElementById('car-list');
-      carListDiv.innerHTML = '';
-      if (!Array.isArray(list) || list.length === 0) {
-        carListDiv.innerHTML = '<div class="text-gray-500">No cars found.</div>';
-        return;
-      }
-      list.forEach(car => {
-        const carDiv = document.createElement('div');
-        carDiv.className = 'border rounded p-3 mb-2 flex flex-col md:flex-row md:items-center justify-between';
-        carDiv.innerHTML = `
+  try {
+    const res = await fetch(api('/api/cars'), { headers: { 'Authorization': 'Bearer ' + token } });
+    if (!res.ok) throw new Error('Failed');
+    const list = await res.json();
+    const carListDiv = document.getElementById('car-list');
+    carListDiv.innerHTML = '';
+    if (!Array.isArray(list) || list.length === 0) {
+      carListDiv.innerHTML = '<div class="text-gray-500">No cars found.</div>';
+      return;
+    }
+
+    list.forEach(car => {
+      // normalize images array:
+      let imgs = [];
+      if (Array.isArray(car.images) && car.images.length) imgs = car.images;
+      else if (car.image_url) imgs = [car.image_url];
+      else if (car.image_urls) imgs = car.image_urls;
+      // ensure absolute URLs: if starts with /uploads or relative, prefix backend
+      imgs = imgs.map(u => {
+        if (!u) return '';
+        if (u.startsWith('http')) return u;
+        if (u.startsWith('/')) return BACKEND_URL + u;
+        return BACKEND_URL + '/' + u;
+      }).filter(Boolean);
+
+      // first image or placeholder
+      const thumb = imgs[0] || 'https://via.placeholder.com/160x100?text=No+Image';
+
+      const carDiv = document.createElement('div');
+      carDiv.className = 'border rounded p-3 mb-3 flex items-center justify-between';
+      carDiv.innerHTML = `
+        <div class="flex items-center gap-4">
+          <img src="${thumb}" alt="${escapeHtml(car.brand)}" class="w-36 h-24 object-cover rounded border cursor-pointer" data-images='${JSON.stringify(imgs)}'>
           <div>
-            <span class="font-semibold">${car.brand} ${car.model}</span> (${car.year})<br>
-            Location: ${car.location} | Rate: ₹${car.daily_rate}/day
+            <div class="font-semibold">${escapeHtml(car.brand)} ${escapeHtml(car.model)}</div>
+            <div class="text-gray-600 text-sm">Year: ${car.year} | ₹${car.daily_rate}/day</div>
+            <div class="text-gray-500 text-xs">${escapeHtml(car.location || '')}</div>
           </div>
-          <div class="flex gap-2 mt-2 md:mt-0">
-            <button class="bg-red-600 text-white px-3 py-1 rounded" data-carid="${car.id}" onclick="deleteCar(${car.id}, this)">Delete</button>
-            <button class="bg-blue-600 text-white px-3 py-1 rounded" data-carid="${car.id}" onclick="viewCarBookings(${car.id}, '${car.brand} ${car.model}')">View Bookings</button>
-          </div>
-        `;
-        carListDiv.appendChild(carDiv);
+        </div>
+        <div class="flex gap-2">
+          <button class="bg-blue-600 text-white px-3 py-1 rounded view-bookings" data-carid="${car.id}" data-carname="${escapeHtml(car.brand+' '+car.model)}">View Bookings</button>
+          <button class="bg-red-600 text-white px-3 py-1 rounded delete-car" data-carid="${car.id}">Delete</button>
+        </div>
+      `;
+      carListDiv.appendChild(carDiv);
+
+      // thumbnail click => open lightbox with full gallery
+      carDiv.querySelector('img').addEventListener('click', function(){
+        const arr = JSON.parse(this.getAttribute('data-images') || '[]');
+        openLightbox(arr, `${car.brand} ${car.model}`);
       });
+
+      // view bookings handler
+      const vb = carDiv.querySelector('.view-bookings');
+      vb && vb.addEventListener('click', () => viewCarBookings(car.id, car.brand+' '+car.model));
+      // delete handler
+      const del = carDiv.querySelector('.delete-car');
+      del && del.addEventListener('click', () => deleteCar(car.id, del));
     });
+  } catch(e){
+    console.error(e);
+    document.getElementById('car-list').innerHTML = '<div class="text-red-500">Failed to load cars</div>';
+  }
 }
 
-function deleteCar(carId, btn) {
-  if (!confirm('Are you sure you want to delete this car? This will also delete all bookings for this car.')) return;
+/* ---------------------------
+   Delete Car
+   --------------------------- */
+async function deleteCar(carId, btn){
+  if (!confirm('Delete car and its bookings?')) return;
   const token = getAdminToken();
   btn.disabled = true;
-  fetch(api('/api/deletecar'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-    body: JSON.stringify({ car_id: carId })
-  })
-    .then(r => r.json())
-    .then(j => {
-      alert(j.message || 'Car deleted');
-      loadCarList();
-    })
-    .catch(()=>{ alert('Delete failed'); btn.disabled = false; });
+  try {
+    const res = await fetch(api('/api/deletecar'), {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify({ car_id: carId })
+    });
+    const j = await res.json();
+    if (!res.ok) throw new Error(j.message || 'Delete failed');
+    alert(j.message || 'Deleted');
+    loadCarList();
+  } catch(e){
+    alert(e.message || 'Delete failed');
+    btn.disabled = false;
+  }
 }
 
-function viewCarBookings(carId, carName) {
+/* ---------------------------
+   View bookings for a car
+   --------------------------- */
+function viewCarBookings(carId, carName){
   const token = getAdminToken();
+  if (!token) return;
   const panel = document.getElementById('car-bookings-panel');
   const title = document.getElementById('car-bookings-title');
   const body = document.getElementById('car-bookings-body');
@@ -565,91 +459,221 @@ function viewCarBookings(carId, carName) {
       }
       list.forEach(bk => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td class="border px-2 py-1">${bk.id}</td><td class="border px-2 py-1">${bk.name} (${bk.email})</td><td class="border px-2 py-1">${(new Date(bk.start_date)).toLocaleDateString()}</td><td class="border px-2 py-1">${(new Date(bk.end_date)).toLocaleDateString()}</td><td class="border px-2 py-1">₹${bk.amount}</td><td class="border px-2 py-1">${bk.paid==1?'Yes':'No'}</td><td class="border px-2 py-1">${bk.verified==1?'Yes':'No'}</td>`;
+        tr.innerHTML = `<td class="border px-2 py-1">${bk.booking_id || bk.id}</td><td class="border px-2 py-1">${escapeHtml(bk.customer_name || bk.name || bk.email || '')}</td><td class="border px-2 py-1">${(new Date(bk.start_date)).toLocaleDateString()}</td><td class="border px-2 py-1">${(new Date(bk.end_date)).toLocaleDateString()}</td><td class="border px-2 py-1">${bk.amount? '₹'+bk.amount : '-'}</td><td class="border px-2 py-1">${bk.paid==1?'Yes':'No'}</td><td class="border px-2 py-1">${bk.verified==1?'Yes':'No'}</td>`;
         body.appendChild(tr);
       });
-    });
+    }).catch(()=> { body.innerHTML = '<tr><td colspan="7" class="text-red-500">Failed to load bookings</td></tr>'; });
 }
 
 document.getElementById('close-car-bookings').addEventListener('click', () => {
   document.getElementById('car-bookings-panel').classList.add('hidden');
 });
-document.head.appendChild(jsQrScript);
 
-// modify startScan to use jsQR if BarcodeDetector not available
-const originalStartScan = startScan;
-startScan = async function() {
+/* ---------------------------
+   Lightbox controls
+   --------------------------- */
+function openLightbox(images, title){
+  const lb = document.getElementById('lightbox');
+  const lbImages = document.getElementById('lb-images');
+  const lbTitle = document.getElementById('lb-title');
+  lbImages.innerHTML = '';
+  lbTitle.innerText = title || 'Images';
+  (images || []).forEach(url => {
+    const img = document.createElement('img');
+    img.src = url;
+    img.className = 'max-h-96 object-contain mr-2';
+    lbImages.appendChild(img);
+  });
+  lb.classList.remove('hidden');
+  lb.classList.add('flex');
+}
+document.getElementById('lb-close').addEventListener('click', () => {
+  const lb = document.getElementById('lightbox');
+  lb.classList.add('hidden'); lb.classList.remove('flex');
+});
+
+/* ---------------------------
+   Transactions / pagination / CSV export
+   --------------------------- */
+let currentPage = 1;
+let currentPageSize = 20;
+
+document.getElementById('prev-page').addEventListener('click', ()=> { if (currentPage>1) loadTransactions(currentPage-1, currentPageSize); });
+document.getElementById('next-page').addEventListener('click', ()=> loadTransactions(currentPage+1, currentPageSize));
+document.getElementById('page-size').addEventListener('change', (e)=> { currentPageSize = parseInt(e.target.value); loadTransactions(1,currentPageSize); });
+document.getElementById('btn-apply-filters').addEventListener('click', ()=> loadTransactions(1,currentPageSize));
+document.getElementById('btn-clear-filters').addEventListener('click', ()=> { document.getElementById('admin-search').value=''; document.getElementById('filter-start').value=''; document.getElementById('filter-end').value=''; loadTransactions(1,currentPageSize); });
+
+function buildFiltersQuery(params={}){
+  const q = document.getElementById('admin-search').value.trim();
+  const start = document.getElementById('filter-start').value;
+  const end = document.getElementById('filter-end').value;
+  if (q) params.q = q;
+  if (start) params.start_date = start;
+  if (end) params.end_date = end;
+  return Object.keys(params).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(params[k])).join('&');
+}
+
+async function loadTransactions(page=1,pageSize=20){
+  const token = getAdminToken(); if (!token) return;
+  currentPage = page; currentPageSize = pageSize;
+  const qStr = buildFiltersQuery({ page, pageSize });
+  try {
+    const res = await fetch(api(`/api/admin/transactions?${qStr}`), { headers: { 'Authorization': 'Bearer ' + token } });
+    if (res.status === 401) { sessionStorage.removeItem('adminToken'); sessionStorage.removeItem('adminLoggedIn'); window.adminToken = null; document.getElementById('admin-login').classList.remove('hidden'); document.getElementById('admin-dashboard').classList.add('hidden'); return; }
+    const resp = await res.json();
+    const list = resp.data || [];
+    const body = document.getElementById('tx-body'); body.innerHTML = '';
+    list.forEach(tx => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td class="border px-2 py-1">${tx.payment_id}</td><td class="border px-2 py-1">${escapeHtml(tx.name || tx.customer_name || '')} (${escapeHtml(tx.email || '')})</td><td class="border px-2 py-1">${escapeHtml(tx.brand || '')} ${escapeHtml(tx.model || '')}</td><td class="border px-2 py-1">${(new Date(tx.start_date)).toLocaleDateString()}</td><td class="border px-2 py-1">${(new Date(tx.end_date)).toLocaleDateString()}</td><td class="border px-2 py-1">₹${tx.amount}</td><td class="border px-2 py-1">${tx.paid==1?'Yes':'No'}</td><td class="border px-2 py-1">${tx.verified==1?'Yes':'No'}</td>`;
+      body.appendChild(tr);
+    });
+    document.getElementById('page-info').innerText = `Page ${resp.page} / ${Math.max(1, Math.ceil((resp.total||0)/resp.pageSize))}`;
+    // update stats
+    try { document.getElementById('stat-bookings').innerText = resp.total || (resp.data?resp.data.length:0); } catch(e){}
+    loadStats();
+  } catch(e){ console.error(e); }
+}
+
+document.getElementById('export-csv').addEventListener('click', () => {
+  const token = getAdminToken(); if (!token) return;
+  const qStr = buildFiltersQuery();
+  const url = api(`/api/admin/transactions.csv${qStr?('?'+qStr):''}`);
+  fetch(url, { headers: { 'Authorization': 'Bearer ' + token } }).then(r => {
+    if (!r.ok) throw new Error('Export failed');
+    return r.blob();
+  }).then(b => {
+    const url = URL.createObjectURL(b);
+    const a = document.createElement('a'); a.href = url; a.download = 'transactions.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }).catch(()=> alert('Export failed'));
+});
+
+/* ---------------------------
+   Dashboard stats
+   --------------------------- */
+function loadStats(){
+  const token = getAdminToken(); if (!token) return;
+  // transactions for stats:
+  fetch(api('/api/admin/transactions?page=1&pageSize=1000'), { headers: { 'Authorization': 'Bearer ' + token } })
+    .then(r => r.ok? r.json() : Promise.reject('unauth'))
+    .then(j => {
+      const total = j.total || (Array.isArray(j.data)? j.data.length : 0);
+      const pending = (j.data || []).filter(p => p.paid==0).length;
+      document.getElementById('stat-bookings').innerText = total;
+      document.getElementById('stat-pending').innerText = pending;
+    }).catch(()=>{});
+  fetch(api('/api/cars'), { headers: { 'Authorization': 'Bearer ' + token } }).then(r => r.json()).then(cars => { document.getElementById('stat-cars').innerText = (Array.isArray(cars)?cars.length:0); }).catch(()=>{});
+}
+
+/* ---------------------------
+   Camera QR scanning (BarcodeDetector + jsQR fallback)
+   --------------------------- */
+let videoStream = null;
+async function startScan(){
   const video = document.getElementById('video');
-  document.getElementById('scan-status').innerText = 'Starting camera...';
+  const status = document.getElementById('scan-status');
+  status.innerText = 'Starting camera...';
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
     video.srcObject = stream;
     videoStream = stream;
     video.play();
-    document.getElementById('scan-status').innerText = 'Scanning...';
+    status.innerText = 'Scanning...';
 
     if (window.BarcodeDetector) {
-      // keep original BarcodeDetector path
-      const detector = new BarcodeDetector({formats: ['qr_code']});
-      const scanLoop = async () => {
+      const detector = new BarcodeDetector({ formats: ['qr_code'] });
+      const loop = async () => {
         try {
-          const faces = await detector.detect(video);
-          if (faces && faces.length) {
-            const token = faces[0].rawValue;
-            videoStream.getTracks().forEach(t => t.stop());
-            videoStream = null;
-            document.getElementById('scan-status').innerText = 'Found token';
-            fetch('/api/admin/verify-qr', { method: 'POST', headers: {'Content-Type':'application/json','Authorization':'Bearer ' + getAdminToken()}, body: JSON.stringify({ qr_token: token }) }).then(r => r.json()).then(j => {
-              const result = document.getElementById('qr-result');
-              if (j.booking) {
-                result.innerText = `Verified! Booking ID: ${j.booking.id} (${j.booking.start_date} - ${j.booking.end_date})\nCar: ${j.car.brand} ${j.car.model}\nCustomer: ${j.customer.name} (${j.customer.email})\nAmount: ₹${j.amount}`;
-                loadTransactions();
-              } else {
-                result.innerText = j.message || 'Not found';
-              }
-            }).catch(()=>{ document.getElementById('qr-result').innerText = 'Verify failed'; });
+          const codes = await detector.detect(video);
+          if (codes && codes.length) {
+            const token = codes[0].rawValue;
+            stopScan();
+            status.innerText = 'Found token, verifying...';
+            verifyQrToken(token);
             return;
           }
-        } catch (e) {}
-        requestAnimationFrame(scanLoop);
+        } catch(e){}
+        requestAnimationFrame(loop);
       };
-      requestAnimationFrame(scanLoop);
+      requestAnimationFrame(loop);
     } else {
-      // use jsQR fallback
+      // jsQR fallback
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       const scanLoop = () => {
         if (!video || video.readyState !== video.HAVE_ENOUGH_DATA) { requestAnimationFrame(scanLoop); return; }
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         try {
           const imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
           const code = window.jsQR(imgData.data, imgData.width, imgData.height);
           if (code && code.data) {
-            videoStream.getTracks().forEach(t => t.stop());
-            videoStream = null;
-            document.getElementById('scan-status').innerText = 'Found token';
-            fetch(api('/api/admin/verify-qr'), { method: 'POST', headers: {'Content-Type':'application/json','Authorization':'Bearer ' + getAdminToken()}, body: JSON.stringify({ qr_token: code.data }) }).then(r => r.json()).then(j => {
-              const result = document.getElementById('qr-result');
-              if (j.booking) {
-                result.innerText = `Verified! Booking ID: ${j.booking.id} (${j.booking.start_date} - ${j.booking.end_date})\nCar: ${j.car.brand} ${j.car.model}\nCustomer: ${j.customer.name} (${j.customer.email})\nAmount: ₹${j.amount}`;
-                loadTransactions();
-              } else {
-                result.innerText = j.message || 'Not found';
-              }
-            }).catch(()=>{ document.getElementById('qr-result').innerText = 'Verify failed'; });
+            stopScan();
+            verifyQrToken(code.data);
             return;
           }
-        } catch (e) {}
+        } catch(e){}
         requestAnimationFrame(scanLoop);
       };
       requestAnimationFrame(scanLoop);
     }
-  } catch (e) {
-    document.getElementById('scan-status').innerText = 'Camera start failed';
+  } catch(e) {
+    status.innerText = 'Camera permission or start failed';
   }
-};
+}
+
+function stopScan(){
+  try {
+    if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+    const v = document.getElementById('video'); if (v) try{ v.pause(); v.srcObject = null; } catch(e){}
+    document.getElementById('scan-status').innerText = 'Stopped';
+  } catch(e){}
+}
+document.getElementById('stop-scan').addEventListener('click', () => stopScan());
+
+async function verifyQrToken(token){
+  const status = document.getElementById('scan-status'); status.innerText = 'Verifying token...';
+  const t = getAdminToken(); if (!t) { status.innerText = 'Not authenticated'; return; }
+  try {
+    const res = await fetch(api('/api/admin/verify-qr'), {
+      method: 'POST', headers: { 'Content-Type':'application/json','Authorization':'Bearer ' + t }, body: JSON.stringify({ qr_token: token })
+    });
+    const j = await res.json();
+    if (res.ok && j.booking) {
+      document.getElementById('qr-result').innerText = `Verified: Booking ${j.booking.id} (${j.booking.start_date} - ${j.booking.end_date})\nCar: ${j.car.brand} ${j.car.model}\nCustomer: ${j.customer.name} ${j.customer.email}\nAmount: ₹${j.amount}`;
+      loadTransactions(1,currentPageSize);
+    } else {
+      document.getElementById('qr-result').innerText = j.message || 'Not found';
+    }
+  } catch(e) {
+    document.getElementById('qr-result').innerText = 'Verification failed';
+  }
+}
+
+/* ---------------------------
+   Utility: escape HTML
+   --------------------------- */
+function escapeHtml(s){ if (s==null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ---------------------------
+   Init: if already logged in restore state
+   --------------------------- */
+(function init(){
+  try {
+    if (sessionStorage.getItem('adminLoggedIn') && sessionStorage.getItem('adminToken')) {
+      document.getElementById('admin-login').classList.add('hidden');
+      document.getElementById('admin-dashboard').classList.remove('hidden');
+      document.getElementById('col-addcar').classList.remove('hidden');
+      loadCarList(); loadTransactions(1, currentPageSize); loadStats();
+    }
+  } catch(e){}
+})();
+</script>
+
+</body>
+</html>
+
 </script>
 
 </body>
