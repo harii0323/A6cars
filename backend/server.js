@@ -1,190 +1,215 @@
-// ================== A6 Cars Backend ==================
-// Technologies: Node.js + Express + PostgreSQL + JWT + Multer (Image Upload) + Render Ready
-
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const bodyParser = require('body-parser');
-const { Pool } = require('pg');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const { Pool } = require('pg');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
+app.use(cors());
+app.use(express.json());
 
-// ==================== MIDDLEWARE ====================
-app.use(bodyParser.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // Serve uploaded images
+// ✅ Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ✅ CORS setup
-app.use(
-  cors({
-    origin: [
-      "https://a6cars-frontend-4i84.onrender.com",
-      "http://localhost:3000",
-      "http://127.0.0.1:5500"
-    ],
-    methods: ["GET", "POST", "PUT", "DELETE"],
-    credentials: true
-  })
-);
-
-// ==================== DATABASE CONNECTION ====================
+// ✅ PostgreSQL connection
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  connectionString: process.env.DATABASE_URL || 'postgresql://root:password@localhost:5432/a6cars_db'
 });
 
-pool.connect()
-  .then(() => console.log("✅ Connected to PostgreSQL database"))
-  .catch(err => console.error("❌ Database connection failed:", err.message));
-
-// ==================== MULTER CONFIG (Image Upload) ====================
+// ✅ Multer setup (store .jpg images)
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, 'uploads'));
+  destination: function (req, file, cb) {
+    const dir = path.join(__dirname, 'uploads');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
+    cb(null, dir);
   },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+  filename: function (req, file, cb) {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, unique + path.extname(file.originalname));
   }
 });
-
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg/;
-  const ext = path.extname(file.originalname).toLowerCase();
-  if (allowedTypes.test(ext)) {
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext !== '.jpg' && ext !== '.jpeg') {
+      return cb(new Error('Only .jpg images allowed'));
+    }
     cb(null, true);
-  } else {
-    cb(new Error('Only .jpg files are allowed!'), false);
-  }
-};
-
-const upload = multer({ storage, fileFilter });
-
-// ==================== ROOT CHECK ====================
-app.get('/', (req, res) => {
-  res.send('🚗 A6 Cars Rental API (PostgreSQL) + Image Upload is running!');
-});
-
-// ==================== USER REGISTRATION ====================
-app.post('/api/register', async (req, res) => {
-  const { name, email, phone, password } = req.body;
-
-  if (!name || !email || !phone || !password) {
-    return res.status(400).json({ message: 'All fields are required.' });
-  }
-
-  try {
-    const existingUser = await pool.query('SELECT * FROM customers WHERE email = $1', [email]);
-    if (existingUser.rows.length > 0) {
-      return res.status(400).json({ message: 'Email already registered.' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    await pool.query(
-      'INSERT INTO customers (name, email, phone, password) VALUES ($1, $2, $3, $4)',
-      [name, email, phone, hashedPassword]
-    );
-
-    res.json({ message: '✅ Registration successful!' });
-  } catch (error) {
-    console.error('❌ Registration Error:', error);
-    res.status(500).json({ message: 'Server error during registration.' });
   }
 });
 
-// ==================== USER LOGIN ====================
-app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body;
+// ✅ Admin credentials (use your own system or DB table later)
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@a6cars.com';
+const ADMIN_PASSWORD_HASH = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'admin123', 10);
+const JWT_SECRET = process.env.JWT_SECRET || 'secretkey123';
 
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Email and password required.' });
-  }
+// Middleware: Verify JWT
+function verifyToken(req, res, next) {
+  const header = req.headers['authorization'];
+  if (!header) return res.status(401).json({ message: 'Missing token' });
+  const token = header.split(' ')[1];
+  jwt.verify(token, JWT_SECRET, (err, decoded) => {
+    if (err) return res.status(401).json({ message: 'Invalid token' });
+    req.admin = decoded;
+    next();
+  });
+}
 
-  try {
-    const result = await pool.query('SELECT * FROM customers WHERE email = $1', [email]);
-    if (result.rows.length === 0) {
-      return res.status(400).json({ message: 'Invalid email or password.' });
-    }
-
-    const user = result.rows[0];
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(400).json({ message: 'Invalid email or password.' });
-    }
-
-    const token = jwt.sign(
-      { id: user.id, email: user.email },
-      process.env.JWT_SECRET || 'secret123',
-      { expiresIn: '2h' }
-    );
-
-    res.json({
-      message: '✅ Login successful!',
-      token,
-      user: { id: user.id, name: user.name, email: user.email }
-    });
-  } catch (error) {
-    console.error('❌ Login Error:', error);
-    res.status(500).json({ message: 'Server error during login.' });
-  }
-});
-
-// ==================== ADMIN LOGIN ====================
+// ✅ Admin login
 app.post('/api/admin/login', async (req, res) => {
-  const { email, password } = req.body;
-
-  const ADMIN_EMAIL = "admin@a6cars.com";
-  const ADMIN_PASSWORD = "admin123";
-
   try {
-    if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-      const token = jwt.sign(
-        { role: 'admin', email },
-        process.env.JWT_SECRET || 'secret123',
-        { expiresIn: '2h' }
-      );
+    const { email, password } = req.body;
+    if (email !== ADMIN_EMAIL) return res.status(401).json({ message: 'Invalid credentials' });
+    const valid = await bcrypt.compare(password, ADMIN_PASSWORD_HASH);
+    if (!valid) return res.status(401).json({ message: 'Invalid credentials' });
+    const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: '2h' });
+    res.json({ token });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Login failed' });
+  }
+});
 
-      return res.json({
-        message: '✅ Admin login successful!',
-        token,
-        admin: { email }
-      });
+// ✅ Add car (multiple image upload)
+app.post('/api/admin/addcar', verifyToken, upload.array('images', 10), async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { brand, model, year, daily_rate, location } = req.body;
+    if (!brand || !model || !year || !daily_rate || !location) {
+      return res.status(400).json({ message: 'Missing required fields' });
     }
 
-    return res.status(401).json({ message: '❌ Invalid admin credentials' });
-  } catch (error) {
-    console.error('❌ Admin Login Error:', error);
-    res.status(500).json({ message: 'Server error during admin login' });
-  }
-});
-
-// ==================== ADD CAR (with Image Upload) ====================
-app.post('/api/admin/addcar', upload.single('image'), async (req, res) => {
-  const { brand, model, year, daily_rate, location } = req.body;
-
-  if (!brand || !model || !year || !daily_rate || !location) {
-    return res.status(400).json({ message: 'All fields are required.' });
-  }
-
-  const imagePath = req.file ? `/uploads/${req.file.filename}` : null;
-
-  try {
-    await pool.query(
-      'INSERT INTO cars (brand, model, year, daily_rate, location, image_url) VALUES ($1, $2, $3, $4, $5, $6)',
-      [brand, model, year, daily_rate, location, imagePath]
+    await client.query('BEGIN');
+    const insertCar = await client.query(
+      'INSERT INTO cars (brand, model, year, daily_rate, location) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+      [brand, model, year, daily_rate, location]
     );
-    res.json({ message: '✅ Car added successfully with image!' });
-  } catch (error) {
-    console.error('❌ Error adding car:', error);
-    res.status(500).json({ message: 'Server error while adding car.' });
+    const carId = insertCar.rows[0].id;
+
+    // Insert image URLs into car_images
+    const images = (req.files || []).map(file => '/uploads/' + file.filename);
+    for (const img of images) {
+      await client.query('INSERT INTO car_images (car_id, image_url) VALUES ($1, $2)', [carId, img]);
+    }
+
+    await client.query('COMMIT');
+    res.json({ message: 'Car added successfully', car_id: carId, images });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ message: 'Failed to add car' });
+  } finally {
+    client.release();
   }
 });
 
-// ==================== SERVER START ====================
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`🚀 A6 Cars Backend running on port ${PORT}`);
+// ✅ Get all cars (with their images)
+app.get('/api/cars', async (req, res) => {
+  try {
+    const carsRes = await pool.query('SELECT * FROM cars ORDER BY id DESC');
+    const cars = carsRes.rows;
+
+    for (let car of cars) {
+      const imgs = await pool.query('SELECT image_url FROM car_images WHERE car_id = $1', [car.id]);
+      car.images = imgs.rows.map(r => r.image_url);
+    }
+
+    res.json(cars);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to fetch cars' });
+  }
 });
+
+// ✅ Delete car (and cascade deletes images/bookings)
+app.post('/api/deletecar', verifyToken, async (req, res) => {
+  try {
+    const { car_id } = req.body;
+    if (!car_id) return res.status(400).json({ message: 'Missing car_id' });
+    await pool.query('DELETE FROM cars WHERE id=$1', [car_id]);
+    res.json({ message: 'Car deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Delete failed' });
+  }
+});
+
+// ✅ Get bookings for a specific car
+app.get('/api/car-bookings/:id', verifyToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const q = `
+      SELECT b.*, c.name, c.email 
+      FROM bookings b 
+      JOIN customers c ON b.customer_id = c.id 
+      WHERE b.car_id = $1
+      ORDER BY b.id DESC`;
+    const result = await pool.query(q, [id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to fetch bookings' });
+  }
+});
+
+// ✅ Transactions API (paginated)
+app.get('/api/admin/transactions', verifyToken, async (req, res) => {
+  try {
+    const { page = 1, pageSize = 20 } = req.query;
+    const offset = (page - 1) * pageSize;
+
+    const count = await pool.query('SELECT COUNT(*) FROM bookings');
+    const total = parseInt(count.rows[0].count);
+
+    const q = `
+      SELECT b.id as payment_id, b.start_date, b.end_date, b.amount, b.paid, b.verified,
+             cu.name, cu.email, ca.brand, ca.model
+      FROM bookings b
+      JOIN customers cu ON b.customer_id = cu.id
+      JOIN cars ca ON b.car_id = ca.id
+      ORDER BY b.id DESC
+      LIMIT $1 OFFSET $2`;
+
+    const result = await pool.query(q, [pageSize, offset]);
+    res.json({ page: parseInt(page), pageSize: parseInt(pageSize), total, data: result.rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Failed to load transactions' });
+  }
+});
+
+// ✅ Verify payment QR token (mock example)
+app.post('/api/admin/verify-qr', verifyToken, async (req, res) => {
+  try {
+    const { qr_token } = req.body;
+    if (!qr_token) return res.status(400).json({ message: 'Missing qr_token' });
+
+    const booking = await pool.query('SELECT * FROM bookings WHERE id=$1', [qr_token]);
+    if (booking.rows.length === 0) return res.status(404).json({ message: 'Booking not found' });
+
+    const b = booking.rows[0];
+    const car = (await pool.query('SELECT * FROM cars WHERE id=$1', [b.car_id])).rows[0];
+    const customer = (await pool.query('SELECT * FROM customers WHERE id=$1', [b.customer_id])).rows[0];
+
+    await pool.query('UPDATE bookings SET verified=true WHERE id=$1', [qr_token]);
+
+    res.json({ message: 'Booking verified', booking: b, car, customer, amount: b.amount });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Verification failed' });
+  }
+});
+
+// ✅ Root test
+app.get('/', (req, res) => {
+  res.send('A6 Cars API running ✅');
+});
+
+// ✅ Start server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
