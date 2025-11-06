@@ -1,133 +1,114 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Book a Car | A6 Cars</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <!-- Add Swiper CSS for carousel -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css"
+  />
 </head>
-<body class="bg-gray-100 p-6">
 
-<!-- Navbar -->
-<div id="navbar"></div>
+<body class="bg-gray-100 min-h-screen">
+  <div id="navbar"></div>
 
-<script>
-  // 🔧 Detect backend environment
-  const BACKEND_URL =
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-      ? 'http://localhost:3000'
-      : 'https://a6cars.onrender.com';
+  <script>
+    // Load navbar dynamically
+    fetch("/navbar.html")
+      .then((res) => res.text())
+      .then((html) => {
+        document.getElementById("navbar").innerHTML = html;
+      });
+  </script>
 
-  // Load navbar (optional if you have a navbar.html)
-  fetch('/navbar.html')
-    .then(res => res.text())
-    .then(html => {
-      document.getElementById('navbar').innerHTML = html;
-      setupNavbar();
-    });
-
-  function setupNavbar() {
-    try {
-      const logoutBtn = document.getElementById('nav-logout');
-      if (logoutBtn) logoutBtn.onclick = () => {
-        localStorage.clear();
-        window.location.href = '/login.html';
-      };
-    } catch (e) {}
-  }
-</script>
-
-<div class="h-20"></div>
-
-<!-- Title -->
-<div class="flex justify-center">
-  <div class="bg-white p-6 rounded shadow w-3/4 text-center">
-    <h1 class="text-3xl font-bold text-blue-700 mb-2">Book Your Car</h1>
-    <p class="text-gray-600 mb-4">Select a car and choose available dates</p>
+  <div class="container mx-auto px-4 pt-24 pb-12">
+    <h1 class="text-3xl font-bold text-center mb-8">Available Cars</h1>
+    <div id="car-list" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6"></div>
   </div>
-</div>
 
-<!-- Cars Grid -->
-<div id="cars" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+  <!-- Swiper JS for carousel -->
+  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
 
-<script>
-const customer_id = localStorage.getItem('customer_id');
-if (!customer_id) window.location.href = '/login.html';
-
-// ✅ Fetch available cars
-fetch(`${BACKEND_URL}/api/cars`)
-  .then(res => res.json())
-  .then(data => {
-    const container = document.getElementById('cars');
-    if (!Array.isArray(data) || data.length === 0) {
-      container.innerHTML = '<p class="text-center text-gray-600">No cars available.</p>';
-      return;
+  <script>
+    const BACKEND_URL = "https://a6cars.onrender.com";
+    function api(path) {
+      if (
+        location.hostname === "localhost" ||
+        location.hostname === "127.0.0.1"
+      )
+        return path;
+      return BACKEND_URL + path;
     }
 
-    data.forEach(car => {
-      const div = document.createElement('div');
-      div.className = 'bg-white p-6 rounded-lg shadow text-center space-y-3';
-      div.innerHTML = `
-        <h2 class="text-2xl font-bold">${car.brand} ${car.model}</h2>
-        <p>Year: ${car.year}</p>
-        <p>Rate: ₹${car.daily_rate}</p>
-        <p>Location: ${car.location}</p>
-        <label>Start Date: <input type="text" id="start-${car.id}" placeholder="dd/mm/yyyy" class="border rounded p-1"></label><br>
-        <label>End Date: <input type="text" id="end-${car.id}" placeholder="dd/mm/yyyy" class="border rounded p-1"></label><br>
-        <button id="book-btn-${car.id}" onclick="bookCar(${car.id})" class="bg-blue-600 text-white px-4 py-2 rounded mt-2">Book</button>
-      `;
-      container.appendChild(div);
+    async function loadCars() {
+      try {
+        const res = await fetch(api("/api/cars"));
+        const cars = await res.json();
+        const carList = document.getElementById("car-list");
+        carList.innerHTML = "";
 
-      flatpickr(`#start-${car.id}`, { dateFormat: 'd/m/Y', minDate: 'today' });
-      flatpickr(`#end-${car.id}`, { dateFormat: 'd/m/Y', minDate: 'today' });
-    });
-  })
-  .catch(err => {
-    document.getElementById('cars').innerHTML = `<p class="text-red-600 text-center">Error loading cars: ${err.message}</p>`;
-  });
+        if (!Array.isArray(cars) || cars.length === 0) {
+          carList.innerHTML =
+            '<p class="text-gray-500 text-center col-span-3">No cars available.</p>';
+          return;
+        }
 
-async function bookCar(car_id) {
-  const start = document.getElementById(`start-${car_id}`).value;
-  const end = document.getElementById(`end-${car_id}`).value;
-  const token = localStorage.getItem('auth_token');
+        cars.forEach((car) => {
+          const images = car.images && car.images.length
+            ? car.images.map(
+                (img) =>
+                  `<div class="swiper-slide"><img src="${api(
+                    img
+                  )}" alt="${car.brand}" class="w-full h-48 object-cover rounded-lg"></div>`
+              ).join("")
+            : `<div class="swiper-slide"><img src="https://via.placeholder.com/400x300?text=No+Image" class="w-full h-48 object-cover rounded-lg"></div>`;
 
-  if (!start || !end) return alert('Please select both start and end dates.');
+          const carCard = document.createElement("div");
+          carCard.className =
+            "bg-white p-4 rounded-lg shadow hover:shadow-lg transition";
+          carCard.innerHTML = `
+            <div class="swiper carSwiper mb-3">
+              <div class="swiper-wrapper">${images}</div>
+              <div class="swiper-pagination"></div>
+              <div class="swiper-button-next"></div>
+              <div class="swiper-button-prev"></div>
+            </div>
+            <h2 class="text-xl font-semibold mb-1">${car.brand} ${car.model}</h2>
+            <p class="text-gray-600 mb-1">Year: ${car.year}</p>
+            <p class="text-gray-600 mb-1">Location: ${car.location}</p>
+            <p class="text-blue-600 font-bold mb-2">₹${car.daily_rate}/day</p>
+            <button class="bg-blue-600 text-white px-3 py-2 rounded w-full" onclick="bookCar(${car.id})">Book Now</button>
+          `;
 
-  const btn = document.getElementById(`book-btn-${car_id}`);
-  btn.disabled = true;
-  btn.innerText = 'Booking...';
+          carList.appendChild(carCard);
+        });
 
-  try {
-    const res = await fetch(`${BACKEND_URL}/api/book`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        car_id,
-        customer_id,
-        start_date: `${start.split('/').reverse().join('-')}`,
-        end_date: `${end.split('/').reverse().join('-')}`
-      })
-    });
+        // Initialize Swiper carousels after rendering
+        new Swiper(".carSwiper", {
+          loop: true,
+          pagination: {
+            el: ".swiper-pagination",
+            clickable: true,
+          },
+          navigation: {
+            nextEl: ".swiper-button-next",
+            prevEl: ".swiper-button-prev",
+          },
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
 
-    const data = await res.json();
-    btn.disabled = false;
-    btn.innerText = 'Book';
+    function bookCar(carId) {
+      localStorage.setItem("selectedCarId", carId);
+      window.location.href = "/booking_form.html";
+    }
 
-    if (!res.ok) return alert(data.message || 'Booking failed.');
-    alert(data.message || 'Booking successful!');
-    window.location.href = '/history.html';
-  } catch (err) {
-    btn.disabled = false;
-    btn.innerText = 'Book';
-    alert('Error: ' + err.message);
-  }
-}
-</script>
-
+    loadCars();
+  </script>
 </body>
 </html>
