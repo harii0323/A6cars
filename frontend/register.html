@@ -7,51 +7,51 @@
 </head>
 <body class="bg-gray-100 flex justify-center items-center h-screen">
 
-<div class="bg-white p-8 rounded shadow-lg w-96">
-  <h2 class="text-2xl font-bold mb-6 text-center">Register</h2>
-  <form id="registerForm" class="space-y-4">
-    <input type="text" name="name" placeholder="Name" required class="w-full p-2 border rounded">
-    <input type="email" name="email" placeholder="Email" required class="w-full p-2 border rounded">
-    <input type="text" name="phone" placeholder="Phone" required class="w-full p-2 border rounded">
-    <input type="password" name="password" placeholder="Password" required class="w-full p-2 border rounded">
-    <button type="submit" class="bg-blue-600 text-white w-full p-2 rounded">Register</button>
-  </form>
-</div>
+  <div class="bg-white p-8 rounded shadow-lg w-96">
+    <h2 class="text-2xl font-bold mb-6 text-center text-blue-600">Register</h2>
+    <form id="registerForm" class="space-y-4">
+      <input type="text" name="name" placeholder="Name" required class="w-full p-2 border rounded">
+      <input type="email" name="email" placeholder="Email" required class="w-full p-2 border rounded">
+      <input type="text" name="phone" placeholder="Phone" required class="w-full p-2 border rounded">
+      <input type="password" name="password" placeholder="Password" required class="w-full p-2 border rounded">
+      <button type="submit" class="bg-blue-600 text-white w-full p-2 rounded hover:bg-blue-700">Register</button>
+    </form>
+    <p class="mt-4 text-center text-sm">Already have an account? 
+      <a href="login.html" class="text-blue-600 hover:underline">Login here</a>
+    </p>
+  </div>
 
-<script>
-  // 🔧 Detect backend (local vs live)
-  const BACKEND_URL =
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-      ? 'http://localhost:3000'
-      : 'https://a6cars.onrender.com';
+  <script>
+    // ✅ Use your live backend URL
+    const BACKEND_URL = 'https://a6cars.onrender.com';
 
-  document.getElementById('registerForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const data = Object.fromEntries(new FormData(this).entries());
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target).entries());
 
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      });
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
 
-      const text = await res.text();
-      const json = text ? JSON.parse(text) : {};
+        const text = await res.text();
+        const json = text ? JSON.parse(text) : {};
 
-      if (!res.ok) {
-        alert(json.message || 'Registration failed');
-        return;
+        if (!res.ok) {
+          alert(json.message || 'Registration failed.');
+          return;
+        }
+
+        alert(json.message || 'Registered successfully!');
+        window.location.href = 'login.html'; // redirect to login
+
+      } catch (error) {
+        alert('Error: ' + (error.message || 'Network issue, please try again.'));
       }
-
-      alert(json.message || 'Registered successfully!');
-      window.location.href = '/login.html';
-
-    } catch (err) {
-      alert('Registration failed: ' + (err.message || 'Network error'));
-    }
-  });
-</script>
+    });
+  </script>
 
 </body>
 </html>
