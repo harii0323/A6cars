@@ -44,8 +44,8 @@ const upload = multer({
 });
 
 // ✅ Admin credentials
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@a6cars.com';
-const ADMIN_PASSWORD_HASH = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'admin123', 10);
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '0323';
+const ADMIN_PASSWORD_HASH = bcrypt.hashSync(process.env.ADMIN_PASSWORD || 'Anu', 10);
 const JWT_SECRET = process.env.JWT_SECRET || 'secretkey123';
 
 // ✅ Verify JWT Middleware
