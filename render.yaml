@@ -5,8 +5,8 @@
 
 version: "1"
 
-# ---------------- BACKEND SERVICE ----------------
 services:
+  # ---------------- BACKEND SERVICE ----------------
   - type: web
     name: a6cars-backend
     env: node
@@ -21,18 +21,16 @@ services:
         value: secret123
     autoDeploy: true
 
-# ---------------- FRONTEND SERVICE ----------------
+  # ---------------- FRONTEND SERVICE ----------------
   - type: static_site
     name: a6cars-frontend
     staticPublishPath: frontend
     autoDeploy: true
 
-# ---------------- DATABASE ----------------
 databases:
+  # ---------------- DATABASE ----------------
   - name: a6cars-db
     databaseName: a6cars_db
     user: root
     plan: free
-    region: singapore
     postgresMajorVersion: "17"
-
