@@ -22,9 +22,8 @@ services:
     autoDeploy: true
 
 # ---------------- FRONTEND SERVICE ----------------
-  - type: web
+  - type: static_site
     name: a6cars-frontend
-    env: static
     staticPublishPath: frontend
     autoDeploy: true
 
@@ -36,3 +35,4 @@ databases:
     plan: free
     region: singapore
     postgresMajorVersion: "17"
+
