@@ -13,22 +13,28 @@ services:
     buildCommand: "npm install"
     startCommand: "node server.js"
     envVars:
+      # ✅ Auto link the database connection string
       - key: DATABASE_URL
         fromDatabase:
           name: a6cars-db
           property: connectionString
+
+      # ✅ Secret key for JWT
       - key: JWT_SECRET
         value: secret123
+
     autoDeploy: true
 
   # ---------------- FRONTEND SERVICE ----------------
-  - type: static_site
+  - type: web
     name: a6cars-frontend
+    env: static
+    buildCommand: ""
     staticPublishPath: frontend
     autoDeploy: true
 
+# ---------------- DATABASE ----------------
 databases:
-  # ---------------- DATABASE ----------------
   - name: a6cars-db
     databaseName: a6cars_db
     user: root
