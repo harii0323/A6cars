@@ -1,16 +1,37 @@
-# Exported from Render on 2025-11-04T11:13:55Z
 version: "1"
-projects:
-- name: My project
-  environments:
-  - name: Production
-    databases:
-    - name: a6cars-db
-      databaseName: a6cars_db
-      user: root
-      plan: free
-      region: singapore
-      ipAllowList:
-      - source: 0.0.0.0/0
-        description: everywhere
-      postgresMajorVersion: "17"
+
+# ---------------- BACKEND SERVICE ----------------
+services:
+  - type: web
+    name: a6cars-backend
+    env: node
+    plan: free
+    region: singapore
+    buildCommand: "npm install"
+    startCommand: "node server.js"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: a6cars-db
+          property: connectionString
+      - key: JWT_SECRET
+        value: secret123
+    autoDeploy: true
+
+# ---------------- FRONTEND SERVICE ----------------
+  - type: web
+    name: a6cars-frontend
+    env: static
+    plan: free
+    region: singapore
+    staticPublishPath: frontend
+    autoDeploy: true
+
+# ---------------- DATABASE ----------------
+databases:
+  - name: a6cars-db
+    databaseName: a6cars_db
+    user: root
+    plan: free
+    region: singapore
+    postgresMajorVersion: "17"
