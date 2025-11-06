@@ -8,11 +8,11 @@
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Flatpickr for Date Picker -->
+  <!-- Flatpickr (Date Picker) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
   <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
-  <!-- Swiper for Carousel -->
+  <!-- Swiper (Carousel for Images) -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
 </head>
@@ -22,10 +22,10 @@
   <div id="navbar"></div>
 
   <script>
-    // ✅ Fix: Single BACKEND_URL declaration
+    // ✅ Backend URL setup
     const BACKEND_URL =
       (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-        ? "http://localhost:3000"
+        ? "http://localhost:5000"
         : "https://a6cars.onrender.com";
 
     // Load navbar dynamically
@@ -50,38 +50,42 @@
 
   <div class="h-20"></div>
 
-  <!-- Page Title -->
+  <!-- Title -->
   <div class="flex justify-center mb-6">
     <div class="bg-white p-6 rounded shadow w-3/4 text-center">
       <h1 class="text-3xl font-bold text-blue-700 mb-2">Book Your Car</h1>
-      <p class="text-gray-600 mb-4">Select a car and choose available dates</p>
+      <p class="text-gray-600 mb-4">Select a car and choose your preferred rental dates</p>
     </div>
   </div>
 
-  <!-- Cars Grid -->
+  <!-- Cars Container -->
   <div id="cars" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-6 pb-10"></div>
 
   <script>
     const customer_id = localStorage.getItem("customer_id");
     if (!customer_id) window.location.href = "/login.html";
 
-    // ✅ Fetch available cars with images
-    fetch(`${BACKEND_URL}/api/cars`)
-      .then(res => res.json())
-      .then(data => {
+    // ✅ Load Cars from Backend
+    async function loadCars() {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/cars`);
+        const data = await res.json();
+
         const container = document.getElementById("cars");
         if (!Array.isArray(data) || data.length === 0) {
-          container.innerHTML =
-            '<p class="text-center text-gray-600 col-span-3">No cars available.</p>';
+          container.innerHTML = `<p class="text-center text-gray-600 col-span-3">No cars available for booking.</p>`;
           return;
         }
 
+        container.innerHTML = "";
+
         data.forEach(car => {
-          // ✅ Image carousel HTML
           const images = car.images && car.images.length
-            ? car.images.map(img =>
-                `<div class="swiper-slide"><img src="${BACKEND_URL}${img}" alt="${car.brand}" class="w-full h-48 object-cover rounded-lg"></div>`
-              ).join("")
+            ? car.images.map(img => `
+                <div class="swiper-slide">
+                  <img src="${BACKEND_URL}${img}" alt="${car.brand}" class="w-full h-48 object-cover rounded-lg" />
+                </div>
+              `).join("")
             : `<div class="swiper-slide"><img src="https://via.placeholder.com/400x300?text=No+Image" class="w-full h-48 object-cover rounded-lg"></div>`;
 
           const div = document.createElement("div");
@@ -98,43 +102,43 @@
             <p class="text-gray-600">Year: ${car.year}</p>
             <p class="text-gray-600">Rate: ₹${car.daily_rate}</p>
             <p class="text-gray-600 mb-2">Location: ${car.location}</p>
+
             <div class="space-y-2">
               <input type="text" id="start-${car.id}" placeholder="Start Date" class="border rounded p-2 w-full" />
               <input type="text" id="end-${car.id}" placeholder="End Date" class="border rounded p-2 w-full" />
-              <button id="book-btn-${car.id}" onclick="bookCar(${car.id})" class="bg-blue-600 text-white px-4 py-2 rounded w-full">Book</button>
+              <button id="book-btn-${car.id}" class="bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700">Book</button>
             </div>
           `;
           container.appendChild(div);
 
+          // Date pickers
           flatpickr(`#start-${car.id}`, { dateFormat: "Y-m-d", minDate: "today" });
           flatpickr(`#end-${car.id}`, { dateFormat: "Y-m-d", minDate: "today" });
+
+          // Booking button
+          document.getElementById(`book-btn-${car.id}`).addEventListener("click", () => bookCar(car.id));
         });
 
-        // Initialize Swiper after rendering all car cards
+        // Initialize Swiper after rendering all cars
         new Swiper(".carSwiper", {
           loop: true,
-          pagination: {
-            el: ".swiper-pagination",
-            clickable: true,
-          },
-          navigation: {
-            nextEl: ".swiper-button-next",
-            prevEl: ".swiper-button-prev",
-          },
+          pagination: { el: ".swiper-pagination", clickable: true },
+          navigation: { nextEl: ".swiper-button-next", prevEl: ".swiper-button-prev" },
         });
-      })
-      .catch(err => {
-        document.getElementById("cars").innerHTML = `<p class="text-red-600 text-center">Error loading cars: ${err.message}</p>`;
-      });
+      } catch (err) {
+        document.getElementById("cars").innerHTML = `<p class="text-center text-red-600">Error loading cars: ${err.message}</p>`;
+      }
+    }
 
-    // ✅ Booking logic
+    loadCars();
+
+    // ✅ Booking Function
     async function bookCar(car_id) {
       const start = document.getElementById(`start-${car_id}`).value;
       const end = document.getElementById(`end-${car_id}`).value;
       const token = localStorage.getItem("auth_token");
 
-      if (!start || !end)
-        return alert("Please select both start and end dates.");
+      if (!start || !end) return alert("Please select both start and end dates.");
 
       const btn = document.getElementById(`book-btn-${car_id}`);
       btn.disabled = true;
@@ -155,11 +159,14 @@
           }),
         });
 
-        const data = await res.json();
+        const text = await res.text();
+        let data = {};
+        try { data = JSON.parse(text); } catch { data = { message: text }; }
+
         btn.disabled = false;
         btn.innerText = "Book";
 
-        if (!res.ok) return alert(data.message || "Booking failed.");
+        if (!res.ok) return alert(data.message || "Booking failed!");
         alert(data.message || "Booking successful!");
         window.location.href = "/history.html";
       } catch (err) {
