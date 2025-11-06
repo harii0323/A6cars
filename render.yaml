@@ -1,6 +1,6 @@
 # ============================
 # Render Deployment Configuration
-# A6 Cars Full Project
+# A6 Cars Full Project (Backend + Frontend + Database)
 # ============================
 
 version: "1"
@@ -22,10 +22,8 @@ services:
     autoDeploy: true
 
   # ---------------- FRONTEND SERVICE ----------------
-  - type: web
+  - type: static_site
     name: a6cars-frontend
-    env: static
-    buildCommand: ""
     staticPublishPath: frontend
     autoDeploy: true
 
