@@ -48,7 +48,7 @@
         if (json.user?.name) localStorage.setItem('customer_name', json.user.name);
 
         alert('Login successful!');
-        window.location.href = 'booking.html'; // redirect to bookings
+        window.location.href = 'book.html'; // redirect to bookings
 
       } catch (error) {
         alert('Error: ' + (error.message || 'Network issue, please try again.'));
