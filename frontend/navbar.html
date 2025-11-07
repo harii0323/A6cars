@@ -5,10 +5,10 @@
 
     <ul class="flex space-x-6 items-center">
       <li><a href="/index.html" id="nav-home" class="hover:text-gray-300">Home</a></li>
-      <li><a href="/booking.html" id="nav-book" class="hover:text-gray-300">Book Car</a></li>
-      <li><a href="/history.html" id="nav-history" class="hover:text-gray-300">History</a></li>
+      <li><a href="/book.html" id="nav-book" class="hover:text-gray-300 hidden">Book Car</a></li>
+      <li><a href="/booking.html" id="nav-history" class="hover:text-gray-300 hidden">My Bookings</a></li>
       <li><a href="/admin-dashboard.html" id="nav-admin" class="hover:text-yellow-300 hidden font-semibold">Admin Panel</a></li>
-      <li id="nav-user" class="hidden font-semibold"></li>
+      <li id="nav-user" class="hidden font-semibold text-yellow-300"></li>
       <li>
         <button id="nav-logout"
           class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-white hidden">
@@ -25,55 +25,55 @@
 </nav>
 
 <script>
-  // 🧠 Dynamic Navbar Logic
-  document.addEventListener('DOMContentLoaded', () => {
-    try {
-      const customerId = localStorage.getItem('customer_id');
-      const customerName = localStorage.getItem('customer_name');
-      const adminLogged = sessionStorage.getItem('adminLoggedIn');
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    const customerId = localStorage.getItem('customer_id');
+    const customerName = localStorage.getItem('customer_name');
+    const adminLogged = sessionStorage.getItem('adminLoggedIn');
 
-      const userEl = document.getElementById('nav-user');
-      const logoutBtn = document.getElementById('nav-logout');
-      const authLinks = document.getElementById('nav-auth');
-      const adminLink = document.getElementById('nav-admin');
+    const userEl = document.getElementById('nav-user');
+    const logoutBtn = document.getElementById('nav-logout');
+    const authLinks = document.getElementById('nav-auth');
+    const adminLink = document.getElementById('nav-admin');
+    const bookLink = document.getElementById('nav-book');
+    const historyLink = document.getElementById('nav-history');
 
-      if (customerId || adminLogged) {
-        // Hide Login/Register buttons
-        authLinks.classList.add('hidden');
-        logoutBtn.classList.remove('hidden');
-
-        if (customerName) {
-          userEl.textContent = `👋 Hello, ${customerName}`;
-          userEl.classList.remove('hidden');
-        }
-
-        // Admin Mode
-        if (adminLogged) {
-          adminLink.classList.remove('hidden');
-          document.getElementById('nav-book').classList.add('hidden');
-          document.getElementById('nav-history').classList.add('hidden');
-          document.getElementById('nav-home').classList.add('hidden');
-          userEl.textContent = `🧑‍💼 Admin`;
-        }
-      } else {
-        // Not logged in
-        authLinks.classList.remove('hidden');
-        logoutBtn.classList.add('hidden');
-        userEl.classList.add('hidden');
-        adminLink.classList.add('hidden');
-      }
-
-      // Logout logic
-      logoutBtn.addEventListener('click', () => {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('customer_id');
-        localStorage.removeItem('customer_name');
-        sessionStorage.removeItem('adminLoggedIn');
-        window.location.href = '/login.html';
-      });
-
-    } catch (err) {
-      console.error('Navbar setup error:', err);
+    if (customerId) {
+      // Customer logged in
+      authLinks.classList.add('hidden');
+      bookLink.classList.remove('hidden');
+      historyLink.classList.remove('hidden');
+      userEl.textContent = `👋 Hello, ${customerName || 'Customer'}`;
+      userEl.classList.remove('hidden');
+      logoutBtn.classList.remove('hidden');
+    } 
+    else if (adminLogged) {
+      // Admin logged in
+      authLinks.classList.add('hidden');
+      adminLink.classList.remove('hidden');
+      userEl.textContent = `🧑‍💼 Admin`;
+      userEl.classList.remove('hidden');
+      logoutBtn.classList.remove('hidden');
+    } 
+    else {
+      // Not logged in
+      authLinks.classList.remove('hidden');
+      logoutBtn.classList.add('hidden');
+      userEl.classList.add('hidden');
+      adminLink.classList.add('hidden');
+      bookLink.classList.add('hidden');
+      historyLink.classList.add('hidden');
     }
-  });
+
+    // Logout Logic
+    logoutBtn.addEventListener('click', () => {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = '/login.html';
+    });
+
+  } catch (err) {
+    console.error('Navbar setup error:', err);
+  }
+});
 </script>
