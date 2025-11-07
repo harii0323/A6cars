@@ -13,6 +13,14 @@
 </head>
 
 <body class="bg-gray-100 min-h-screen">
+  <script>
+  // ✅ Redirect if not logged in
+  if (!localStorage.getItem("customer_id")) {
+    alert("Please log in to access this page.");
+    window.location.href = "/login.html";
+  }
+</script>
+
   <!-- Navbar -->
   <div id="navbar"></div>
 
