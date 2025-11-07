@@ -49,45 +49,41 @@
     <p class="text-gray-600">Track your bookings, payments, and collection QRs</p>
   </div>
 
-  <!-- Booking list -->
   <div id="booking-list" class="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
-
-  <!-- Pagination -->
-  <div id="pagination" class="flex justify-center items-center gap-3 mt-6 mb-10"></div>
 
   <script>
     const customer_id = localStorage.getItem("customer_id");
     if (!customer_id) window.location.href = "/login.html";
 
-    let currentPage = 1;
-    const limit = 6;
-
-    // ✅ Load user's bookings (with pagination)
-    async function loadBookings(page = 1) {
+    // Load user's bookings
+    async function loadBookings() {
       const container = document.getElementById("booking-list");
-      const pagination = document.getElementById("pagination");
       container.innerHTML = `<p class="text-center text-gray-500 col-span-3">Loading your bookings...</p>`;
-      pagination.innerHTML = "";
 
       try {
-        const res = await fetch(`${BACKEND_URL}/api/mybookings/${customer_id}?page=${page}&limit=${limit}`);
+        const res = await fetch(`${BACKEND_URL}/api/mybookings/${customer_id}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Failed to load bookings.");
 
-        const bookings = Array.isArray(data.data) ? data.data : [];
-        if (bookings.length === 0) {
+        if (!Array.isArray(data) || data.length === 0) {
           container.innerHTML = `<p class="text-center text-gray-600 col-span-3">You have no bookings yet.</p>`;
           return;
         }
 
         container.innerHTML = "";
-        bookings.forEach(bk => {
-          const status = bk.paid ? `<span class="status-paid">Paid</span>` : `<span class="status-pending">Pending</span>`;
-          const verified = bk.verified ? `<span class="status-paid">Verified</span>` : `<span class="status-pending">Not Verified</span>`;
+        data.forEach(bk => {
+          const status = bk.paid
+            ? `<span class="status-paid">Paid</span>`
+            : `<span class="status-pending">Pending</span>`;
+          const verified = bk.verified
+            ? `<span class="status-paid">Verified</span>`
+            : `<span class="status-pending">Not Verified</span>`;
 
           const images = (bk.images || []).length
-            ? bk.images.map(img => `<div class="swiper-slide"><img src="${BACKEND_URL}${img}" class="w-full h-48 object-cover rounded-lg" /></div>`).join("")
-            : `<div class="swiper-slide"><img src="https://via.placeholder.com/400x300?text=No+Image" class="w-full h-48 object-cover rounded-lg" /></div>`;
+            ? bk.images.map(img =>
+                `<div class='swiper-slide'><img src='${BACKEND_URL}${img}' class='w-full h-48 object-cover rounded-lg'></div>`
+              ).join("")
+            : `<div class='swiper-slide'><img src='https://via.placeholder.com/400x300?text=No+Image' class='w-full h-48 object-cover rounded-lg'></div>`;
 
           const card = document.createElement("div");
           card.className = "bg-white rounded-lg shadow-lg p-4";
@@ -96,6 +92,7 @@
               <div class="swiper-wrapper">${images}</div>
               <div class="swiper-pagination"></div>
             </div>
+
             <h2 class="text-xl font-semibold mb-1">${bk.brand} ${bk.model}</h2>
             <p class="text-gray-600 mb-1">From: ${new Date(bk.start_date).toLocaleDateString()}</p>
             <p class="text-gray-600 mb-1">To: ${new Date(bk.end_date).toLocaleDateString()}</p>
@@ -114,22 +111,18 @@
           container.appendChild(card);
         });
 
-        // Swiper
-        new Swiper(".carSwiper", { loop: true, pagination: { el: ".swiper-pagination", clickable: true } });
-
-        // Pagination controls
-        pagination.innerHTML = `
-          <button ${data.page <= 1 ? "disabled" : ""} class="bg-gray-300 px-3 py-1 rounded" onclick="loadBookings(${data.page - 1})">Prev</button>
-          <span>Page ${data.page} of ${data.total_pages}</span>
-          <button ${data.page >= data.total_pages ? "disabled" : ""} class="bg-gray-300 px-3 py-1 rounded" onclick="loadBookings(${data.page + 1})">Next</button>
-        `;
+        new Swiper(".carSwiper", {
+          loop: true,
+          pagination: { el: ".swiper-pagination", clickable: true },
+        });
 
       } catch (err) {
-        container.innerHTML = `<p class="text-red-600 text-center col-span-3">${err.message}</p>`;
+        document.getElementById("booking-list").innerHTML =
+          `<p class="text-red-600 text-center col-span-3">${err.message}</p>`;
       }
     }
 
-    // ✅ Show Payment QR Modal
+    // Show Payment QR
     function showPaymentQR(booking_id, amount, qr) {
       if (!qr || qr === "null" || qr === "undefined") {
         alert("❌ Payment QR not found. Please contact support or rebook.");
@@ -149,7 +142,7 @@
       document.body.appendChild(qrPopup);
     }
 
-    // ✅ Confirm payment manually (then generate collection QR)
+    // Confirm Payment & Generate Collection QR
     async function confirmPayment(booking_id) {
       try {
         const res = await fetch(`${BACKEND_URL}/api/payment/confirm`, {
@@ -170,13 +163,13 @@
         a.download = `collection_qr_${booking_id}.png`;
         a.click();
         document.querySelectorAll(".fixed").forEach(el => el.remove());
-        loadBookings(currentPage);
+        loadBookings();
       } catch (err) {
         alert("❌ " + err.message);
       }
     }
 
-    // ✅ Download QR
+    // Download QR
     function downloadCollectionQR(qr, booking_id) {
       if (!qr || qr === "null" || qr === "undefined") {
         alert("❌ No QR available. Payment may not be verified yet.");
@@ -188,7 +181,7 @@
       a.click();
     }
 
-    // ✅ Popup for collection QR
+    // Popup QR Viewer
     function showPopupQR(title, desc, qr) {
       const qrPopup = document.createElement("div");
       qrPopup.className = "fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50";
@@ -202,7 +195,6 @@
       document.body.appendChild(qrPopup);
     }
 
-    // ✅ Init
     loadBookings();
   </script>
 </body>
