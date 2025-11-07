@@ -633,23 +633,59 @@ function stopScan(){
 document.getElementById('stop-scan').addEventListener('click', () => stopScan());
 
 async function verifyQrToken(token){
-  const status = document.getElementById('scan-status'); status.innerText = 'Verifying token...';
-  const t = getAdminToken(); if (!t) { status.innerText = 'Not authenticated'; return; }
+  const status = document.getElementById('scan-status');
+  status.innerText = 'Verifying QR...';
+  const t = getAdminToken();
+  if (!t) return status.innerText = 'Admin not logged in.';
+
   try {
+    let qr_data;
+    try { qr_data = JSON.parse(token); } catch { qr_data = { booking_id: token }; }
+
     const res = await fetch(api('/api/admin/verify-qr'), {
-      method: 'POST', headers: { 'Content-Type':'application/json','Authorization':'Bearer ' + t }, body: JSON.stringify({ qr_token: token })
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + t },
+      body: JSON.stringify({ qr_data })
     });
     const j = await res.json();
-    if (res.ok && j.booking) {
-      document.getElementById('qr-result').innerText = `Verified: Booking ${j.booking.id} (${j.booking.start_date} - ${j.booking.end_date})\nCar: ${j.car.brand} ${j.car.model}\nCustomer: ${j.customer.name} ${j.customer.email}\nAmount: ₹${j.amount}`;
-      loadTransactions(1,currentPageSize);
-    } else {
-      document.getElementById('qr-result').innerText = j.message || 'Not found';
-    }
-  } catch(e) {
-    document.getElementById('qr-result').innerText = 'Verification failed';
+    if (!res.ok) throw new Error(j.message || 'Verification failed');
+
+    // ✅ Success UI + sound
+    playSuccessSound();
+    showToast('✅ Booking verified successfully!', 'green');
+    status.innerText = '✅ Verified';
+
+    document.getElementById('qr-result').innerHTML = `
+      <div class="bg-green-50 border border-green-300 p-3 rounded mt-2 text-sm">
+        <p><b>Booking ID:</b> ${j.booking_id}</p>
+        <p><b>Customer:</b> ${j.customer.name} (${j.customer.email})</p>
+        <p><b>Car:</b> ${j.car}</p>
+        <p><b>Amount:</b> ₹${j.amount}</p>
+      </div>
+    `;
+
+    // 🔄 auto-refresh your transactions table
+    if (typeof loadTransactions === 'function') loadTransactions(1, currentPageSize);
+  } catch(err){
+    showToast('❌ ' + err.message, 'red');
+    status.innerText = '❌ Verification failed';
   }
 }
+    // --- Toast and sound utilities ---
+function playSuccessSound() {
+  const audio = new Audio("https://cdn.pixabay.com/download/audio/2022/03/15/audio_2bda1e560f.mp3");
+  audio.play();
+}
+
+function showToast(message, color = "green") {
+  const toast = document.createElement("div");
+  toast.className = `fixed top-5 right-5 bg-${color}-600 text-white px-4 py-2 rounded shadow-lg transition-all duration-500`;
+  toast.style.zIndex = "9999";
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
 
 /* ---------------------------
    Utility: escape HTML
@@ -669,10 +705,21 @@ function escapeHtml(s){ if (s==null) return ''; return String(s).replace(/[&<>"'
     }
   } catch(e){}
 })();
-</script>
+  // --- Toast and sound utilities ---
+function playSuccessSound() {
+  const audio = new Audio("https://cdn.pixabay.com/download/audio/2022/03/15/audio_2bda1e560f.mp3");
+  audio.play();
+}
 
-</body>
-</html>
+function showToast(message, color = "green") {
+  const toast = document.createElement("div");
+  toast.className = `fixed top-5 right-5 bg-${color}-600 text-white px-4 py-2 rounded shadow-lg transition-all duration-500`;
+  toast.style.zIndex = "9999";
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
 
 </script>
 
