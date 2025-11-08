@@ -6,26 +6,23 @@
 
     <!-- Menu -->
     <ul class="flex space-x-6 items-center">
-      <!-- Visible for logged-in users -->
+      <!-- User links -->
       <li><a href="/home.html" id="nav-home" class="hover:text-gray-300 hidden">Home</a></li>
       <li><a href="/booking.html" id="nav-book" class="hover:text-gray-300 hidden">Book Car</a></li>
       <li><a href="/history.html" id="nav-history" class="hover:text-gray-300 hidden">My Bookings</a></li>
 
-      <!-- Visible for admin only -->
-      <li><a href="/admin-dashboard.html" id="nav-admin" class="hover:text-yellow-300 hidden font-semibold">Admin Panel</a></li>
+      <!-- Admin link -->
+      <li><a href="/admin-dashboard.html" id="nav-admin" class="hover:text-yellow-300 hidden font-semibold">Admin Dashboard</a></li>
 
       <!-- Greeting -->
       <li id="nav-user" class="hidden font-semibold"></li>
 
       <!-- Logout button -->
       <li>
-        <button id="nav-logout"
-          class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-white hidden">
-          Logout
-        </button>
+        <button id="nav-logout" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-white hidden">Logout</button>
       </li>
 
-      <!-- Login/Register buttons -->
+      <!-- Auth links -->
       <li id="nav-auth" class="flex space-x-2">
         <a href="/login.html" class="bg-white text-blue-700 px-3 py-1 rounded hover:bg-gray-100">User Login</a>
         <a href="/register.html" class="bg-blue-500 px-3 py-1 rounded hover:bg-blue-600">Register</a>
@@ -36,95 +33,69 @@
 </nav>
 
 <script>
-  // ✅ Secure Navbar Logic
-  document.addEventListener('DOMContentLoaded', async () => {
-    try {
-      // 🔹 Retrieve stored values
-      let customerId = localStorage.getItem('customer_id');
-      let customerName = localStorage.getItem('customer_name');
-      let authToken = localStorage.getItem('auth_token');
-      let adminLogged = sessionStorage.getItem('adminLoggedIn');
-      let adminToken = sessionStorage.getItem('adminToken');
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    const customerId = localStorage.getItem('customer_id');
+    const customerName = localStorage.getItem('customer_name');
+    const authToken = localStorage.getItem('auth_token');
+    const adminLogged = sessionStorage.getItem('adminLoggedIn');
+    const adminToken = sessionStorage.getItem('adminToken');
 
-      // 🔹 Clear any invalid or leftover values
-      if (!authToken || authToken === "undefined" || authToken === "null") {
-        localStorage.removeItem("auth_token");
-        localStorage.removeItem("customer_id");
-        localStorage.removeItem("customer_name");
-        customerId = null;
-        customerName = null;
-        authToken = null;
-      }
+    const userEl = document.getElementById('nav-user');
+    const logoutBtn = document.getElementById('nav-logout');
+    const authLinks = document.getElementById('nav-auth');
+    const adminLink = document.getElementById('nav-admin');
+    const navHome = document.getElementById('nav-home');
+    const navBook = document.getElementById('nav-book');
+    const navHistory = document.getElementById('nav-history');
 
-      if (!adminToken || adminToken === "undefined" || adminToken === "null") {
-        sessionStorage.removeItem("adminToken");
-        sessionStorage.removeItem("adminLoggedIn");
-        adminToken = null;
-        adminLogged = null;
-      }
+    const isUserLoggedIn = customerId && authToken;
+    const isAdminLoggedIn = adminLogged && adminToken;
 
-      // 🔹 Element references
-      const userEl = document.getElementById('nav-user');
-      const logoutBtn = document.getElementById('nav-logout');
-      const authLinks = document.getElementById('nav-auth');
-      const adminLink = document.getElementById('nav-admin');
-      const navHome = document.getElementById('nav-home');
-      const navBook = document.getElementById('nav-book');
-      const navHistory = document.getElementById('nav-history');
-
-      const isUserLoggedIn = !!(customerId && authToken);
-      const isAdminLoggedIn = !!(adminLogged && adminToken);
-
-      // ✅ User Logged In
-      if (isUserLoggedIn) {
-        authLinks.classList.add('hidden');
-        logoutBtn.classList.remove('hidden');
-        navHome.classList.remove('hidden');
-        navBook.classList.remove('hidden');
-        navHistory.classList.remove('hidden');
-        adminLink.classList.add('hidden');
-
-        userEl.textContent = `👋 Hello, ${customerName || 'User'}`;
-        userEl.classList.remove('hidden');
-      }
-
-      // ✅ Admin Logged In
-      else if (isAdminLoggedIn) {
-        authLinks.classList.add('hidden');
-        logoutBtn.classList.remove('hidden');
-        adminLink.classList.remove('hidden');
-
-        userEl.textContent = '🧑‍💼 Admin';
-        userEl.classList.remove('hidden');
-
-        // Hide user-only menu items
-        navHome.classList.add('hidden');
-        navBook.classList.add('hidden');
-        navHistory.classList.add('hidden');
-      }
-
-      // 🚪 Guest (Not Logged In)
-      else {
-        authLinks.classList.remove('hidden');
-        logoutBtn.classList.add('hidden');
-        userEl.classList.add('hidden');
-        adminLink.classList.add('hidden');
-        navHome.classList.add('hidden');
-        navBook.classList.add('hidden');
-        navHistory.classList.add('hidden');
-      }
-
-      // ✅ Logout clears all and redirects
-      logoutBtn.addEventListener('click', () => {
-        localStorage.clear();
-        sessionStorage.clear();
-        alert('You have been logged out.');
-        window.location.href = '/index.html';
-      });
-
-    } catch (err) {
-      console.error('Navbar setup error:', err);
+    // User logged in
+    if (isUserLoggedIn) {
+      authLinks.classList.add('hidden');
+      logoutBtn.classList.remove('hidden');
+      navHome.classList.remove('hidden');
+      navBook.classList.remove('hidden');
+      navHistory.classList.remove('hidden');
+      adminLink.classList.add('hidden');
+      userEl.textContent = `👋 Hello, ${customerName || 'User'}`;
+      userEl.classList.remove('hidden');
     }
-  });
+    // Admin logged in
+    else if (isAdminLoggedIn) {
+      authLinks.classList.add('hidden');
+      logoutBtn.classList.remove('hidden');
+      adminLink.classList.remove('hidden');
+      userEl.textContent = `🧑‍💼 Admin`;
+      userEl.classList.remove('hidden');
+      navHome.classList.add('hidden');
+      navBook.classList.add('hidden');
+      navHistory.classList.add('hidden');
+    }
+    // Guest
+    else {
+      authLinks.classList.remove('hidden');
+      logoutBtn.classList.add('hidden');
+      userEl.classList.add('hidden');
+      adminLink.classList.add('hidden');
+      navHome.classList.add('hidden');
+      navBook.classList.add('hidden');
+      navHistory.classList.add('hidden');
+    }
+
+    // Logout
+    logoutBtn.addEventListener('click', () => {
+      localStorage.clear();
+      sessionStorage.clear();
+      alert('You have been logged out.');
+      window.location.href = '/index.html';
+    });
+
+  } catch (err) {
+    console.error('Navbar setup error:', err);
+  }
+});
 </script>
 
