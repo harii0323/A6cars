@@ -6,133 +6,92 @@
   <title>Admin Panel | A6 Cars</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* Simple lightbox modal */
     .lb-backdrop { background: rgba(0,0,0,0.7); }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
 
-<!-- navbar loader -->
-<div id="navbar"></div>
-<script>
-  // load navbar.html from same origin
-  fetch('/navbar.html').then(r => r.text()).then(html => { document.getElementById('navbar').innerHTML = html; try{ setupNavbar(); }catch(e){} });
-</script>
+  <!-- Navbar (loaded from navbar.html if present) -->
+  <div id="navbar"></div>
+  <script>
+    fetch('/navbar.html').then(r => r.text()).then(html => { document.getElementById('navbar').innerHTML = html; }).catch(()=>{});
+  </script>
 
-<!-- backend base -->
-<script>
-  // Change BACKEND_URL if needed
-  const BACKEND_URL = 'https://a6cars.onrender.com';
-  function api(path) {
-    // if local dev, use relative path
-    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return path;
-    return BACKEND_URL + path;
-  }
-</script>
+  <!-- backend base -->
+  <script>
+    // Adjust backend URL for dev / prod
+    const BACKEND_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? 'http://localhost:10000' : 'https://a6cars.onrender.com';
+    function api(path) {
+      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return path;
+      return BACKEND_URL + path;
+    }
+  </script>
 
-<!-- spacer for fixed navbar -->
-<div class="h-20"></div>
+  <div class="h-20"></div>
 
-<!-- Main admin layout -->
-<div class="min-h-[70vh] flex">
-  <!-- Sidebar -->
-  <aside class="w-80 bg-white shadow-md px-5 py-6">
-    <div class="flex items-center gap-3 mb-6">
-      <div class="w-10 h-10 bg-blue-600 text-white flex items-center justify-center rounded">A6</div>
-      <div>
-        <div class="font-bold text-lg">A6 Admin</div>
-        <div class="text-sm text-gray-500">Control Panel</div>
-      </div>
-    </div>
-
-    <nav class="space-y-2">
-      <button id="menu-add" class="w-full text-left px-3 py-2 rounded hover:bg-blue-50">Add Cars</button>
-      <button id="menu-carmanage" class="w-full text-left px-3 py-2 rounded hover:bg-blue-50">Manage Cars</button>
-      <button id="menu-verify" class="w-full text-left px-3 py-2 rounded hover:bg-blue-50">Verify Payment</button>
-      <button id="menu-trans" class="w-full text-left px-3 py-2 rounded hover:bg-blue-50">Transactions</button>
-      <button id="menu-all" class="w-full text-left px-3 py-2 rounded hover:bg-blue-50">Show All</button>
-    </nav>
-
-    <div class="mt-6 border-t pt-4">
-      <div class="text-sm text-gray-600 mb-2">Filters</div>
-      <input id="admin-search" placeholder="Search (customer/car/brand)" class="w-full border px-2 py-1 rounded mb-2" />
-      <div class="flex gap-2 mb-2">
-        <input id="filter-start" type="date" class="border px-2 py-1 rounded w-1/2" />
-        <input id="filter-end" type="date" class="border px-2 py-1 rounded w-1/2" />
-      </div>
-      <div class="flex gap-2">
-        <button id="btn-apply-filters" class="flex-1 bg-green-600 text-white px-3 py-1 rounded">Apply</button>
-        <button id="btn-clear-filters" class="flex-1 bg-gray-200 px-3 py-1 rounded">Clear</button>
-      </div>
-
-      <div class="mt-6">
-        <button id="admin-logout" class="w-full bg-red-600 text-white px-3 py-2 rounded">Logout</button>
-      </div>
-    </div>
-  </aside>
-
-  <!-- Content -->
-  <main class="flex-1 p-6">
+  <div class="max-w-6xl mx-auto p-6">
     <div class="bg-white rounded-lg shadow p-6">
       <div class="flex items-center justify-between mb-6">
         <div>
           <h1 class="text-2xl font-bold">Admin Panel</h1>
-          <p class="text-sm text-gray-500">Overview and management tools</p>
+          <p class="text-sm text-gray-500">Manage cars, bookings and verify payments</p>
         </div>
-        <div class="text-right text-sm text-gray-500">Welcome, Admin</div>
+        <div>
+          <button id="admin-logout" class="bg-red-600 text-white px-3 py-1 rounded hidden">Logout</button>
+        </div>
       </div>
 
-      <!-- Admin login box -->
-      <div id="admin-login" class="space-y-4 max-w-xl mx-auto">
-        <input id="admin-id" type="text" placeholder="Admin Email" class="w-full p-3 border rounded" value="">
-        <input id="admin-pass" type="password" placeholder="Password" class="w-full p-3 border rounded" value="">
+      <!-- Admin login -->
+      <div id="admin-login" class="max-w-md mx-auto space-y-4">
+        <input id="admin-email" type="text" placeholder="Admin Email" class="w-full p-3 border rounded" />
+        <input id="admin-password" type="password" placeholder="Password" class="w-full p-3 border rounded" />
         <div class="flex items-center gap-2">
-          <button id="admin-login-btn" type="button" class="bg-green-600 text-white px-4 py-2 rounded">Login</button>
+          <button id="admin-login-btn" class="bg-green-600 text-white px-4 py-2 rounded">Login</button>
           <div id="admin-login-msg" class="text-sm text-red-600"></div>
         </div>
       </div>
 
-      <!-- full dashboard -->
+      <!-- Dashboard (hidden until login) -->
       <div id="admin-dashboard" class="hidden mt-6">
-        <!-- stats -->
+
+        <!-- quick stats -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div class="p-4 rounded shadow-sm bg-gradient-to-r from-blue-50 to-white">
+          <div class="p-4 rounded shadow-sm bg-blue-50">
             <div class="text-sm text-gray-500">Total Bookings</div>
             <div id="stat-bookings" class="text-2xl font-bold">—</div>
           </div>
-          <div class="p-4 rounded shadow-sm bg-gradient-to-r from-yellow-50 to-white">
+          <div class="p-4 rounded shadow-sm bg-yellow-50">
             <div class="text-sm text-gray-500">Pending Payments</div>
             <div id="stat-pending" class="text-2xl font-bold">—</div>
           </div>
-          <div class="p-4 rounded shadow-sm bg-gradient-to-r from-green-50 to-white">
+          <div class="p-4 rounded shadow-sm bg-green-50">
             <div class="text-sm text-gray-500">Available Cars</div>
             <div id="stat-cars" class="text-2xl font-bold">—</div>
           </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <!-- Add Car (col) -->
-          <div id="col-addcar" class="p-4 border rounded bg-white hidden">
+          <!-- Add Car -->
+          <div id="col-addcar" class="p-4 border rounded bg-white">
             <h3 class="text-lg font-semibold mb-3">Add Car (multiple images)</h3>
             <form id="addCarForm" enctype="multipart/form-data" class="space-y-3">
-              <input type="text" name="brand" placeholder="Brand" required class="w-full p-2 border rounded">
-              <input type="text" name="model" placeholder="Model" required class="w-full p-2 border rounded">
-              <input type="number" name="year" placeholder="Year" required class="w-full p-2 border rounded">
-              <input type="number" step="0.01" name="daily_rate" placeholder="Daily Rate (INR)" required class="w-full p-2 border rounded">
-              <input type="text" name="location" placeholder="Location" required class="w-full p-2 border rounded">
+              <input type="text" name="brand" placeholder="Brand" required class="w-full p-2 border rounded" />
+              <input type="text" name="model" placeholder="Model" required class="w-full p-2 border rounded" />
+              <input type="number" name="year" placeholder="Year" required class="w-full p-2 border rounded" />
+              <input type="number" step="0.01" name="daily_rate" placeholder="Daily Rate (INR)" required class="w-full p-2 border rounded" />
+              <input type="text" name="location" placeholder="Location" required class="w-full p-2 border rounded" />
               <label class="text-sm text-gray-600">Upload images (JPG/JPEG) — you can select multiple</label>
-              <input type="file" name="images" id="images-input" accept=".jpg,.jpeg" multiple required class="w-full p-2 border rounded bg-gray-50">
+              <input type="file" name="images" id="images-input" accept=".jpg,.jpeg" multiple required class="w-full p-2 border rounded bg-gray-50" />
               <div id="images-preview" class="flex gap-2 mt-2 flex-wrap"></div>
               <button type="submit" class="bg-blue-600 text-white w-full p-2 rounded">Add Car</button>
             </form>
           </div>
 
-          <!-- Car manage (col) -->
-          <div id="col-carmanage" class="p-4 border rounded bg-white hidden lg:col-span-2">
+          <!-- Manage Cars -->
+          <div id="col-carmanage" class="p-4 border rounded bg-white lg:col-span-2">
             <h3 class="text-lg font-semibold mb-3">Manage Cars</h3>
             <div id="car-list" class="space-y-3"></div>
 
-            <!-- bookings panel -->
             <div id="car-bookings-panel" class="hidden mt-4 bg-gray-50 p-3 rounded">
               <div class="flex items-center justify-between mb-2">
                 <h4 class="font-medium">Bookings for <span id="car-bookings-title"></span></h4>
@@ -140,17 +99,28 @@
               </div>
               <div class="overflow-auto">
                 <table class="w-full text-left border-collapse text-sm">
-                  <thead><tr><th class="border px-2 py-1">Booking ID</th><th class="border px-2 py-1">Customer</th><th class="border px-2 py-1">From</th><th class="border px-2 py-1">To</th><th class="border px-2 py-1">Amount</th><th class="border px-2 py-1">Paid</th><th class="border px-2 py-1">Verified</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th class="border px-2 py-1">Booking ID</th>
+                      <th class="border px-2 py-1">Customer</th>
+                      <th class="border px-2 py-1">From</th>
+                      <th class="border px-2 py-1">To</th>
+                      <th class="border px-2 py-1">Amount</th>
+                      <th class="border px-2 py-1">Paid</th>
+                      <th class="border px-2 py-1">Verified</th>
+                    </tr>
+                  </thead>
                   <tbody id="car-bookings-body"></tbody>
                 </table>
               </div>
             </div>
           </div>
 
-          <!-- Verify Payment (col) -->
-          <div id="col-verify" class="p-4 border rounded bg-white hidden">
-            <h3 class="text-lg font-semibold mb-3">Verify Payment</h3>
-            <div id="qr-verify" class="mb-4"><div id="qr-result" class="mt-4 text-sm"></div></div>
+          <!-- Verify Payment (QR scan) -->
+          <div id="col-verify" class="p-4 border rounded bg-white hidden lg:col-span-3">
+            <h3 class="text-lg font-semibold mb-3">Verify Payment (Scan QR)</h3>
+            <div id="qr-result" class="mt-2 text-sm"></div>
+
             <div id="scanner" class="mt-4">
               <h4 class="font-medium mb-2">Camera Scanner</h4>
               <video id="video" width="100%" height="220" style="border:1px solid #ccc"></video>
@@ -159,445 +129,357 @@
             </div>
           </div>
 
-          <!-- Transactions (col) -->
-          <div id="col-transactions" class="p-4 border rounded bg-white hidden lg:col-span-3">
-            <div class="flex items-center justify-between">
-              <h3 class="text-lg font-semibold">Transactions</h3>
-              <div class="flex items-center gap-2">
-                <button id="export-csv" class="bg-gray-700 text-white px-3 py-1 rounded">Export CSV</button>
-              </div>
-            </div>
-            <div class="mt-3 overflow-auto">
-              <table id="tx-table" class="w-full text-left border-collapse text-sm">
-                <thead class="bg-gray-50">
-                  <tr><th class="border px-2 py-1">Payment ID</th><th class="border px-2 py-1">Customer</th><th class="border px-2 py-1">Car</th><th class="border px-2 py-1">From</th><th class="border px-2 py-1">To</th><th class="border px-2 py-1">Amount</th><th class="border px-2 py-1">Paid</th><th class="border px-2 py-1">Verified</th></tr>
-                </thead>
-                <tbody id="tx-body"></tbody>
-              </table>
-            </div>
-            <div class="mt-3 flex items-center gap-2">
-              <button id="prev-page" class="px-2 py-1 bg-gray-200 rounded">Prev</button>
-              <span id="page-info">Page 1</span>
-              <button id="next-page" class="px-2 py-1 bg-gray-200 rounded">Next</button>
-              <select id="page-size" class="border px-2 py-1 rounded">
-                <option value="10">10</option>
-                <option value="20" selected>20</option>
-                <option value="50">50</option>
-              </select>
-            </div>
+        </div>
+
+        <!-- Basic Transactions list (no filters) -->
+        <div class="mt-6 bg-white p-4 rounded">
+          <h3 class="text-lg font-semibold mb-3">Recent Transactions</h3>
+          <div class="overflow-auto">
+            <table id="tx-table" class="w-full text-left text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="border px-2 py-1">Payment ID</th>
+                  <th class="border px-2 py-1">Customer</th>
+                  <th class="border px-2 py-1">Car</th>
+                  <th class="border px-2 py-1">From</th>
+                  <th class="border px-2 py-1">To</th>
+                  <th class="border px-2 py-1">Amount</th>
+                  <th class="border px-2 py-1">Paid</th>
+                  <th class="border px-2 py-1">Verified</th>
+                </tr>
+              </thead>
+              <tbody id="tx-body"></tbody>
+            </table>
           </div>
         </div>
-      </div>
-    </div>
-  </main>
-</div>
 
-<!-- Lightbox modal for images -->
-<div id="lightbox" class="fixed inset-0 hidden items-center justify-center z-50">
-  <div id="lb-backdrop" class="absolute inset-0 lb-backdrop"></div>
-  <div class="relative z-50 max-w-3xl w-full mx-4">
-    <div class="bg-white rounded p-4">
-      <div class="flex justify-between items-center mb-2">
-        <div id="lb-title" class="font-semibold">Images</div>
-        <button id="lb-close" class="bg-red-500 text-white px-2 py-1 rounded">Close</button>
       </div>
-      <div id="lb-images" class="flex gap-2 overflow-x-auto"></div>
     </div>
   </div>
-</div>
 
-<!-- jsQR fallback -->
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <!-- Lightbox modal for images -->
+  <div id="lightbox" class="fixed inset-0 hidden items-center justify-center z-50">
+    <div id="lb-backdrop" class="absolute inset-0 lb-backdrop"></div>
+    <div class="relative z-50 max-w-3xl w-full mx-4">
+      <div class="bg-white rounded p-4">
+        <div class="flex justify-between items-center mb-2">
+          <div id="lb-title" class="font-semibold">Images</div>
+          <button id="lb-close" class="bg-red-500 text-white px-2 py-1 rounded">Close</button>
+        </div>
+        <div id="lb-images" class="flex gap-2 overflow-x-auto"></div>
+      </div>
+    </div>
+  </div>
 
-<script>
-/* ---------------------------
-   Helper & Auth utilities
-   --------------------------- */
-function getAdminToken(){
-  try { return sessionStorage.getItem('adminToken') || ''; } catch(e) { return ''; }
-}
-function setAdminToken(token){
-  try { sessionStorage.setItem('adminToken', token); sessionStorage.setItem('adminLoggedIn', '1'); window.adminToken = token; } catch(e){}
-}
+  <!-- jsQR fallback -->
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 
-/* ---------------------------
-   Admin login
-   --------------------------- */
-document.getElementById('admin-login-btn').addEventListener('click', async () => {
-  const email = document.getElementById('admin-id').value.trim();
-  const password = document.getElementById('admin-pass').value;
-  const msg = document.getElementById('admin-login-msg');
-  msg.innerText = '';
-  try {
-    if (!email || !password) throw new Error('Enter credentials');
-    const res = await fetch(api('/api/admin/login'), {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-    const txt = await res.text();
-    let j = {};
-    try { j = txt ? JSON.parse(txt) : {}; } catch(e){}
-    if (!res.ok) throw new Error(j.message || txt || 'Login failed');
-    setAdminToken(j.token);
-    // show dashboard
-    document.getElementById('admin-login').classList.add('hidden');
-    document.getElementById('admin-dashboard').classList.remove('hidden');
-    // default show all
-    document.getElementById('col-addcar').classList.remove('hidden');
-    loadTransactions(1, 20); loadCarList(); loadStats();
-  } catch (err) {
-    msg.innerText = err.message || 'Login failed';
+  <script>
+  /* ---------------------------
+     Auth helpers
+     --------------------------- */
+  function getAdminToken(){
+    return sessionStorage.getItem('adminToken') || '';
   }
-});
-
-/* ---------------------------
-   Logout
-   --------------------------- */
-document.getElementById('admin-logout').addEventListener('click', () => {
-  try { stopScan(); } catch(e){}
-  sessionStorage.removeItem('adminToken'); sessionStorage.removeItem('adminLoggedIn');
-  window.adminToken = null;
-  // reset UI
-  document.getElementById('admin-dashboard').classList.add('hidden');
-  document.getElementById('admin-login').classList.remove('hidden');
-  ['col-addcar','col-carmanage','col-verify','col-transactions'].forEach(id => { const el = document.getElementById(id); if (el) el.classList.add('hidden'); });
-});
-
-/* ---------------------------
-   Menu wiring
-   --------------------------- */
-function setActiveMenu(key){
-  ['menu-add','menu-carmanage','menu-verify','menu-trans','menu-all'].forEach(k => {
-    const el = document.getElementById(k);
-    if (!el) return;
-    if (k === key) { el.classList.add('bg-blue-100','text-blue-800'); } else { el.classList.remove('bg-blue-100','text-blue-800'); }
-  });
-}
-document.getElementById('menu-add').addEventListener('click', () => { showOnly('col-addcar'); setActiveMenu('menu-add'); });
-document.getElementById('menu-carmanage').addEventListener('click', () => { showOnly('col-carmanage'); loadCarList(); setActiveMenu('menu-carmanage'); });
-document.getElementById('menu-verify').addEventListener('click', () => { showOnly('col-verify'); setActiveMenu('menu-verify'); startScan(); });
-document.getElementById('menu-trans').addEventListener('click', () => { showOnly('col-transactions'); loadTransactions(1, currentPageSize); setActiveMenu('menu-trans'); });
-document.getElementById('menu-all').addEventListener('click', () => { ['col-addcar','col-carmanage','col-verify','col-transactions'].forEach(id=>{ const el=document.getElementById(id); if (el) el.classList.remove('hidden'); }); setActiveMenu('menu-all'); loadCarList(); loadTransactions(1,currentPageSize); });
-
-function showOnly(idToShow){
-  ['col-addcar','col-carmanage','col-verify','col-transactions'].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    if (id === idToShow) el.classList.remove('hidden'); else el.classList.add('hidden');
-  });
-  if (idToShow !== 'col-verify') stopScan();
-}
-
-/* ---------------------------
-   Add Car (multiple images)
-   --------------------------- */
-const imagesInput = document.getElementById('images-input');
-const imagesPreview = document.getElementById('images-preview');
-
-imagesInput && imagesInput.addEventListener('change', function(){
-  imagesPreview.innerHTML = '';
-  const files = this.files;
-  if (!files || !files.length) return;
-  Array.from(files).forEach(f => {
-    const url = URL.createObjectURL(f);
-    const img = document.createElement('img');
-    img.src = url;
-    img.className = 'w-28 h-20 object-cover rounded border';
-    imagesPreview.appendChild(img);
-  });
-});
-
-document.getElementById('addCarForm').addEventListener('submit', async function(e){
-  e.preventDefault();
-  const token = getAdminToken();
-  if (!token) { alert('Please login as admin.'); return; }
-  const fd = new FormData(this);
-
-  // append files (already included by using form element with file inputs named 'images')
-  // but ensure we use 'images' multiple:
-  const fileInput = document.querySelector('#images-input');
-  if (fileInput && fileInput.files && fileInput.files.length){
-    // remove default images keys added by form if any, and append properly
-    // (FormData already includes file input entries with name 'images', so this is safe)
-  } else {
-    alert('Select at least one image (jpg).');
-    return;
-  }
-
-  try {
-    const res = await fetch(api('/api/admin/addcar'), {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + token },
-      body: fd
-    });
-    const txt = await res.text();
-    let j = {};
-    try { j = txt ? JSON.parse(txt) : {}; } catch(e){}
-    if (!res.ok) throw new Error(j.message || txt || 'Add car failed');
-    alert(j.message || 'Car added');
-    this.reset();
-    imagesPreview.innerHTML = '';
-    loadCarList();
-  } catch(err){
-    console.error(err);
-    alert(err.message || 'Failed to add car');
-  }
-});
-
-/* ---------------------------
-   Load car list (with images)
-   --------------------------- */
-async function loadCarList(){
-  const token = getAdminToken();
-  if (!token) return;
-  try {
-    const res = await fetch(api('/api/cars'), { headers: { 'Authorization': 'Bearer ' + token } });
-    if (!res.ok) throw new Error('Failed');
-    const list = await res.json();
-    const carListDiv = document.getElementById('car-list');
-    carListDiv.innerHTML = '';
-    if (!Array.isArray(list) || list.length === 0) {
-      carListDiv.innerHTML = '<div class="text-gray-500">No cars found.</div>';
-      return;
+  function setAdminToken(token){
+    if (token) {
+      sessionStorage.setItem('adminToken', token);
+      sessionStorage.setItem('adminLoggedIn', '1');
+      document.getElementById('admin-login').classList.add('hidden');
+      document.getElementById('admin-dashboard').classList.remove('hidden');
+      document.getElementById('admin-logout').classList.remove('hidden');
+      // show verify column toggle
+      document.getElementById('col-verify').classList.remove('hidden');
+      loadCarList(); loadTransactions(); loadStats();
     }
+  }
 
-    list.forEach(car => {
-      // normalize images array:
-      let imgs = [];
-      if (Array.isArray(car.images) && car.images.length) imgs = car.images;
-      else if (car.image_url) imgs = [car.image_url];
-      else if (car.image_urls) imgs = car.image_urls;
-      // ensure absolute URLs: if starts with /uploads or relative, prefix backend
-      imgs = imgs.map(u => {
-        if (!u) return '';
-        if (u.startsWith('http')) return u;
-        if (u.startsWith('/')) return BACKEND_URL + u;
-        return BACKEND_URL + '/' + u;
-      }).filter(Boolean);
-
-      // first image or placeholder
-      const thumb = imgs[0] || 'https://via.placeholder.com/160x100?text=No+Image';
-
-      const carDiv = document.createElement('div');
-      carDiv.className = 'border rounded p-3 mb-3 flex items-center justify-between';
-      carDiv.innerHTML = `
-        <div class="flex items-center gap-4">
-          <img src="${thumb}" alt="${escapeHtml(car.brand)}" class="w-36 h-24 object-cover rounded border cursor-pointer" data-images='${JSON.stringify(imgs)}'>
-          <div>
-            <div class="font-semibold">${escapeHtml(car.brand)} ${escapeHtml(car.model)}</div>
-            <div class="text-gray-600 text-sm">Year: ${car.year} | ₹${car.daily_rate}/day</div>
-            <div class="text-gray-500 text-xs">${escapeHtml(car.location || '')}</div>
-          </div>
-        </div>
-        <div class="flex gap-2">
-          <button class="bg-blue-600 text-white px-3 py-1 rounded view-bookings" data-carid="${car.id}" data-carname="${escapeHtml(car.brand+' '+car.model)}">View Bookings</button>
-          <button class="bg-red-600 text-white px-3 py-1 rounded delete-car" data-carid="${car.id}">Delete</button>
-        </div>
-      `;
-      carListDiv.appendChild(carDiv);
-
-      // thumbnail click => open lightbox with full gallery
-      carDiv.querySelector('img').addEventListener('click', function(){
-        const arr = JSON.parse(this.getAttribute('data-images') || '[]');
-        openLightbox(arr, `${car.brand} ${car.model}`);
+  // Admin login
+  document.getElementById('admin-login-btn').addEventListener('click', async () => {
+    const email = document.getElementById('admin-email').value.trim();
+    const password = document.getElementById('admin-password').value;
+    const msg = document.getElementById('admin-login-msg');
+    msg.innerText = '';
+    try {
+      if (!email || !password) throw new Error('Enter credentials');
+      const res = await fetch(api('/api/admin/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
       });
+      const txt = await res.text();
+      let j = {};
+      try { j = txt ? JSON.parse(txt) : {}; } catch(e){}
+      if (!res.ok) throw new Error(j.message || txt || 'Login failed');
+      setAdminToken(j.token);
+    } catch (err) {
+      msg.innerText = err.message || 'Login failed';
+    }
+  });
 
-      // view bookings handler
-      const vb = carDiv.querySelector('.view-bookings');
-      vb && vb.addEventListener('click', () => viewCarBookings(car.id, car.brand+' '+car.model));
-      // delete handler
-      const del = carDiv.querySelector('.delete-car');
-      del && del.addEventListener('click', () => deleteCar(car.id, del));
+  // Logout fully clears sessionStorage and hides dashboard
+  document.getElementById('admin-logout').addEventListener('click', () => {
+    sessionStorage.removeItem('adminToken');
+    sessionStorage.removeItem('adminLoggedIn');
+    document.getElementById('admin-dashboard').classList.add('hidden');
+    document.getElementById('admin-login').classList.remove('hidden');
+    document.getElementById('admin-logout').classList.add('hidden');
+  });
+
+  /* ---------------------------
+     Add car (multiple images) UI
+     --------------------------- */
+  const imagesInput = document.getElementById('images-input');
+  const imagesPreview = document.getElementById('images-preview');
+
+  imagesInput && imagesInput.addEventListener('change', function(){
+    imagesPreview.innerHTML = '';
+    const files = this.files;
+    if (!files || !files.length) return;
+    Array.from(files).forEach(f => {
+      const url = URL.createObjectURL(f);
+      const img = document.createElement('img');
+      img.src = url;
+      img.className = 'w-28 h-20 object-cover rounded border';
+      imagesPreview.appendChild(img);
     });
-  } catch(e){
-    console.error(e);
-    document.getElementById('car-list').innerHTML = '<div class="text-red-500">Failed to load cars</div>';
-  }
-}
+  });
 
-/* ---------------------------
-   Delete Car
-   --------------------------- */
-async function deleteCar(carId, btn){
-  if (!confirm('Delete car and its bookings?')) return;
-  const token = getAdminToken();
-  btn.disabled = true;
-  try {
-    const res = await fetch(api('/api/deletecar'), {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-      body: JSON.stringify({ car_id: carId })
-    });
-    const j = await res.json();
-    if (!res.ok) throw new Error(j.message || 'Delete failed');
-    alert(j.message || 'Deleted');
-    loadCarList();
-  } catch(e){
-    alert(e.message || 'Delete failed');
-    btn.disabled = false;
-  }
-}
+  document.getElementById('addCarForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    const token = getAdminToken();
+    if (!token) { alert('Please login as admin.'); return; }
+    const fd = new FormData(this);
+    const fileInput = document.querySelector('#images-input');
+    if (!fileInput || !fileInput.files || !fileInput.files.length){ alert('Select at least one image (jpg).'); return; }
 
-/* ---------------------------
-   View bookings for a car
-   --------------------------- */
-function viewCarBookings(carId, carName){
-  const token = getAdminToken();
-  if (!token) return;
-  const panel = document.getElementById('car-bookings-panel');
-  const title = document.getElementById('car-bookings-title');
-  const body = document.getElementById('car-bookings-body');
-  title.innerText = carName;
-  panel.classList.remove('hidden');
-  body.innerHTML = '<tr><td colspan="7" class="text-gray-500">Loading...</td></tr>';
-  fetch(api(`/api/car-bookings/${carId}`), { headers: { 'Authorization': 'Bearer ' + token } })
-    .then(r => r.json())
-    .then(list => {
-      body.innerHTML = '';
+    try {
+      const res = await fetch(api('/api/admin/addcar'), {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + token },
+        body: fd
+      });
+      const txt = await res.text();
+      let j = {};
+      try { j = txt ? JSON.parse(txt) : {}; } catch(e){}
+      if (!res.ok) throw new Error(j.message || txt || 'Add car failed');
+      alert(j.message || 'Car added');
+      this.reset();
+      imagesPreview.innerHTML = '';
+      loadCarList();
+    } catch(err){
+      console.error(err);
+      alert(err.message || 'Failed to add car');
+    }
+  });
+
+  /* ---------------------------
+     Load car list and manage
+     --------------------------- */
+  async function loadCarList(){
+    try {
+      const token = getAdminToken();
+      const headers = {};
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const res = await fetch(api('/api/cars'), { headers });
+      if (!res.ok) throw new Error('Failed to load cars');
+      const list = await res.json();
+      const carListDiv = document.getElementById('car-list');
+      carListDiv.innerHTML = '';
       if (!Array.isArray(list) || list.length === 0) {
-        body.innerHTML = '<tr><td colspan="7" class="text-gray-500">No bookings found.</td></tr>';
+        carListDiv.innerHTML = '<div class="text-gray-500">No cars found.</div>';
         return;
       }
-      list.forEach(bk => {
+
+      list.forEach(car => {
+        let imgs = Array.isArray(car.images) ? car.images : [];
+        imgs = imgs.map(u => {
+          if (!u) return '';
+          return u.startsWith('http') ? u : (u.startsWith('/') ? BACKEND_URL + u : BACKEND_URL + '/' + u);
+        }).filter(Boolean);
+
+        const thumb = imgs[0] || 'https://via.placeholder.com/160x100?text=No+Image';
+
+        const carDiv = document.createElement('div');
+        carDiv.className = 'border rounded p-3 mb-3 flex items-center justify-between';
+        carDiv.innerHTML = `
+          <div class="flex items-center gap-4">
+            <img src="${thumb}" alt="${escapeHtml(car.brand)}" class="w-36 h-24 object-cover rounded border cursor-pointer" data-images='${JSON.stringify(imgs)}'>
+            <div>
+              <div class="font-semibold">${escapeHtml(car.brand)} ${escapeHtml(car.model)}</div>
+              <div class="text-gray-600 text-sm">Year: ${car.year} | ₹${car.daily_rate}/day</div>
+              <div class="text-gray-500 text-xs">${escapeHtml(car.location || '')}</div>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button class="bg-blue-600 text-white px-3 py-1 rounded view-bookings" data-carid="${car.id}" data-carname="${escapeHtml(car.brand+' '+car.model)}">View Bookings</button>
+            <button class="bg-red-600 text-white px-3 py-1 rounded delete-car" data-carid="${car.id}">Delete</button>
+          </div>
+        `;
+        carListDiv.appendChild(carDiv);
+
+        carDiv.querySelector('img').addEventListener('click', function(){
+          const arr = JSON.parse(this.getAttribute('data-images') || '[]');
+          openLightbox(arr, `${car.brand} ${car.model}`);
+        });
+
+        const vb = carDiv.querySelector('.view-bookings');
+        vb && vb.addEventListener('click', () => viewCarBookings(car.id, car.brand+' '+car.model));
+        const del = carDiv.querySelector('.delete-car');
+        del && del.addEventListener('click', () => deleteCar(car.id, del));
+      });
+
+      // update available cars stat
+      try { document.getElementById('stat-cars').innerText = list.length; } catch(e){}
+
+    } catch(e){
+      console.error(e);
+      document.getElementById('car-list').innerHTML = '<div class="text-red-500">Failed to load cars</div>';
+    }
+  }
+
+  async function deleteCar(carId, btn){
+    if (!confirm('Delete car and its bookings?')) return;
+    btn.disabled = true;
+    try {
+      const token = getAdminToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const res = await fetch(api('/api/deletecar'), { method: 'POST', headers, body: JSON.stringify({ car_id: carId }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.message || 'Delete failed');
+      alert(j.message || 'Deleted');
+      loadCarList();
+    } catch(e){
+      alert(e.message || 'Delete failed');
+      btn.disabled = false;
+    }
+  }
+
+  function viewCarBookings(carId, carName){
+    const panel = document.getElementById('car-bookings-panel');
+    const title = document.getElementById('car-bookings-title');
+    const body = document.getElementById('car-bookings-body');
+    title.innerText = carName;
+    panel.classList.remove('hidden');
+    body.innerHTML = '<tr><td colspan="7" class="text-gray-500">Loading...</td></tr>';
+    const token = getAdminToken();
+    const headers = {};
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    fetch(api(`/api/car-bookings/${carId}`), { headers })
+      .then(r => r.ok ? r.json() : Promise.reject('Failed'))
+      .then(list => {
+        body.innerHTML = '';
+        if (!Array.isArray(list) || list.length === 0) {
+          body.innerHTML = '<tr><td colspan="7" class="text-gray-500">No bookings found.</td></tr>';
+          return;
+        }
+        list.forEach(bk => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td class="border px-2 py-1">${bk.booking_id || bk.id}</td><td class="border px-2 py-1">${escapeHtml(bk.customer_name || bk.name || bk.email || '')}</td><td class="border px-2 py-1">${(new Date(bk.start_date)).toLocaleDateString()}</td><td class="border px-2 py-1">${(new Date(bk.end_date)).toLocaleDateString()}</td><td class="border px-2 py-1">${bk.amount? '₹'+bk.amount : '-'}</td><td class="border px-2 py-1">${bk.paid==1?'Yes':'No'}</td><td class="border px-2 py-1">${bk.verified==1?'Yes':'No'}</td>`;
+          body.appendChild(tr);
+        });
+      }).catch(()=> { body.innerHTML = '<tr><td colspan="7" class="text-red-500">Failed to load bookings</td></tr>'; });
+  }
+
+  document.getElementById('close-car-bookings').addEventListener('click', () => {
+    document.getElementById('car-bookings-panel').classList.add('hidden');
+  });
+
+  /* ---------------------------
+     Transactions & stats
+     --------------------------- */
+  async function loadTransactions(){
+    try {
+      const token = getAdminToken();
+      const headers = {};
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const res = await fetch(api('/api/admin/transactions?page=1&pageSize=20'), { headers });
+      if (!res.ok) {
+        document.getElementById('tx-body').innerHTML = '<tr><td colspan="8" class="text-gray-500">Transactions not available (auth may be required)</td></tr>';
+        return;
+      }
+      const resp = await res.json();
+      const list = resp.data || [];
+      const body = document.getElementById('tx-body'); body.innerHTML = '';
+      list.forEach(tx => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td class="border px-2 py-1">${bk.booking_id || bk.id}</td><td class="border px-2 py-1">${escapeHtml(bk.customer_name || bk.name || bk.email || '')}</td><td class="border px-2 py-1">${(new Date(bk.start_date)).toLocaleDateString()}</td><td class="border px-2 py-1">${(new Date(bk.end_date)).toLocaleDateString()}</td><td class="border px-2 py-1">${bk.amount? '₹'+bk.amount : '-'}</td><td class="border px-2 py-1">${bk.paid==1?'Yes':'No'}</td><td class="border px-2 py-1">${bk.verified==1?'Yes':'No'}</td>`;
+        tr.innerHTML = `<td class="border px-2 py-1">${tx.payment_id}</td><td class="border px-2 py-1">${escapeHtml(tx.name || tx.customer_name || '')} (${escapeHtml(tx.email || '')})</td><td class="border px-2 py-1">${escapeHtml(tx.brand || '')} ${escapeHtml(tx.model || '')}</td><td class="border px-2 py-1">${(new Date(tx.start_date)).toLocaleDateString()}</td><td class="border px-2 py-1">${(new Date(tx.end_date)).toLocaleDateString()}</td><td class="border px-2 py-1">₹${tx.amount}</td><td class="border px-2 py-1">${tx.paid==1?'Yes':'No'}</td><td class="border px-2 py-1">${tx.verified==1?'Yes':'No'}</td>`;
         body.appendChild(tr);
       });
-    }).catch(()=> { body.innerHTML = '<tr><td colspan="7" class="text-red-500">Failed to load bookings</td></tr>'; });
-}
-
-document.getElementById('close-car-bookings').addEventListener('click', () => {
-  document.getElementById('car-bookings-panel').classList.add('hidden');
-});
-
-/* ---------------------------
-   Lightbox controls
-   --------------------------- */
-function openLightbox(images, title){
-  const lb = document.getElementById('lightbox');
-  const lbImages = document.getElementById('lb-images');
-  const lbTitle = document.getElementById('lb-title');
-  lbImages.innerHTML = '';
-  lbTitle.innerText = title || 'Images';
-  (images || []).forEach(url => {
-    const img = document.createElement('img');
-    img.src = url;
-    img.className = 'max-h-96 object-contain mr-2';
-    lbImages.appendChild(img);
-  });
-  lb.classList.remove('hidden');
-  lb.classList.add('flex');
-}
-document.getElementById('lb-close').addEventListener('click', () => {
-  const lb = document.getElementById('lightbox');
-  lb.classList.add('hidden'); lb.classList.remove('flex');
-});
-
-/* ---------------------------
-   Transactions / pagination / CSV export
-   --------------------------- */
-let currentPage = 1;
-let currentPageSize = 20;
-
-document.getElementById('prev-page').addEventListener('click', ()=> { if (currentPage>1) loadTransactions(currentPage-1, currentPageSize); });
-document.getElementById('next-page').addEventListener('click', ()=> loadTransactions(currentPage+1, currentPageSize));
-document.getElementById('page-size').addEventListener('change', (e)=> { currentPageSize = parseInt(e.target.value); loadTransactions(1,currentPageSize); });
-document.getElementById('btn-apply-filters').addEventListener('click', ()=> loadTransactions(1,currentPageSize));
-document.getElementById('btn-clear-filters').addEventListener('click', ()=> { document.getElementById('admin-search').value=''; document.getElementById('filter-start').value=''; document.getElementById('filter-end').value=''; loadTransactions(1,currentPageSize); });
-
-function buildFiltersQuery(params={}){
-  const q = document.getElementById('admin-search').value.trim();
-  const start = document.getElementById('filter-start').value;
-  const end = document.getElementById('filter-end').value;
-  if (q) params.q = q;
-  if (start) params.start_date = start;
-  if (end) params.end_date = end;
-  return Object.keys(params).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(params[k])).join('&');
-}
-
-async function loadTransactions(page=1,pageSize=20){
-  const token = getAdminToken(); if (!token) return;
-  currentPage = page; currentPageSize = pageSize;
-  const qStr = buildFiltersQuery({ page, pageSize });
-  try {
-    const res = await fetch(api(`/api/admin/transactions?${qStr}`), { headers: { 'Authorization': 'Bearer ' + token } });
-    if (res.status === 401) { sessionStorage.removeItem('adminToken'); sessionStorage.removeItem('adminLoggedIn'); window.adminToken = null; document.getElementById('admin-login').classList.remove('hidden'); document.getElementById('admin-dashboard').classList.add('hidden'); return; }
-    const resp = await res.json();
-    const list = resp.data || [];
-    const body = document.getElementById('tx-body'); body.innerHTML = '';
-    list.forEach(tx => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td class="border px-2 py-1">${tx.payment_id}</td><td class="border px-2 py-1">${escapeHtml(tx.name || tx.customer_name || '')} (${escapeHtml(tx.email || '')})</td><td class="border px-2 py-1">${escapeHtml(tx.brand || '')} ${escapeHtml(tx.model || '')}</td><td class="border px-2 py-1">${(new Date(tx.start_date)).toLocaleDateString()}</td><td class="border px-2 py-1">${(new Date(tx.end_date)).toLocaleDateString()}</td><td class="border px-2 py-1">₹${tx.amount}</td><td class="border px-2 py-1">${tx.paid==1?'Yes':'No'}</td><td class="border px-2 py-1">${tx.verified==1?'Yes':'No'}</td>`;
-      body.appendChild(tr);
-    });
-    document.getElementById('page-info').innerText = `Page ${resp.page} / ${Math.max(1, Math.ceil((resp.total||0)/resp.pageSize))}`;
-    // update stats
-    try { document.getElementById('stat-bookings').innerText = resp.total || (resp.data?resp.data.length:0); } catch(e){}
-    loadStats();
-  } catch(e){ console.error(e); }
-}
-
-document.getElementById('export-csv').addEventListener('click', () => {
-  const token = getAdminToken(); if (!token) return;
-  const qStr = buildFiltersQuery();
-  const url = api(`/api/admin/transactions.csv${qStr?('?'+qStr):''}`);
-  fetch(url, { headers: { 'Authorization': 'Bearer ' + token } }).then(r => {
-    if (!r.ok) throw new Error('Export failed');
-    return r.blob();
-  }).then(b => {
-    const url = URL.createObjectURL(b);
-    const a = document.createElement('a'); a.href = url; a.download = 'transactions.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-  }).catch(()=> alert('Export failed'));
-});
-
-/* ---------------------------
-   Dashboard stats
-   --------------------------- */
-function loadStats(){
-  const token = getAdminToken(); if (!token) return;
-  // transactions for stats:
-  fetch(api('/api/admin/transactions?page=1&pageSize=1000'), { headers: { 'Authorization': 'Bearer ' + token } })
-    .then(r => r.ok? r.json() : Promise.reject('unauth'))
-    .then(j => {
-      const total = j.total || (Array.isArray(j.data)? j.data.length : 0);
-      const pending = (j.data || []).filter(p => p.paid==0).length;
-      document.getElementById('stat-bookings').innerText = total;
+      try { document.getElementById('stat-bookings').innerText = resp.total || (list.length); } catch(e){}
+      const pending = list.filter(p => p.paid == 0).length;
       document.getElementById('stat-pending').innerText = pending;
-    }).catch(()=>{});
-  fetch(api('/api/cars'), { headers: { 'Authorization': 'Bearer ' + token } }).then(r => r.json()).then(cars => { document.getElementById('stat-cars').innerText = (Array.isArray(cars)?cars.length:0); }).catch(()=>{});
-}
+    } catch (e) {
+      console.error('loadTransactions error', e);
+    }
+  }
 
-/* ---------------------------
-   Camera QR scanning (BarcodeDetector + jsQR fallback)
-   --------------------------- */
-let videoStream = null;
-async function startScan(){
-  const video = document.getElementById('video');
-  const status = document.getElementById('scan-status');
-  status.innerText = 'Starting camera...';
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    video.srcObject = stream;
-    videoStream = stream;
-    video.play();
-    status.innerText = 'Scanning...';
+  async function loadStats(){
+    // stat-cars is set in loadCarList; bookings/pending set in loadTransactions
+  }
 
-    if (window.BarcodeDetector) {
-      const detector = new BarcodeDetector({ formats: ['qr_code'] });
-      const loop = async () => {
+  /* ---------------------------
+     Lightbox controls
+     --------------------------- */
+  function openLightbox(images, title){
+    const lb = document.getElementById('lightbox');
+    const lbImages = document.getElementById('lb-images');
+    const lbTitle = document.getElementById('lb-title');
+    lbImages.innerHTML = '';
+    lbTitle.innerText = title || 'Images';
+    (images || []).forEach(url => {
+      const img = document.createElement('img');
+      img.src = url;
+      img.className = 'max-h-96 object-contain mr-2';
+      lbImages.appendChild(img);
+    });
+    lb.classList.remove('hidden');
+    lb.classList.add('flex');
+  }
+  document.getElementById('lb-close').addEventListener('click', () => {
+    const lb = document.getElementById('lightbox');
+    lb.classList.add('hidden'); lb.classList.remove('flex');
+  });
+
+  /* ---------------------------
+     QR scanning (BarcodeDetector + jsQR fallback)
+     --------------------------- */
+  let videoStream = null;
+  async function startScan(){
+    const video = document.getElementById('video');
+    const status = document.getElementById('scan-status');
+    status.innerText = 'Starting camera...';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+      video.srcObject = stream;
+      videoStream = stream;
+      video.play();
+      status.innerText = 'Scanning...';
+
+      if (window.BarcodeDetector) {
         try {
-          const codes = await detector.detect(video);
-          if (codes && codes.length) {
-            const token = codes[0].rawValue;
-            stopScan();
-            status.innerText = 'Found token, verifying...';
-            verifyQrToken(token);
-            return;
-          }
-        } catch(e){}
-        requestAnimationFrame(loop);
-      };
-      requestAnimationFrame(loop);
-    } else {
+          const detector = new BarcodeDetector({ formats: ['qr_code'] });
+          const loop = async () => {
+            try {
+              const codes = await detector.detect(video);
+              if (codes && codes.length) {
+                const token = codes[0].rawValue;
+                stopScan();
+                status.innerText = 'Found token, verifying...';
+                verifyQrToken(token);
+                return;
+              }
+            } catch(e){}
+            requestAnimationFrame(loop);
+          };
+          requestAnimationFrame(loop);
+          return;
+        } catch(e){
+          // continue to jsQR fallback
+        }
+      }
+
       // jsQR fallback
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
@@ -617,111 +499,94 @@ async function startScan(){
         requestAnimationFrame(scanLoop);
       };
       requestAnimationFrame(scanLoop);
+
+    } catch(e) {
+      status.innerText = 'Camera permission or start failed';
     }
-  } catch(e) {
-    status.innerText = 'Camera permission or start failed';
   }
-}
 
-function stopScan(){
-  try {
-    if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
-    const v = document.getElementById('video'); if (v) try{ v.pause(); v.srcObject = null; } catch(e){}
-    document.getElementById('scan-status').innerText = 'Stopped';
-  } catch(e){}
-}
-document.getElementById('stop-scan').addEventListener('click', () => stopScan());
-
-async function verifyQrToken(token){
-  const status = document.getElementById('scan-status');
-  status.innerText = 'Verifying QR...';
-  const t = getAdminToken();
-  if (!t) return status.innerText = 'Admin not logged in.';
-
-  try {
-    let qr_data;
-    try { qr_data = JSON.parse(token); } catch { qr_data = { booking_id: token }; }
-
-    const res = await fetch(api('/api/admin/verify-qr'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + t },
-      body: JSON.stringify({ qr_data })
-    });
-    const j = await res.json();
-    if (!res.ok) throw new Error(j.message || 'Verification failed');
-
-    // ✅ Success UI + sound
-    playSuccessSound();
-    showToast('✅ Booking verified successfully!', 'green');
-    status.innerText = '✅ Verified';
-
-    document.getElementById('qr-result').innerHTML = `
-      <div class="bg-green-50 border border-green-300 p-3 rounded mt-2 text-sm">
-        <p><b>Booking ID:</b> ${j.booking_id}</p>
-        <p><b>Customer:</b> ${j.customer.name} (${j.customer.email})</p>
-        <p><b>Car:</b> ${j.car}</p>
-        <p><b>Amount:</b> ₹${j.amount}</p>
-      </div>
-    `;
-
-    // 🔄 auto-refresh your transactions table
-    if (typeof loadTransactions === 'function') loadTransactions(1, currentPageSize);
-  } catch(err){
-    showToast('❌ ' + err.message, 'red');
-    status.innerText = '❌ Verification failed';
+  function stopScan(){
+    try {
+      if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+      const v = document.getElementById('video'); if (v) try{ v.pause(); v.srcObject = null; } catch(e){}
+      document.getElementById('scan-status').innerText = 'Stopped';
+    } catch(e){}
   }
-}
-    // --- Toast and sound utilities ---
-function playSuccessSound() {
-  const audio = new Audio("https://cdn.pixabay.com/download/audio/2022/03/15/audio_2bda1e560f.mp3");
-  audio.play();
-}
+  document.getElementById('stop-scan').addEventListener('click', () => stopScan());
 
-function showToast(message, color = "green") {
-  const toast = document.createElement("div");
-  toast.className = `fixed top-5 right-5 bg-${color}-600 text-white px-4 py-2 rounded shadow-lg transition-all duration-500`;
-  toast.style.zIndex = "9999";
-  toast.textContent = message;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
-}
+  async function verifyQrToken(token){
+    const status = document.getElementById('scan-status');
+    status.innerText = 'Verifying QR...';
+    const t = getAdminToken();
+    if (!t) return status.innerText = 'Admin not logged in.';
 
+    try {
+      let qr_data;
+      try { qr_data = JSON.parse(token); } catch { qr_data = { booking_id: token }; }
 
-/* ---------------------------
-   Utility: escape HTML
-   --------------------------- */
-function escapeHtml(s){ if (s==null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+      const res = await fetch(api('/api/admin/verify-qr'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + t },
+        body: JSON.stringify({ qr_data })
+      });
 
-/* ---------------------------
-   Init: if already logged in restore state
-   --------------------------- */
-(function init(){
-  try {
-    if (sessionStorage.getItem('adminLoggedIn') && sessionStorage.getItem('adminToken')) {
+      const j = await res.json().catch(()=>({}));
+      if (!res.ok) throw new Error(j.message || 'Verification failed');
+
+      // success
+      playSuccessSound();
+      showToast('✅ Booking verified successfully!', 'green');
+      status.innerText = '✅ Verified';
+
+      document.getElementById('qr-result').innerHTML = `
+        <div class="bg-green-50 border border-green-300 p-3 rounded mt-2 text-sm">
+          <p><b>Booking ID:</b> ${j.booking_id}</p>
+          <p><b>Customer:</b> ${j.customer?.name || ''} (${j.customer?.email || ''})</p>
+          <p><b>Car:</b> ${j.car || ''}</p>
+          <p><b>Amount:</b> ₹${j.amount || ''}</p>
+        </div>
+      `;
+
+      loadTransactions(); loadCarList();
+    } catch(err){
+      showToast('❌ ' + (err.message || 'Verification failed'), 'red');
+      status.innerText = '❌ Verification failed';
+    }
+  }
+
+  /* small utilities */
+  function escapeHtml(s){ if (s==null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  function playSuccessSound() { try { new Audio("https://cdn.pixabay.com/download/audio/2022/03/15/audio_2bda1e560f.mp3").play().catch(()=>{}); } catch(e){} }
+  function showToast(message, color = "green") {
+    const toast = document.createElement("div");
+    toast.style.position = "fixed";
+    toast.style.top = "16px";
+    toast.style.right = "16px";
+    toast.style.padding = "8px 12px";
+    toast.style.zIndex = "9999";
+    toast.style.borderRadius = "6px";
+    toast.style.color = "#fff";
+    toast.style.background = color === 'green' ? '#16a34a' : (color === 'red' ? '#dc2626' : '#4b5563');
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+
+  /* ---------------------------
+     Initialization: restore admin session if any
+     --------------------------- */
+  (function init(){
+    const token = getAdminToken();
+    if (token) {
       document.getElementById('admin-login').classList.add('hidden');
       document.getElementById('admin-dashboard').classList.remove('hidden');
-      document.getElementById('col-addcar').classList.remove('hidden');
-      loadCarList(); loadTransactions(1, currentPageSize); loadStats();
+      document.getElementById('admin-logout').classList.remove('hidden');
+      document.getElementById('col-verify').classList.remove('hidden');
+      loadCarList(); loadTransactions(); loadStats();
     }
-  } catch(e){}
-})();
-  // --- Toast and sound utilities ---
-function playSuccessSound() {
-  const audio = new Audio("https://cdn.pixabay.com/download/audio/2022/03/15/audio_2bda1e560f.mp3");
-  audio.play();
-}
+  })();
 
-function showToast(message, color = "green") {
-  const toast = document.createElement("div");
-  toast.className = `fixed top-5 right-5 bg-${color}-600 text-white px-4 py-2 rounded shadow-lg transition-all duration-500`;
-  toast.style.zIndex = "9999";
-  toast.textContent = message;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
-}
-
-
-</script>
-
+  </script>
 </body>
 </html>
