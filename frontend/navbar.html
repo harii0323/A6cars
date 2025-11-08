@@ -36,17 +36,34 @@
 </nav>
 
 <script>
-  // ✅ Dynamic navbar setup
-  document.addEventListener('DOMContentLoaded', () => {
+  // ✅ Secure Navbar Logic
+  document.addEventListener('DOMContentLoaded', async () => {
     try {
-      // Retrieve login info
-      const customerId = localStorage.getItem('customer_id');
-      const customerName = localStorage.getItem('customer_name');
-      const authToken = localStorage.getItem('auth_token');
-      const adminLogged = sessionStorage.getItem('adminLoggedIn');
-      const adminToken = sessionStorage.getItem('adminToken');
+      // 🔹 Retrieve stored values
+      let customerId = localStorage.getItem('customer_id');
+      let customerName = localStorage.getItem('customer_name');
+      let authToken = localStorage.getItem('auth_token');
+      let adminLogged = sessionStorage.getItem('adminLoggedIn');
+      let adminToken = sessionStorage.getItem('adminToken');
 
-      // Get element references
+      // 🔹 Clear any invalid or leftover values
+      if (!authToken || authToken === "undefined" || authToken === "null") {
+        localStorage.removeItem("auth_token");
+        localStorage.removeItem("customer_id");
+        localStorage.removeItem("customer_name");
+        customerId = null;
+        customerName = null;
+        authToken = null;
+      }
+
+      if (!adminToken || adminToken === "undefined" || adminToken === "null") {
+        sessionStorage.removeItem("adminToken");
+        sessionStorage.removeItem("adminLoggedIn");
+        adminToken = null;
+        adminLogged = null;
+      }
+
+      // 🔹 Element references
       const userEl = document.getElementById('nav-user');
       const logoutBtn = document.getElementById('nav-logout');
       const authLinks = document.getElementById('nav-auth');
@@ -58,7 +75,7 @@
       const isUserLoggedIn = !!(customerId && authToken);
       const isAdminLoggedIn = !!(adminLogged && adminToken);
 
-      // ✅ User logged in
+      // ✅ User Logged In
       if (isUserLoggedIn) {
         authLinks.classList.add('hidden');
         logoutBtn.classList.remove('hidden');
@@ -71,7 +88,7 @@
         userEl.classList.remove('hidden');
       }
 
-      // ✅ Admin logged in
+      // ✅ Admin Logged In
       else if (isAdminLoggedIn) {
         authLinks.classList.add('hidden');
         logoutBtn.classList.remove('hidden');
@@ -86,7 +103,7 @@
         navHistory.classList.add('hidden');
       }
 
-      // 🚪 Guest (not logged in)
+      // 🚪 Guest (Not Logged In)
       else {
         authLinks.classList.remove('hidden');
         logoutBtn.classList.add('hidden');
@@ -97,7 +114,7 @@
         navHistory.classList.add('hidden');
       }
 
-      // ✅ Logout handler
+      // ✅ Logout clears all and redirects
       logoutBtn.addEventListener('click', () => {
         localStorage.clear();
         sessionStorage.clear();
@@ -110,3 +127,4 @@
     }
   });
 </script>
+
