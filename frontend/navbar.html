@@ -1,8 +1,11 @@
 <!-- ✅ navbar.html -->
 <nav class="bg-blue-700 text-white fixed top-0 left-0 right-0 z-50 shadow-lg">
   <div class="max-w-6xl mx-auto flex justify-between items-center px-6 py-3">
+    <!-- Logo -->
     <a href="/index.html" class="text-2xl font-bold tracking-wide">A6 Cars</a>
-    <ul class="flex space-x-6 items-center">
+
+    <!-- Menu -->
+    <ul id="nav-menu" class="flex space-x-6 items-center">
       <!-- User links -->
       <li><a href="/home.html" id="nav-home" class="hover:text-gray-300 hidden">Home</a></li>
       <li><a href="/booking.html" id="nav-book" class="hover:text-gray-300 hidden">Book Car</a></li>
@@ -36,6 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const adminLogged = sessionStorage.getItem("adminLoggedIn") === "true";
     const adminToken = sessionStorage.getItem("adminToken");
 
+    const navMenu = document.getElementById("nav-menu");
     const userEl = document.getElementById("nav-user");
     const logoutBtn = document.getElementById("nav-logout");
     const authLinks = document.getElementById("nav-auth");
@@ -47,10 +51,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const isUserLoggedIn = Boolean(customerId && authToken);
     const isAdminLoggedIn = Boolean(adminLogged && adminToken);
 
-    // detect if current page is home.html
-    const onHomePage = window.location.pathname.endsWith("home.html");
+    const path = window.location.pathname;
 
-    // 🧑‍💼 Admin logged in
+    // Hide rules for guest pages
+    const isHomePage = path.endsWith("home.html");
+    const isBookPage = path.endsWith("book.html");
+    const isBookingPage = path.endsWith("booking.html");
+
+    // ==============================
+    // 🧩 ADMIN LOGGED IN
+    // ==============================
     if (isAdminLoggedIn) {
       authLinks.classList.add("hidden");
       logoutBtn.classList.remove("hidden");
@@ -58,35 +68,56 @@ document.addEventListener("DOMContentLoaded", () => {
       userEl.textContent = "🧑‍💼 Admin";
       userEl.classList.remove("hidden");
       [navHome, navBook, navHistory].forEach(el => el.classList.add("hidden"));
+      return;
     }
 
-    // 👤 User logged in
-    else if (isUserLoggedIn) {
+    // ==============================
+    // 👤 USER LOGGED IN
+    // ==============================
+    if (isUserLoggedIn) {
       authLinks.classList.add("hidden");
       logoutBtn.classList.remove("hidden");
       adminLink.classList.add("hidden");
-      [navHome, navBook, navHistory].forEach(el => el.classList.remove("hidden"));
       userEl.textContent = `👋 Hello, ${customerName || "User"}`;
       userEl.classList.remove("hidden");
+
+      // page-specific navigation layout
+      if (isHomePage) {
+        navHome.classList.add("hidden");
+        navBook.classList.remove("hidden");
+        navHistory.classList.remove("hidden");
+      } 
+      else if (isBookPage) {
+        navHome.classList.remove("hidden");
+        navBook.classList.add("hidden");
+        navHistory.classList.remove("hidden");
+      } 
+      else if (isBookingPage) {
+        navHome.classList.remove("hidden");
+        navBook.classList.remove("hidden");
+        navHistory.classList.add("hidden");
+      } 
+      else {
+        // Default for other pages
+        [navHome, navBook, navHistory].forEach(el => el.classList.remove("hidden"));
+      }
     }
 
-    // 🚪 Guest
+    // ==============================
+    // 🚪 GUEST (Not logged in)
+    // ==============================
     else {
-      // If on home.html, show Home, Book, My Bookings, hide login/register/admin
-      if (onHomePage) {
-        [navHome, navBook, navHistory].forEach(el => el.classList.remove("hidden"));
-        authLinks.classList.add("hidden");
-      } else {
-        // On other pages, show normal login/register
-        authLinks.classList.remove("hidden");
-        [navHome, navBook, navHistory].forEach(el => el.classList.add("hidden"));
-      }
+      // Default guest layout
+      authLinks.classList.remove("hidden");
       logoutBtn.classList.add("hidden");
       userEl.classList.add("hidden");
       adminLink.classList.add("hidden");
+      [navHome, navBook, navHistory].forEach(el => el.classList.add("hidden"));
     }
 
-    // 🚫 Logout clears everything
+    // ==============================
+    // 🚫 LOGOUT
+    // ==============================
     logoutBtn.addEventListener("click", () => {
       localStorage.clear();
       sessionStorage.clear();
