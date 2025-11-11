@@ -39,7 +39,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const adminLogged = sessionStorage.getItem("adminLoggedIn") === "true";
     const adminToken = sessionStorage.getItem("adminToken");
 
-    const navMenu = document.getElementById("nav-menu");
     const userEl = document.getElementById("nav-user");
     const logoutBtn = document.getElementById("nav-logout");
     const authLinks = document.getElementById("nav-auth");
@@ -52,10 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const isAdminLoggedIn = Boolean(adminLogged && adminToken);
 
     const path = window.location.pathname;
-
-    // Hide rules for guest pages
     const isHomePage = path.endsWith("home.html");
-    const isBookPage = path.endsWith("book.html");
     const isBookingPage = path.endsWith("booking.html");
 
     // ==============================
@@ -75,45 +71,34 @@ document.addEventListener("DOMContentLoaded", () => {
     // 👤 USER LOGGED IN
     // ==============================
     if (isUserLoggedIn) {
-      authLinks.classList.remove("hidden");
-      logoutBtn.classList.add("hidden");
-      adminLink.classList.remove("hidden");
+      authLinks.classList.add("hidden");
+      logoutBtn.classList.remove("hidden");
+      adminLink.classList.add("hidden");
       userEl.textContent = `👋 Hello, ${customerName || "User"}`;
-      userEl.classList.add("hidden");
+      userEl.classList.remove("hidden");
 
-      // page-specific navigation layout
       if (isHomePage) {
         navHome.classList.remove("hidden");
-        navBook.classList.add("hidden");
-        navHistory.classList.add("hidden");
-      } 
-      else if (isBookPage) {
-        navHome.classList.add("hidden");
-        navBook.classList.add("hidden");
+        navBook.classList.remove("hidden");
         navHistory.classList.remove("hidden");
-      } 
-      else if (isBookingPage) {
-        navHome.classList.add("hidden");
-        navBook.classList.add("hidden");
+      } else if (isBookingPage) {
+        navHome.classList.remove("hidden");
+        navBook.classList.remove("hidden");
         navHistory.classList.remove("hidden");
-      } 
-      else {
-        // Default for other pages
+      } else {
         [navHome, navBook, navHistory].forEach(el => el.classList.remove("hidden"));
       }
+      return;
     }
 
     // ==============================
     // 🚪 GUEST (Not logged in)
     // ==============================
-    else {
-      // Default guest layout
-      authLinks.classList.remove("hidden");
-      logoutBtn.classList.add("hidden");
-      userEl.classList.add("hidden");
-      adminLink.classList.add("hidden");
-      [navHome, navBook, navHistory].forEach(el => el.classList.add("hidden"));
-    }
+    authLinks.classList.remove("hidden");
+    logoutBtn.classList.add("hidden");
+    userEl.classList.add("hidden");
+    adminLink.classList.add("hidden");
+    [navHome, navBook, navHistory].forEach(el => el.classList.add("hidden"));
 
     // ==============================
     // 🚫 LOGOUT
