@@ -75,27 +75,27 @@ document.addEventListener("DOMContentLoaded", () => {
     // 👤 USER LOGGED IN
     // ==============================
     if (isUserLoggedIn) {
-      authLinks.classList.add("hidden");
-      logoutBtn.classList.remove("hidden");
-      adminLink.classList.add("hidden");
+      authLinks.classList.remove("hidden");
+      logoutBtn.classList.add("hidden");
+      adminLink.classList.remove("hidden");
       userEl.textContent = `👋 Hello, ${customerName || "User"}`;
       userEl.classList.remove("hidden");
 
       // page-specific navigation layout
       if (isHomePage) {
-        navHome.classList.add("hidden");
-        navBook.classList.remove("hidden");
-        navHistory.classList.remove("hidden");
+        navHome.classList.remove("hidden");
+        navBook.classList.add("hidden");
+        navHistory.classList.add("hidden");
       } 
       else if (isBookPage) {
-        navHome.classList.remove("hidden");
+        navHome.classList.add("hidden");
         navBook.classList.add("hidden");
         navHistory.classList.remove("hidden");
       } 
       else if (isBookingPage) {
-        navHome.classList.remove("hidden");
-        navBook.classList.remove("hidden");
-        navHistory.classList.add("hidden");
+        navHome.classList.add("hidden");
+        navBook.classList.add("hidden");
+        navHistory.classList.remove("hidden");
       } 
       else {
         // Default for other pages
