@@ -79,7 +79,7 @@ document.addEventListener("DOMContentLoaded", () => {
       logoutBtn.classList.add("hidden");
       adminLink.classList.remove("hidden");
       userEl.textContent = `👋 Hello, ${customerName || "User"}`;
-      userEl.classList.remove("hidden");
+      userEl.classList.add("hidden");
 
       // page-specific navigation layout
       if (isHomePage) {
