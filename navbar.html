@@ -1,0 +1,125 @@
+<!-- ✅ navbar.html -->
+<nav class="bg-blue-700 text-white fixed top-0 left-0 right-0 z-50 shadow-lg">
+  <div class="max-w-6xl mx-auto flex justify-between items-center px-6 py-3">
+    <!-- Logo -->
+    <a href="/index.html" class="text-2xl font-bold tracking-wide">A6 Cars</a>
+
+    <!-- Menu -->
+    <ul id="navMenu" class="flex space-x-6 items-center">
+      <!-- User links -->
+      <li><a href="/home.html" id="nav-home" class="hover:text-gray-300 hidden">Home</a></li>
+      <li><a href="/booking.html" id="nav-book" class="hover:text-gray-300 hidden">Book Car</a></li>
+      <li><a href="/history.html" id="nav-history" class="hover:text-gray-300 hidden">My Bookings</a></li>
+
+      <!-- Admin -->
+      <li><a href="/admin-dashboard.html" id="nav-admin" class="hover:text-yellow-300 hidden font-semibold">Admin Dashboard</a></li>
+
+      <!-- Greeting -->
+      <li id="nav-user" class="hidden font-semibold"></li>
+
+      <!-- Logout -->
+      <li><button id="nav-logout" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-white hidden">Logout</button></li>
+
+      <!-- Auth links -->
+      <li id="nav-auth" class="flex space-x-2">
+        <a href="/login.html" class="bg-white text-blue-700 px-3 py-1 rounded hover:bg-gray-100">User Login</a>
+        <a href="/register.html" class="bg-blue-500 px-3 py-1 rounded hover:bg-blue-600">Register</a>
+        <a href="/admin.html" class="bg-yellow-400 text-black px-3 py-1 rounded hover:bg-yellow-500 font-semibold">Admin Login</a>
+      </li>
+    </ul>
+  </div>
+</nav>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  try {
+    const customerId = localStorage.getItem("customer_id");
+    const customerName = localStorage.getItem("customer_name");
+    const authToken = localStorage.getItem("auth_token");
+    const adminLogged = sessionStorage.getItem("adminLoggedIn") === "true";
+    const adminToken = sessionStorage.getItem("adminToken");
+
+    const userEl = document.getElementById("nav-user");
+    const logoutBtn = document.getElementById("nav-logout");
+    const authLinks = document.getElementById("nav-auth");
+    const adminLink = document.getElementById("nav-admin");
+    const navHome = document.getElementById("nav-home");
+    const navBook = document.getElementById("nav-book");
+    const navHistory = document.getElementById("nav-history");
+
+    const isUserLoggedIn = Boolean(customerId && authToken);
+    const isAdminLoggedIn = Boolean(adminLogged && adminToken);
+
+    const path = window.location.pathname;
+
+    const isHomePage = path.endsWith("home.html");
+    const isBookPage = path.endsWith("book.html");
+    const isBookingPage = path.endsWith("booking.html");
+
+    // Utility functions
+    const show = (...els) => els.forEach(el => el?.classList.remove("hidden"));
+    const hide = (...els) => els.forEach(el => el?.classList.add("hidden"));
+
+    // ==============================
+    // 🧩 ADMIN LOGGED IN
+    // ==============================
+    if (isAdminLoggedIn) {
+      hide(authLinks, navHome, navBook, navHistory);
+      show(adminLink, logoutBtn, userEl);
+      userEl.textContent = "🧑‍💼 Admin";
+      return;
+    }
+
+    // ==============================
+    // 👤 USER LOGGED IN
+    // ==============================
+    if (isUserLoggedIn) {
+      hide(authLinks, adminLink);
+      show(userEl, logoutBtn);
+      userEl.textContent = `👋 Hello, ${customerName || "User"}`;
+
+      // Page-specific navigation layout
+      if (isHomePage) {
+        // home.html → Book, Booking, Logout
+        show(navBook, navHistory);
+        hide(navHome);
+      } 
+      else if (isBookPage) {
+        // book.html → Booking, Home, Logout
+        show(navHistory, navHome);
+        hide(navBook);
+      } 
+      else if (isBookingPage) {
+        // booking.html → Book, Home, Logout
+        show(navBook, navHome);
+        hide(navHistory);
+      } 
+      else {
+        // Default: show all
+        show(navHome, navBook, navHistory);
+      }
+
+      return;
+    }
+
+    // ==============================
+    // 🚪 GUEST (Not logged in)
+    // ==============================
+    show(authLinks);
+    hide(userEl, logoutBtn, adminLink, navHome, navBook, navHistory);
+
+    // ==============================
+    // 🚫 LOGOUT FUNCTION
+    // ==============================
+    logoutBtn.addEventListener("click", () => {
+      localStorage.clear();
+      sessionStorage.clear();
+      alert("You have been logged out.");
+      window.location.href = "/index.html";
+    });
+
+  } catch (err) {
+    console.error("Navbar setup error:", err);
+  }
+});
+</script>

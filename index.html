@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>A6 Cars | Welcome</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen flex flex-col">
+  <!-- Navbar -->
+  <nav class="bg-blue-700 text-white shadow-lg fixed top-0 left-0 right-0 z-50">
+    <div class="max-w-6xl mx-auto flex justify-between items-center px-6 py-3">
+      <a href="/index.html" class="text-2xl font-bold tracking-wide">A6 Cars</a>
+      <ul id="nav-menu" class="flex space-x-4 items-center"></ul>
+    </div>
+  </nav>
+
+  <div class="h-20"></div>
+
+  <!-- Hero Section -->
+  <section class="flex flex-col items-center justify-center flex-1 text-center px-6">
+    <h1 class="text-4xl font-bold text-blue-700 mb-4">Welcome to A6 Cars 🚗</h1>
+    <p class="text-gray-600 text-lg max-w-xl mb-8">
+      Rent your favorite cars easily, securely, and quickly. Login as a user to book a car,
+      or login as admin to manage vehicles and bookings.
+    </p>
+
+    <div id="action-buttons" class="space-x-4"></div>
+  </section>
+
+  <footer class="bg-blue-700 text-white text-center py-3">
+    &copy; 2025 A6 Cars. All rights reserved.
+  </footer>
+
+  <script>
+    const BACKEND_URL =
+      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+        ? "http://localhost:10000"
+        : "https://a6cars.onrender.com";
+
+    // Clear any invalid or incomplete sessions
+    const userId = localStorage.getItem("customer_id");
+    const userName = localStorage.getItem("customer_name");
+    const authToken = localStorage.getItem("auth_token");
+    const adminLogged = sessionStorage.getItem("adminLoggedIn");
+    const adminToken = sessionStorage.getItem("adminToken");
+
+    const navMenu = document.getElementById("nav-menu");
+    const actionButtons = document.getElementById("action-buttons");
+
+    // ✅ Only consider valid login if both ID + token exist
+    const userLoggedIn = userId && authToken;
+    const adminActive = adminLogged && adminToken;
+
+    if (adminActive) {
+      // 🧑‍💼 Admin Logged In
+      navMenu.innerHTML = `
+        <li><button id="logoutBtn" class="bg-red-500 px-4 py-1 rounded hover:bg-red-600">Logout</button></li>
+      `;
+      actionButtons.innerHTML = `
+        <h2 class="text-2xl font-semibold text-blue-700 mb-4">🧑‍💼 Admin Mode</h2>
+        <a href="/admin-dashboard.html" class="bg-yellow-400 text-black px-5 py-2 rounded hover:bg-yellow-500 font-semibold">
+          Go to Admin Dashboard
+        </a>
+      `;
+    } 
+    else if (userLoggedIn) {
+      // 👤 User Logged In
+      navMenu.innerHTML = `
+        <li><a href="/home.html" class="hover:text-gray-200">Home</a></li>
+        <li><a href="/booking.html" class="hover:text-gray-200">My Bookings</a></li>
+        <li><a href="/book.html" class="hover:text-gray-200">Book</a></li>
+        <li><button id="logoutBtn" class="bg-red-500 px-4 py-1 rounded hover:bg-red-600">Logout</button></li>
+      `;
+      actionButtons.innerHTML = `
+        <h2 class="text-2xl font-semibold text-blue-700 mb-4">👋 Welcome back, ${userName || 'User'}!</h2>
+        <a href="/home.html" class="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700">Go to Dashboard</a>
+      `;
+    } 
+    else {
+      // 🚪 Not Logged In (default landing)
+      navMenu.innerHTML = `
+        <li><a href="/login.html" class="bg-white text-blue-700 px-3 py-1 rounded hover:bg-gray-100">User Login</a></li>
+       <!-- <li><a href="/register.html" class="bg-blue-500 px-3 py-1 rounded hover:bg-blue-600">Register</a></li>-->
+        <li><a href="/admin.html" class="bg-yellow-400 text-black px-3 py-1 rounded hover:bg-yellow-500 font-semibold">Admin Login</a></li>
+      `;
+      actionButtons.innerHTML = `
+       <!-- <a href="/register.html" class="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700">Sign Up to Start Booking</a> -->
+        <a href="/admin.html" class="bg-yellow-400 text-black px-5 py-2 rounded hover:bg-yellow-500">Admin Login</a>
+      `;
+    }
+
+    // ✅ Logout clears all data
+    document.addEventListener("click", (e) => {
+      if (e.target.id === "logoutBtn") {
+        localStorage.clear();
+        sessionStorage.clear();
+        alert("You have been logged out.");
+        window.location.href = "/index.html";
+      }
+    });
+  </script>
+</body>
+</html>
