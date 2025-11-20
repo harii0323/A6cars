@@ -33,12 +33,17 @@
 <script>
 document.addEventListener("DOMContentLoaded", () => {
   try {
+    // ===========================
+    // 🔍 READ USER + ADMIN TOKENS
+    // ===========================
     const customerId = localStorage.getItem("customer_id");
     const customerName = localStorage.getItem("customer_name");
     const authToken = localStorage.getItem("auth_token");
+
     const adminLogged = sessionStorage.getItem("adminLoggedIn") === "true";
     const adminToken = sessionStorage.getItem("adminToken");
 
+    // Elements
     const userEl = document.getElementById("nav-user");
     const logoutBtn = document.getElementById("nav-logout");
     const authLinks = document.getElementById("nav-auth");
@@ -47,70 +52,75 @@ document.addEventListener("DOMContentLoaded", () => {
     const navBook = document.getElementById("nav-book");
     const navHistory = document.getElementById("nav-history");
 
+    // Detection
     const isUserLoggedIn = Boolean(customerId && authToken);
     const isAdminLoggedIn = Boolean(adminLogged && adminToken);
 
-    const path = window.location.pathname;
+    // ===========================
+    // 🌐 PAGE DETECTION
+    // ===========================
+    const page = window.location.pathname.split("/").pop() || "index.html";
 
-    const isHomePage = path.endsWith("home.html");
-    const isBookPage = path.endsWith("book.html");
-    const isBookingPage = path.endsWith("booking.html");
+    const isHomePage    = page === "home.html";
+    const isBookPage    = page === "book.html";     
+    const isBookingPage = page === "booking.html"; 
+    const isHistoryPage = page === "history.html";
 
-    // Utility functions
+    // Helpers
     const show = (...els) => els.forEach(el => el?.classList.remove("hidden"));
     const hide = (...els) => els.forEach(el => el?.classList.add("hidden"));
 
-    // ==============================
+    // ===========================
     // 🧩 ADMIN LOGGED IN
-    // ==============================
+    // ===========================
     if (isAdminLoggedIn) {
       hide(authLinks, navHome, navBook, navHistory);
       show(adminLink, logoutBtn, userEl);
       userEl.textContent = "🧑‍💼 Admin";
-      return;
     }
 
-    // ==============================
+    // ===========================
     // 👤 USER LOGGED IN
-    // ==============================
-    if (isUserLoggedIn) {
+    // ===========================
+    else if (isUserLoggedIn) {
       hide(authLinks, adminLink);
       show(userEl, logoutBtn);
       userEl.textContent = `👋 Hello, ${customerName || "User"}`;
 
-      // Page-specific navigation layout
+      // Dynamic navigation logic
       if (isHomePage) {
-        // home.html → Book, Booking, Logout
         show(navBook, navHistory);
         hide(navHome);
-      } 
-      else if (isBookPage) {
-        // book.html → Booking, Home, Logout
-        show(navHistory, navHome);
+      }
+      else if (isBookPage) {  
+        show(navHome, navHistory);
         hide(navBook);
-      } 
-      else if (isBookingPage) {
-        // booking.html → Book, Home, Logout
-        show(navBook, navHome);
+      }
+      else if (isBookingPage) { 
+        show(navHome, navBook);
         hide(navHistory);
-      } 
+      }
+      else if (isHistoryPage) {
+        show(navHome, navBook);
+        hide(navHistory);
+      }
       else {
-        // Default: show all
+        // any other page
         show(navHome, navBook, navHistory);
       }
-
-      return;
     }
 
-    // ==============================
-    // 🚪 GUEST (Not logged in)
-    // ==============================
-    show(authLinks);
-    hide(userEl, logoutBtn, adminLink, navHome, navBook, navHistory);
+    // ===========================
+    // 🚪 GUEST (NO USER OR ADMIN)
+    // ===========================
+    else {
+      show(authLinks);
+      hide(userEl, logoutBtn, adminLink, navHome, navBook, navHistory);
+    }
 
-    // ==============================
-    // 🚫 LOGOUT FUNCTION
-    // ==============================
+    // ===========================
+    // 🔴 LOGOUT FOR BOTH USER + ADMIN
+    // ===========================
     logoutBtn.addEventListener("click", () => {
       localStorage.clear();
       sessionStorage.clear();
