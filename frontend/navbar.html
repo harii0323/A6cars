@@ -27,12 +27,11 @@
 <script>
 document.addEventListener("DOMContentLoaded", () => {
   try {
-    // Debug (now valid)
+    // Debug (SAFE because inside DOMContentLoaded)
     console.log("customer_id =", localStorage.getItem("customer_id"));
     console.log("customer_name =", localStorage.getItem("customer_name"));
     console.log("auth_token =", localStorage.getItem("auth_token"));
 
-    // Read tokens
     const customerId = localStorage.getItem("customer_id");
     const customerName = localStorage.getItem("customer_name");
     const authToken = localStorage.getItem("auth_token");
@@ -40,7 +39,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const adminLogged = sessionStorage.getItem("adminLoggedIn") === "true";
     const adminToken = sessionStorage.getItem("adminToken");
 
-    // Elements
     const userEl = document.getElementById("nav-user");
     const logoutBtn = document.getElementById("nav-logout");
     const authLinks = document.getElementById("nav-auth");
@@ -53,6 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const isAdminLoggedIn = Boolean(adminLogged && adminToken);
 
     const page = window.location.pathname.split("/").pop() || "index.html";
+
     const isHomePage    = page === "home.html";
     const isBookPage    = page === "book.html";
     const isBookingPage = page === "booking.html";
@@ -97,7 +96,6 @@ document.addEventListener("DOMContentLoaded", () => {
       hide(userEl, logoutBtn, adminLink, navHome, navBook, navHistory);
     }
 
-    // Logout
     logoutBtn.addEventListener("click", () => {
       localStorage.clear();
       sessionStorage.clear();
@@ -106,7 +104,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
   } catch (err) {
-    console.error("Navbar error:", err);
+    console.error("Navbar setup error:", err);
   }
 });
 </script>
