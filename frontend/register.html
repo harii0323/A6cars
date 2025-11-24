@@ -21,37 +21,43 @@
     </p>
   </div>
 
-  <script>
-    // ✅ Use your live backend URL
-    const BACKEND_URL = 'https://a6cars.onrender.com';
+<script>
+  // 🌐 Auto-switch backend URL: localhost for development, Render for production
+  const BACKEND_URL =
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+      ? "http://localhost:10000"
+      : "https://a6cars-latest.onrender.com";
 
-    document.getElementById('registerForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const data = Object.fromEntries(new FormData(e.target).entries());
+  document.getElementById('registerForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const data = Object.fromEntries(new FormData(e.target).entries());
 
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
 
-        const text = await res.text();
-        const json = text ? JSON.parse(text) : {};
+      const json = await res.json();
 
-        if (!res.ok) {
-          alert(json.message || 'Registration failed.');
-          return;
-        }
-
-        alert(json.message || 'Registered successfully!');
-        window.location.href = 'login.html'; // redirect to login
-
-      } catch (error) {
-        alert('Error: ' + (error.message || 'Network issue, please try again.'));
+      if (!res.ok) {
+        alert(json.message || '❌ Registration failed');
+        return;
       }
-    });
-  </script>
+
+      alert(json.message || '🎉 Registered successfully!');
+      window.location.href = 'login.html'; // redirect to login
+
+    } catch (error) {
+      alert('⚠️ Network error – please try again.');
+    }
+  });
+</script>
+
 
 </body>
 </html>
