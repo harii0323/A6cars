@@ -336,7 +336,10 @@ app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {
 // ============================================================
 // ✅ Start Server
 // ============================================================
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () =>
-  console.log(`🚀 A6 Cars backend running on http://localhost:${PORT}`)
+const PORT = process.env.PORT || 10000;
+const HOST = "0.0.0.0"; // <— important for Render
+
+app.listen(PORT, HOST, () =>
+  console.log(`🚀 A6 Cars backend running on PORT ${PORT}`)
 );
+
