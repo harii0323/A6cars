@@ -12,117 +12,105 @@
 <body class="bg-gray-100 min-h-screen">
   <div id="navbar"></div>
   <script>
-    fetch("/navbar.html").then(res => res.text()).then(html => {
-      document.getElementById("navbar").innerHTML = html;
-    });
-  </script>
+  // 🌐 Detect backend URL based on local vs production
+  const BACKEND_URL =
+    (location.hostname === "localhost" || location.hostname === "127.0.0.1")
+      ? "http://localhost:10000"
+      : "https://a6cars-latest.onrender.com";
 
-  <!-- ✅ Redirect if not logged in -->
-  <script>
-    const customer_id = localStorage.getItem("customer_id");
-    if (!customer_id) {
-      alert("Please log in to view your bookings.");
-      window.location.href = "/login.html";
-    }
-  </script>
+  const customer_id = localStorage.getItem("customer_id");
+  if (!customer_id) {
+    alert("Please log in to view your bookings.");
+    window.location.href = "/login.html";
+  }
 
-  <div class="h-20"></div>
+  async function loadBookings() {
+    const container = document.getElementById("booking-list");
+    container.innerHTML = `<p class="text-center text-gray-500 col-span-3">Loading your bookings...</p>`;
 
-  <div class="text-center mb-6">
-    <h1 class="text-3xl font-bold text-blue-700">My Bookings</h1>
-    <p class="text-gray-600">Track your bookings, payments, and collection QRs</p>
-  </div>
-
-  <div id="booking-list" class="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
-
-  <script>
-    const BACKEND_URL =
-      (location.hostname === "localhost" || location.hostname === "127.0.0.1")
-        ? "http://localhost:10000"
-        : "https://a6cars.onrender.com";
-
-    async function loadBookings() {
-      const container = document.getElementById("booking-list");
-      container.innerHTML = `<p class="text-center text-gray-500 col-span-3">Loading your bookings...</p>`;
-
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/mybookings/${customer_id}`);
-        const data = await res.json();
-
-        if (!res.ok || !data.length) {
-          container.innerHTML = `<p class="text-center text-gray-600 col-span-3">No bookings yet.</p>`;
-          return;
-        }
-
-        container.innerHTML = "";
-        data.forEach(bk => {
-          const status = bk.paid ? "✅ Paid" : "❌ Pending";
-          const verified = bk.verified ? "✅ Verified" : "❌ Not Verified";
-          const images = bk.images && bk.images.length
-            ? bk.images.map(img =>
-                `<div class='swiper-slide'><img src='${BACKEND_URL}${img}' class='w-full h-48 object-cover rounded-lg'></div>`
-              ).join("")
-            : `<div class='swiper-slide'><img src='https://via.placeholder.com/400x300?text=No+Image' class='w-full h-48 object-cover rounded-lg'></div>`;
-
-          const card = document.createElement("div");
-          card.className = "bg-white rounded-lg shadow-lg p-4";
-          card.innerHTML = `
-            <div class="swiper carSwiper mb-3">
-              <div class="swiper-wrapper">${images}</div>
-              <div class="swiper-pagination"></div>
-            </div>
-            <h2 class="text-xl font-semibold mb-1">${bk.brand} ${bk.model}</h2>
-            <p class="text-gray-600 mb-1">From: ${new Date(bk.start_date).toLocaleDateString()}</p>
-            <p class="text-gray-600 mb-1">To: ${new Date(bk.end_date).toLocaleDateString()}</p>
-            <p class="text-gray-600 mb-1">Amount: ₹${bk.amount}</p>
-            <p class="text-gray-600 mb-1">Payment: ${status}</p>
-            <p class="text-gray-600 mb-3">Verification: ${verified}</p>
-            ${
-              !bk.paid
-                ? `<button class="bg-blue-600 text-white py-2 rounded w-full" onclick="showPaymentQR(${bk.booking_id}, ${bk.amount})">Pay Now</button>`
-                : `<button class="bg-green-600 text-white py-2 rounded w-full" onclick="downloadCollectionQR('${bk.collection_qr}', ${bk.booking_id})">Download Collection QR</button>`
-            }
-          `;
-          container.appendChild(card);
-        });
-
-        new Swiper(".carSwiper", { loop: true, pagination: { el: ".swiper-pagination", clickable: true } });
-      } catch (err) {
-        document.getElementById("booking-list").innerHTML = `<p class="text-red-600 text-center">${err.message}</p>`;
-      }
-    }
-
-    async function showPaymentQR(booking_id, amount) {
-      const res = await fetch(`${BACKEND_URL}/api/payments/qr`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ booking_id, customer_id })
-      });
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/mybookings/${customer_id}`);
       const data = await res.json();
-      showPopupQR("Scan to Pay", `Pay ₹${amount} to A6 Cars`, data.qr);
-    }
 
-    function showPopupQR(title, desc, qr) {
-      const qrPopup = document.createElement("div");
-      qrPopup.className = "fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50";
-      qrPopup.innerHTML = `
-        <div class="bg-white p-6 rounded-lg text-center max-w-sm">
-          <h2 class="text-xl font-bold mb-2 text-blue-700">${title}</h2>
-          <p class="text-gray-600 mb-2">${desc}</p>
-          <img src="${qr}" alt="QR Code" class="mx-auto w-56 h-56 rounded border mb-3">
-          <button class="mt-4 bg-red-600 text-white px-4 py-2 rounded w-full" onclick="this.closest('.fixed').remove()">Close</button>
-        </div>`;
-      document.body.appendChild(qrPopup);
-    }
+      if (!res.ok || !data.length) {
+        container.innerHTML = `<p class="text-center text-gray-600 col-span-3">No bookings yet.</p>`;
+        return;
+      }
 
-    function downloadCollectionQR(qr, id) {
-      const a = document.createElement("a");
-      a.href = qr;
-      a.download = `collection_qr_${id}.png`;
-      a.click();
-    }
+      container.innerHTML = "";
+      data.forEach(bk => {
+        const status = bk.paid ? "✅ Paid" : "❌ Pending";
+        const verified = bk.verified ? "🟢 Verified" : "🔴 Not Verified";
 
-    loadBookings();
-  </script>
+        const images = bk.images?.length
+          ? bk.images.map(img => `<div class="swiper-slide"><img src="${img}" class="w-full h-48 object-cover rounded-lg"></div>`).join("")
+          : `<div class="swiper-slide"><img src="https://via.placeholder.com/400x300?text=No+Image" class="w-full h-48 object-cover rounded-lg"></div>`;
+
+        const card = document.createElement("div");
+        card.className = "bg-white rounded-lg shadow-lg p-4";
+        card.innerHTML = `
+          <div class="swiper carSwiper mb-3">
+            <div class="swiper-wrapper">${images}</div>
+            <div class="swiper-pagination"></div>
+          </div>
+          <h2 class="text-xl font-semibold mb-1">${bk.brand} ${bk.model}</h2>
+          <p class="text-gray-600 mb-1">From: ${new Date(bk.start_date).toLocaleDateString()}</p>
+          <p class="text-gray-600 mb-1">To: ${new Date(bk.end_date).toLocaleDateString()}</p>
+          <p class="text-gray-600 mb-1">Amount: ₹${bk.amount}</p>
+          <p class="text-gray-600 mb-1">Payment: ${status}</p>
+          <p class="text-gray-600 mb-3">Verification: ${verified}</p>
+          ${
+            !bk.paid
+              ? `<button class="bg-blue-600 text-white py-2 rounded w-full hover:bg-blue-700" onclick="showPaymentQR(${bk.booking_id}, ${bk.amount})">Pay Now</button>`
+              : `<button class="bg-green-600 text-white py-2 rounded w-full hover:bg-green-700" onclick="downloadCollectionQR('${bk.collection_qr}', ${bk.booking_id})">Download Collection QR</button>`
+          }
+        `;
+        container.appendChild(card);
+      });
+
+      new Swiper(".carSwiper", {
+        loop: true,
+        pagination: { el: ".swiper-pagination", clickable: true }
+      });
+
+    } catch (err) {
+      container.innerHTML = `<p class="text-red-600 text-center col-span-3">${err.message}</p>`;
+    }
+  }
+
+  async function showPaymentQR(booking_id, amount) {
+    const res = await fetch(`${BACKEND_URL}/api/payments/qr`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ booking_id, customer_id })
+    });
+
+    const data = await res.json();
+    showPopupQR("Scan to Pay", `Pay ₹${amount} to A6 Cars`, data.qr);
+  }
+
+  function showPopupQR(title, desc, qr) {
+    const qrPopup = document.createElement("div");
+    qrPopup.className = "fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50";
+    qrPopup.innerHTML = `
+      <div class="bg-white p-6 rounded-lg text-center max-w-sm">
+        <h2 class="text-xl font-bold mb-2 text-blue-700">${title}</h2>
+        <p class="text-gray-600 mb-2">${desc}</p>
+        <img src="${qr}" alt="QR Code" class="mx-auto w-56 h-56 rounded border mb-3">
+        <button class="mt-4 bg-red-600 text-white px-4 py-2 rounded w-full hover:bg-red-700" onclick="this.closest('.fixed').remove()">Close</button>
+      </div>`;
+    document.body.appendChild(qrPopup);
+  }
+
+  function downloadCollectionQR(qr, id) {
+    const a = document.createElement("a");
+    a.href = qr;
+    a.download = `collection_qr_${id}.png`;
+    a.click();
+  }
+
+  loadBookings();
+</script>
+
 </body>
 </html>
