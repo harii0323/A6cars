@@ -25,57 +25,58 @@
     </p>
   </div>
 
-  <script>
-    // 🌐 Backend URL (auto-select local or production)
-    const BACKEND_URL =
-      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-        ? "http://localhost:10000"
-        : "https://a6cars.onrender.com";
+<script>
+  // 🌐 Backend URL (localhost for dev, Render for production)
+  const BACKEND_URL =
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+      ? "http://localhost:10000"
+      : "https://a6cars-latest.onrender.com";
 
-    // ✅ Handle form submit
-    document.getElementById("loginForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
+  // Handle login submission
+  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
 
-      const email = document.getElementById("email").value.trim();
-      const password = document.getElementById("password").value.trim();
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value.trim();
 
-      if (!email || !password) {
-        alert("Please enter both email and password.");
+    if (!email || !password) {
+      alert("Please enter both email and password.");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({ email, password })
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        alert(json.message || "❌ Invalid email or password");
         return;
       }
 
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password })
-        });
+      // Save login info locally
+      if (json.token) localStorage.setItem("auth_token", json.token);
+      if (json.customer_id) localStorage.setItem("customer_id", json.customer_id);
+      if (json.name) localStorage.setItem("customer_name", json.name);
+      if (json.email) localStorage.setItem("customer_email", json.email);
 
-        const text = await res.text();
-        const json = text ? JSON.parse(text) : {};
+      alert("✅ Login successful!");
+      window.location.href = "/home.html";
 
-        if (!res.ok) {
-          alert(json.message || "❌ Invalid email or password");
-          return;
-        }
+    } catch (err) {
+      console.error("Login error:", err);
+      alert("⚠️ Network error. Please try again.");
+    }
+  });
+</script>
 
-        // ✅ Save login data locally
-        if (json.token) localStorage.setItem("auth_token", json.token);
-        if (json.customer_id) localStorage.setItem("customer_id", json.customer_id);
-        if (json.name) localStorage.setItem("customer_name", json.name);
-        if (json.email) localStorage.setItem("customer_email", json.email);
-
-        alert("✅ Login successful!");
-
-        // Redirect to user home/booking page
-        window.location.href = "/home.html";
-
-      } catch (err) {
-        console.error("Login error:", err);
-        alert("⚠️ Network error. Please try again.");
-      }
-    });
-  </script>
 
 </body>
 </html>
