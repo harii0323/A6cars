@@ -21,15 +21,16 @@ app.get("/", (req, res) => {
   res.send("🚗 A6 Cars Backend is running successfully!");
 });
 
-
 // ============================================================
-// ✅ PostgreSQL Connection
+// ✅ PostgreSQL Connection (local + Render friendly)
 // ============================================================
 const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ||
-    "postgresql://root:password@localhost:5432/a6cars_db",
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+  host: process.env.DB_HOST || "localhost",
+  port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 5432,
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASS || "password",
+  database: process.env.DB_NAME || "a6cars_db",
+  ssl: process.env.DB_HOST ? { rejectUnauthorized: false } : false,
 });
 
 // ============================================================
@@ -58,7 +59,7 @@ const upload = multer({ storage });
 // ============================================================
 const JWT_SECRET = process.env.JWT_SECRET || "secretkey123";
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "karikeharikrishna@gmail.com";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Anu";
+const ADMIN_PASSWORD = process.env.ADMIN_PASS || "Anu";
 
 // ============================================================
 // ✅ Middleware for Admin Verification
