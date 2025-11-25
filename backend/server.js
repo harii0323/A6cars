@@ -25,11 +25,12 @@ app.get("/", (req, res) => {
 // ============================================================
 // ✅ PostgreSQL Connection
 // ============================================================
+const connectionString = process.env.DATABASE_URL || 
+  `postgresql://${process.env.DB_USER || 'root'}:${process.env.DB_PASS || 'password'}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'a6cars_db'}`;
+
 const pool = new Pool({
-  connectionString:
-    process.env.DATABASE_URL ||
-    "postgresql://root:password@localhost:5432/a6cars_db",
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+  connectionString,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
 // ============================================================
@@ -272,6 +273,44 @@ app.get("/api/mybookings/:customer_id", async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error("Fetch bookings error:", err);
+    res.status(500).json({ message: "Failed to fetch bookings." });
+  }
+});
+
+// Get bookings for specific car
+app.get("/api/bookings/:car_id", async (req, res) => {
+  const { car_id } = req.params;
+  try {
+    const result = await pool.query(
+      "SELECT * FROM bookings WHERE car_id=$1 AND status='pending' ORDER BY start_date DESC",
+      [car_id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch car bookings error:", err);
+    res.status(500).json({ message: "Failed to fetch bookings." });
+  }
+});
+
+// Batch get bookings for multiple cars
+app.post("/api/bookings/batch", async (req, res) => {
+  const { car_ids } = req.body;
+  if (!Array.isArray(car_ids) || car_ids.length === 0) {
+    return res.status(400).json({ message: "car_ids must be a non-empty array" });
+  }
+  try {
+    const result = await pool.query(
+      "SELECT car_id, id, start_date, end_date FROM bookings WHERE car_id = ANY($1) AND status='pending' ORDER BY start_date DESC",
+      [car_ids]
+    );
+    const grouped = {};
+    for (const row of result.rows) {
+      if (!grouped[row.car_id]) grouped[row.car_id] = [];
+      grouped[row.car_id].push(row);
+    }
+    res.json(grouped);
+  } catch (err) {
+    console.error("Batch bookings error:", err);
     res.status(500).json({ message: "Failed to fetch bookings." });
   }
 });

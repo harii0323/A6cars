@@ -2,10 +2,11 @@ FROM node:18-alpine
 
 WORKDIR /usr/src/app
 
-COPY package.json package-lock.json* ./
+COPY backend/package.json backend/package-lock.json* ./
 RUN npm install --production || npm install
 
-COPY . .
+COPY backend ./
+RUN mkdir -p uploads
 
 EXPOSE 3000
 

@@ -3,13 +3,13 @@
 # A6 Cars Full Project (Backend + Frontend + Database)
 # ============================
 
-version: "1"
-
 services:
   # ---------------- BACKEND SERVICE ----------------
   - type: web
     name: a6cars-backend
     env: node
+    region: singapore
+    plan: free
     buildCommand: "cd backend && npm install"
     startCommand: "cd backend && node server.js"
     envVars:
@@ -19,15 +19,28 @@ services:
           property: connectionString
       - key: JWT_SECRET
         value: secret123
+      - key: ADMIN_EMAIL
+        value: karikeharikrishna@gmail.com
+      - key: ADMIN_PASSWORD
+        value: Anu
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
     autoDeploy: true
 
   # ---------------- FRONTEND SERVICE ----------------
   - type: web
     name: a6cars-frontend
     env: static
+    region: singapore
+    plan: free
     buildCommand: ""
     staticPublishPath: frontend
     autoDeploy: true
+    routes:
+      - path: "/"
+        destination: "/index.html"
 
 # ---------------- DATABASE ----------------
 databases:
@@ -36,4 +49,5 @@ databases:
     user: root
     plan: free
     postgresMajorVersion: "17"
+    region: singapore
 

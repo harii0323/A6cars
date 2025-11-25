@@ -1,12 +1,43 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:17-alpine
+    container_name: a6cars-db
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: 9OX9XJA05hFUw5v2ndeLVhJ50CMPnVqt
+      POSTGRES_DB: a6cars_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./setup_pg.sql:/docker-entrypoint-initdb.d/setup.sql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U root"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     build: .
+    container_name: a6cars-backend
     ports:
       - "3000:3000"
     env_file:
       - .env
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      NODE_ENV: development
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
     volumes:
-      - ./:/usr/src/app:cached
+      - ./uploads:/usr/src/app/uploads
+      - ./backend:/usr/src/app/backend
+
+volumes:
+  postgres_data:
