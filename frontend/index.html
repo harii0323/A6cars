@@ -33,11 +33,9 @@
     &copy; 2025 A6 Cars. All rights reserved.
   </footer>
 
+  <script src="/api-config.js"></script>
   <script>
-    const BACKEND_URL =
-      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-        ? "http://localhost:10000"
-        : "https://a6cars.onrender.com";
+    const BACKEND_URL = window.API_CONFIG.BACKEND_URL;
 
     // Clear any invalid or incomplete sessions
     const userId = localStorage.getItem("customer_id");

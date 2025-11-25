@@ -21,9 +21,10 @@
     </p>
   </div>
 
+  <script src="/api-config.js"></script>
   <script>
-    // ✅ Use your live backend URL
-    const BACKEND_URL = 'https://a6cars.onrender.com';
+    // ✅ Backend URL (auto-configured)
+    const BACKEND_URL = window.API_CONFIG.BACKEND_URL;
 
     document.getElementById('registerForm').addEventListener('submit', async (e) => {
       e.preventDefault();

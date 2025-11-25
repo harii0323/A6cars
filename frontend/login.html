@@ -25,12 +25,10 @@
     </p>
   </div>
 
+  <script src="/api-config.js"></script>
   <script>
-    // 🌐 Backend URL (auto-select local or production)
-    const BACKEND_URL =
-      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-        ? "http://localhost:10000"
-        : "https://a6cars.onrender.com";
+    // 🌐 Backend URL (auto-configured)
+    const BACKEND_URL = window.API_CONFIG.BACKEND_URL;
 
     // ✅ Handle form submit
     document.getElementById("loginForm").addEventListener("submit", async (e) => {
