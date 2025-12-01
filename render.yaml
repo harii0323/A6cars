@@ -33,7 +33,6 @@ services:
   - type: web
     name: a6cars-frontend
     env: static
-    region: singapore
     plan: free
     buildCommand: ""
     staticPublishPath: frontend
