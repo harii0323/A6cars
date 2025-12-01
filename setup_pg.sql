@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS bookings (
   status VARCHAR(50) DEFAULT 'pending',
   paid BOOLEAN DEFAULT false,
   verified BOOLEAN DEFAULT false,
+  collection_verified BOOLEAN DEFAULT false,
+  return_verified BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -52,5 +54,6 @@ CREATE TABLE IF NOT EXISTS payments (
   upi_id VARCHAR(100),
   qr_code TEXT,
   status VARCHAR(50) DEFAULT 'pending',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMP
 );

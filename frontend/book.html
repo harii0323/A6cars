@@ -126,7 +126,7 @@
         ? "http://localhost:3000"
         : "https://a6cars-latest.onrender.com";
 
-    // ✅ Load available cars
+    // ✅ Load available cars with booked dates
     async function loadCars() {
       const container = document.getElementById("cars");
       container.innerHTML = `<p class='text-center text-gray-500 col-span-3'>Loading cars...</p>`;
@@ -175,15 +175,15 @@
             <p class="text-gray-600 mb-2">Location: ${car.location}</p>
 
             <div class="space-y-2">
-              <input type="text" id="start-${car.id}" placeholder="Start Date" class="border rounded p-2 w-full" />
-              <input type="text" id="end-${car.id}" placeholder="End Date" class="border rounded p-2 w-full" />
+              <input type="text" id="start-${car.id}" placeholder="Start Date (disabled dates are booked)" class="border rounded p-2 w-full" />
+              <input type="text" id="end-${car.id}" placeholder="End Date (disabled dates are booked)" class="border rounded p-2 w-full" />
               <button id="book-btn-${car.id}" onclick="bookCar(${car.id})" class="bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700">Book Now</button>
             </div>
           `;
           container.appendChild(div);
 
-          flatpickr(`#start-${car.id}`, { dateFormat: "Y-m-d", minDate: "today" });
-          flatpickr(`#end-${car.id}`, { dateFormat: "Y-m-d", minDate: "today" });
+          // Fetch booked dates for this car
+          fetchBookedDates(car.id);
         });
 
         new Swiper(".carSwiper", {
@@ -192,6 +192,41 @@
         });
       } catch (err) {
         container.innerHTML = `<p class='text-red-600 text-center col-span-3'>Error loading cars: ${err.message}</p>`;
+      }
+    }
+
+    // ✅ Fetch booked dates for a car and disable them
+    async function fetchBookedDates(carId) {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/bookings/${carId}`);
+        const bookings = await res.json();
+        
+        // Build list of disabled dates
+        const disabledDates = [];
+        bookings.forEach(booking => {
+          const start = new Date(booking.start_date);
+          const end = new Date(booking.end_date);
+          for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            disabledDates.push(new Date(d));
+          }
+        });
+
+        // Initialize date pickers with disabled dates
+        flatpickr(`#start-${carId}`, { 
+          dateFormat: "Y-m-d", 
+          minDate: "today",
+          disable: disabledDates
+        });
+        flatpickr(`#end-${carId}`, { 
+          dateFormat: "Y-m-d", 
+          minDate: "today",
+          disable: disabledDates
+        });
+      } catch (err) {
+        console.error("Error fetching booked dates:", err);
+        // Fallback if error
+        flatpickr(`#start-${carId}`, { dateFormat: "Y-m-d", minDate: "today" });
+        flatpickr(`#end-${carId}`, { dateFormat: "Y-m-d", minDate: "today" });
       }
     }
 
@@ -216,62 +251,128 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Booking failed.");
 
-        alert("✅ Booking created successfully!");
-
-        // ✅ Show payment QR
-        showPopupQR("Scan to Pay", `Pay ₹${data.total} to A6 Cars`, data.payment_qr);
-
-        // ✅ Start polling for collection QR
-        pollForCollectionQR(data.booking_id);
+        // ✅ Show payment QR with countdown timer (180 seconds)
+        showPaymentQRWithCountdown(data.booking_id, data.payment_qr, data.total, 180);
 
       } catch (err) {
         alert("❌ " + err.message);
-      } finally {
         btn.disabled = false;
         btn.innerText = "Book Now";
       }
     }
 
-    // ✅ Show QR popup modal
-    function showPopupQR(title, desc, qr) {
+    // ✅ Show payment QR with 180-second countdown
+    function showPaymentQRWithCountdown(booking_id, qr, amount, seconds) {
+      let remaining = seconds;
+      
+      const qrPopup = document.createElement("div");
+      qrPopup.id = `payment-qr-${booking_id}`;
+      qrPopup.className = "fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50";
+      qrPopup.innerHTML = `
+        <div class="bg-white p-6 rounded-lg text-center max-w-sm">
+          <h2 class="text-xl font-bold mb-2 text-blue-700">Scan to Pay</h2>
+          <p class="text-gray-600 mb-2">Pay ₹${amount} to A6 Cars</p>
+          <img src="${qr}" alt="Payment QR" class="mx-auto w-56 h-56 rounded border mb-3">
+          <p class="text-red-600 font-bold mb-2">QR expires in: <span id="countdown-${booking_id}">${remaining}</span>s</p>
+          <p class="text-sm text-gray-500 mb-3">After payment, you'll be automatically redirected</p>
+          <button class="bg-red-600 text-white px-4 py-2 rounded w-full hover:bg-red-700" onclick="document.getElementById('payment-qr-${booking_id}').remove()">Cancel</button>
+        </div>`;
+      document.body.appendChild(qrPopup);
+
+      // Countdown timer
+      const timer = setInterval(() => {
+        remaining--;
+        const countdownEl = document.getElementById(`countdown-${booking_id}`);
+        if (countdownEl) {
+          countdownEl.textContent = remaining;
+        }
+        
+        if (remaining <= 0) {
+          clearInterval(timer);
+          const popup = document.getElementById(`payment-qr-${booking_id}`);
+          if (popup) popup.remove();
+          alert("QR Code expired. Please try booking again.");
+        }
+      }, 1000);
+
+      // Poll for payment confirmation
+      pollForPaymentConfirmation(booking_id, () => {
+        clearInterval(timer);
+        const popup = document.getElementById(`payment-qr-${booking_id}`);
+        if (popup) popup.remove();
+      });
+    }
+
+    // ✅ Poll for payment confirmation
+    async function pollForPaymentConfirmation(booking_id, onSuccess) {
+      const maxAttempts = 180; // 180 seconds / 1 second poll = 180 attempts
+      let attempts = 0;
+
+      const interval = setInterval(async () => {
+        attempts++;
+        try {
+          const res = await fetch(`${BACKEND_URL}/api/payment/status/${booking_id}`);
+          const data = await res.json();
+
+          if (data.paid) {
+            clearInterval(interval);
+            onSuccess();
+            
+            // Confirm payment and get QRs
+            const confirmRes = await fetch(`${BACKEND_URL}/api/payment/confirm`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ booking_id })
+            });
+
+            const confirmData = await confirmRes.json();
+            if (!confirmRes.ok) throw new Error(confirmData.message);
+
+            // Show collection QR
+            showQRModal("Collection QR - Pickup", confirmData.collection_qr, "collection", booking_id);
+            
+            // Auto-download collection QR
+            downloadQR(confirmData.collection_qr, `collection_qr_${booking_id}.png`);
+
+            // Show return QR after 3 seconds
+            setTimeout(() => {
+              showQRModal("Return QR - Dropoff", confirmData.return_qr, "return", booking_id);
+              downloadQR(confirmData.return_qr, `return_qr_${booking_id}.png`);
+            }, 3000);
+          }
+        } catch (err) {
+          console.log("Checking payment status...");
+        }
+
+        if (attempts >= maxAttempts) {
+          clearInterval(interval);
+        }
+      }, 1000);
+    }
+
+    // ✅ Show QR modal
+    function showQRModal(title, qr, type, booking_id) {
       const qrPopup = document.createElement("div");
       qrPopup.className = "fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50";
       qrPopup.innerHTML = `
         <div class="bg-white p-6 rounded-lg text-center max-w-sm">
           <h2 class="text-xl font-bold mb-2 text-blue-700">${title}</h2>
-          <p class="text-gray-600 mb-2">${desc}</p>
+          <p class="text-gray-600 mb-2 font-semibold">Type: ${type.toUpperCase()}</p>
           <img src="${qr}" alt="QR Code" class="mx-auto w-56 h-56 rounded border mb-3">
-          <button class="mt-4 bg-red-600 text-white px-4 py-2 rounded w-full hover:bg-red-700" onclick="this.closest('.fixed').remove()">Close</button>
+          <p class="text-sm text-gray-500 mb-3">Booking ID: ${booking_id}</p>
+          <button class="mt-4 bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700" onclick="this.closest('.fixed').remove()">Close</button>
         </div>`;
       document.body.appendChild(qrPopup);
     }
 
-    // ✅ Poll for collection QR
-    async function pollForCollectionQR(booking_id) {
-      const interval = setInterval(async () => {
-        try {
-          const res = await fetch(`${BACKEND_URL}/api/mybookings/${customer_id}`);
-          const data = await res.json();
-          const bk = data.find(b => b.booking_id === booking_id);
-
-          if (bk && bk.collection_qr) {
-            clearInterval(interval);
-            showPopupQR(
-              "Show this QR at pickup",
-              "Admin will scan this QR when you collect your car",
-              bk.collection_qr
-            );
-
-            // Auto download collection QR
-            const a = document.createElement("a");
-            a.href = bk.collection_qr;
-            a.download = `collection_qr_${booking_id}.png`;
-            a.click();
-          }
-        } catch (e) {
-          console.log("Waiting for collection QR...");
-        }
-      }, 5000);
+    // ✅ Auto-download QR
+    function downloadQR(dataUrl, filename) {
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     }
 
     // Load cars on start

@@ -13,7 +13,17 @@ const fs = require("fs");
 const QRCode = require("qrcode");
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: [
+    "https://a6cars-frontend-4i84.onrender.com",
+    "https://a6cars-latest.onrender.com",
+    "http://localhost:5173"
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+}));
+
 app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
@@ -216,6 +226,23 @@ app.post("/api/book", async (req, res) => {
     if (!carRes.rows.length)
       return res.status(404).json({ message: "Car not found." });
 
+    // Check for booking conflicts
+    const conflictRes = await client.query(
+      `SELECT * FROM bookings 
+       WHERE car_id=$1 
+       AND (
+         (start_date <= $2 AND end_date >= $2) OR
+         (start_date <= $3 AND end_date >= $3) OR
+         (start_date >= $2 AND end_date <= $3)
+       )
+       AND status IN ('pending', 'confirmed')`,
+      [car_id, start_date, end_date]
+    );
+
+    if (conflictRes.rows.length > 0) {
+      return res.status(409).json({ message: "Car already booked for these dates." });
+    }
+
     const rate = parseFloat(carRes.rows[0].daily_rate);
     const days = Math.max(
       1,
@@ -235,11 +262,14 @@ app.post("/api/book", async (req, res) => {
     const bookingId = booking.rows[0].id;
     const upiString = `upi://pay?pa=8179134484@pthdfc&pn=A6Cars&am=${total}&tn=Booking%20${bookingId}`;
     const paymentQR = await QRCode.toDataURL(upiString);
+    
+    // QR expires in 180 seconds (3 minutes)
+    const qrExpiryTime = new Date(Date.now() + 180 * 1000);
 
     await client.query(
-      `INSERT INTO payments (booking_id, amount, upi_id, qr_code, status)
-       VALUES ($1,$2,$3,$4,'pending')`,
-      [bookingId, total, "8179134484@pthdfc", paymentQR]
+      `INSERT INTO payments (booking_id, amount, upi_id, qr_code, status, created_at, expires_at)
+       VALUES ($1,$2,$3,$4,'pending', NOW(), $5)`,
+      [bookingId, total, "8179134484@pthdfc", paymentQR, qrExpiryTime]
     );
 
     await client.query("COMMIT");
@@ -248,6 +278,7 @@ app.post("/api/book", async (req, res) => {
       booking_id: bookingId,
       total,
       payment_qr: paymentQR,
+      qr_expires_in: 180,
     });
   } catch (err) {
     await client.query("ROLLBACK");
@@ -282,7 +313,9 @@ app.get("/api/bookings/:car_id", async (req, res) => {
   const { car_id } = req.params;
   try {
     const result = await pool.query(
-      "SELECT * FROM bookings WHERE car_id=$1 AND status='pending' ORDER BY start_date DESC",
+      `SELECT start_date, end_date FROM bookings 
+       WHERE car_id=$1 AND status IN ('pending', 'confirmed') 
+       ORDER BY start_date ASC`,
       [car_id]
     );
     res.json(result.rows);
@@ -315,15 +348,38 @@ app.post("/api/bookings/batch", async (req, res) => {
   }
 });
 
+// ✅ Check payment status
+app.get("/api/payment/status/:booking_id", async (req, res) => {
+  const { booking_id } = req.params;
+  try {
+    const result = await pool.query(
+      "SELECT paid, status FROM bookings WHERE id=$1",
+      [booking_id]
+    );
+    
+    if (!result.rows.length) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+
+    res.json({
+      paid: result.rows[0].paid,
+      status: result.rows[0].status
+    });
+  } catch (err) {
+    console.error("Payment status error:", err);
+    res.status(500).json({ message: "Error checking payment status." });
+  }
+});
+
 // Confirm payment and generate QR for admin
 app.post("/api/payment/confirm", async (req, res) => {
   const { booking_id } = req.body;
   const client = await pool.connect();
   try {
     const booking = await client.query(
-      `SELECT b.id AS booking_id, b.start_date, b.end_date, b.amount,
-              c.name AS customer_name, c.email AS customer_email,
-              ca.brand, ca.model, ca.location
+      `SELECT b.id AS booking_id, b.start_date, b.end_date, b.amount, b.customer_id,
+              c.name AS customer_name, c.email AS customer_email, c.phone AS customer_phone,
+              ca.id AS car_id, ca.brand, ca.model, ca.location
        FROM bookings b
        JOIN customers c ON b.customer_id = c.id
        JOIN cars ca ON b.car_id = ca.id
@@ -335,19 +391,51 @@ app.post("/api/payment/confirm", async (req, res) => {
       return res.status(404).json({ message: "Booking not found." });
 
     const data = booking.rows[0];
-    const qrData = {
+    
+    // Collection QR (pickup)
+    const collectionQRData = {
+      qr_type: "collection",
       booking_id: data.booking_id,
+      customer_id: data.customer_id,
       customer_name: data.customer_name,
+      customer_phone: data.customer_phone,
+      car_id: data.car_id,
       car: `${data.brand} ${data.model}`,
       location: data.location,
+      start_date: data.start_date,
       amount: data.amount,
     };
-    const collectionQR = await QRCode.toDataURL(JSON.stringify(qrData));
+    const collectionQR = await QRCode.toDataURL(JSON.stringify(collectionQRData));
 
-    await client.query("UPDATE bookings SET paid=true WHERE id=$1", [booking_id]);
+    // Return QR (dropoff)
+    const returnQRData = {
+      qr_type: "return",
+      booking_id: data.booking_id,
+      customer_id: data.customer_id,
+      customer_name: data.customer_name,
+      customer_phone: data.customer_phone,
+      car_id: data.car_id,
+      car: `${data.brand} ${data.model}`,
+      location: data.location,
+      end_date: data.end_date,
+      amount: data.amount,
+    };
+    const returnQR = await QRCode.toDataURL(JSON.stringify(returnQRData));
+
+    await client.query("UPDATE bookings SET paid=true, status='confirmed' WHERE id=$1", [booking_id]);
     await client.query("UPDATE payments SET status='paid' WHERE booking_id=$1", [booking_id]);
 
-    res.json({ message: "Payment confirmed ✅", collection_qr: collectionQR });
+    res.json({ 
+      message: "Payment confirmed ✅", 
+      collection_qr: collectionQR,
+      return_qr: returnQR,
+      booking_details: {
+        booking_id: data.booking_id,
+        customer_name: data.customer_name,
+        car: data.brand + " " + data.model,
+        amount: data.amount
+      }
+    });
   } catch (err) {
     console.error("Payment confirm error:", err);
     res.status(500).json({ message: "Error confirming payment." });
@@ -363,8 +451,63 @@ app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {
   const { qr_data } = req.body;
   try {
     const booking_id = qr_data.booking_id;
-    await pool.query("UPDATE bookings SET verified=true WHERE id=$1", [booking_id]);
-    res.json({ message: "Booking verified successfully", booking_id });
+    const qr_type = qr_data.qr_type; // "collection" or "return"
+    
+    // Fetch full booking and car details
+    const booking = await pool.query(
+      `SELECT b.id, b.customer_id, b.start_date, b.end_date, b.amount, b.status,
+              c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email,
+              ca.id AS car_id, ca.brand, ca.model, ca.location
+       FROM bookings b
+       JOIN customers c ON b.customer_id = c.id
+       JOIN cars ca ON b.car_id = ca.id
+       WHERE b.id = $1`,
+      [booking_id]
+    );
+
+    if (!booking.rows.length) {
+      return res.status(404).json({ message: "Booking not found." });
+    }
+
+    const bookingData = booking.rows[0];
+    
+    // Update verification status
+    if (qr_type === "collection") {
+      await pool.query(
+        "UPDATE bookings SET collection_verified=true WHERE id=$1",
+        [booking_id]
+      );
+    } else if (qr_type === "return") {
+      await pool.query(
+        "UPDATE bookings SET return_verified=true WHERE id=$1",
+        [booking_id]
+      );
+    }
+
+    res.json({ 
+      message: `${qr_type.toUpperCase()} QR verified successfully ✅`,
+      qr_verification: {
+        qr_type: qr_type,
+        booking_id: bookingData.id,
+        customer: {
+          id: bookingData.customer_id,
+          name: bookingData.customer_name,
+          phone: bookingData.customer_phone,
+          email: bookingData.customer_email
+        },
+        booking: {
+          start_date: bookingData.start_date,
+          end_date: bookingData.end_date,
+          amount: bookingData.amount,
+          status: bookingData.status
+        },
+        car: {
+          id: bookingData.car_id,
+          model: `${bookingData.brand} ${bookingData.model}`,
+          location: bookingData.location
+        }
+      }
+    });
   } catch (err) {
     console.error("QR verification error:", err);
     res.status(500).json({ message: "Error verifying booking." });
