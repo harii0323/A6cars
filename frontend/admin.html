@@ -81,33 +81,12 @@
             </div>
 
             <!-- Menu -->
-            <nav class="space-y-1 mb-6">
-              <button
-                class="side-link w-full text-left px-2 py-1 rounded hover:bg-gray-100 text-sm"
-                data-section="section-cars">
-                Add Cars
-              </button>
-              <button
-                class="side-link w-full text-left px-2 py-1 rounded hover:bg-gray-100 text-sm"
-                data-section="section-cars">
-                Manage Cars
-              </button>
-              <button
-                class="side-link w-full text-left px-2 py-1 rounded hover:bg-gray-100 text-sm"
-                data-section="section-verify">
-                Verify Payment
-              </button>
-              <button
-                class="side-link w-full text-left px-2 py-1 rounded hover:bg-gray-100 text-sm"
-                data-section="section-business">
-                Business Details
-              </button>
-              <button
-                class="side-link w-full text-left px-2 py-1 rounded hover:bg-gray-100 text-sm"
-                data-section="all">
-                Show All
-              </button>
-            </nav>
+            <button class="side-link" data-section="section-addcar">Add Cars</button>
+<button class="side-link" data-section="section-managecar">Manage Cars</button>
+<button class="side-link" data-section="section-verify">Verify Payment</button>
+<button class="side-link" data-section="section-business">Business Details</button>
+<button class="side-link" data-section="all">Show All</button>
+
 
             <!-- Filters for Recent Transactions -->
             <div class="border-t pt-4 mt-4">
@@ -175,74 +154,62 @@
             </div>
           </div>
 
-          <!-- Add / Manage Cars SECTION (hidden by default) -->
-          <section id="section-cars" class="hidden">
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <!-- Add Car -->
-              <div id="col-addcar" class="p-4 border rounded bg-white">
-                <h3 class="text-lg font-semibold mb-3">Add Car (multiple images)</h3>
-                <form id="addCarForm" enctype="multipart/form-data" class="space-y-3">
-                  <input type="text" name="brand" placeholder="Brand" required
-                         class="w-full p-2 border rounded" />
-                  <input type="text" name="model" placeholder="Model" required
-                         class="w-full p-2 border rounded" />
-                  <input type="number" name="year" placeholder="Year" required
-                         class="w-full p-2 border rounded" />
-                  <input type="number" step="0.01" name="daily_rate"
-                         placeholder="Daily Rate (INR)" required
-                         class="w-full p-2 border rounded" />
-                  <input type="text" name="location" placeholder="Location" required
-                         class="w-full p-2 border rounded" />
-                  <label class="text-sm text-gray-600">
-                    Upload images (JPG/JPEG) — you can select multiple
-                  </label>
-                  <input type="file" name="images" id="images-input" accept=".jpg,.jpeg"
-                         multiple required
-                         class="w-full p-2 border rounded bg-gray-50" />
-                  <div id="images-preview" class="flex gap-2 mt-2 flex-wrap"></div>
-                  <button type="submit"
-                          class="bg-blue-600 hover:bg-blue-700 text-white w-full p-2 rounded">
-                    Add Car
-                  </button>
-                </form>
-              </div>
+         <!-- ADD CAR SECTION -->
+<section id="section-addcar" class="hidden">
+  <div class="bg-white p-4 rounded shadow">
+    <h3 class="text-lg font-semibold mb-3">Add Car (multiple images)</h3>
+    <form id="addCarForm" enctype="multipart/form-data" class="space-y-3">
 
-              <!-- Manage Cars -->
-              <div id="col-carmanage" class="p-4 border rounded bg-white lg:col-span-2">
-                <h3 class="text-lg font-semibold mb-3">Manage Cars</h3>
-                <div id="car-list" class="space-y-3 text-sm"></div>
+      <input type="text" name="brand" placeholder="Brand" required class="w-full p-2 border rounded" />
+      <input type="text" name="model" placeholder="Model" required class="w-full p-2 border rounded" />
+      <input type="number" name="year" placeholder="Year" required class="w-full p-2 border rounded" />
+      <input type="number" step="0.01" name="daily_rate" placeholder="Daily Rate (INR)" required class="w-full p-2 border rounded" />
+      <input type="text" name="location" placeholder="Location" required class="w-full p-2 border rounded" />
 
-                <!-- Car bookings panel -->
-                <div id="car-bookings-panel" class="hidden mt-4 bg-gray-50 p-3 rounded">
-                  <div class="flex items-center justify-between mb-2">
-                    <h4 class="font-medium">
-                      Bookings for <span id="car-bookings-title"></span>
-                    </h4>
-                    <button id="close-car-bookings"
-                            class="text-xs bg-gray-200 px-2 py-1 rounded">
-                      Close
-                    </button>
-                  </div>
-                  <div class="overflow-auto">
-                    <table class="w-full text-left border-collapse text-xs">
-                      <thead class="bg-gray-100">
-                        <tr>
-                          <th class="border px-2 py-1">Booking ID</th>
-                          <th class="border px-2 py-1">Customer</th>
-                          <th class="border px-2 py-1">From</th>
-                          <th class="border px-2 py-1">To</th>
-                          <th class="border px-2 py-1">Amount</th>
-                          <th class="border px-2 py-1">Paid</th>
-                          <th class="border px-2 py-1">Verified</th>
-                        </tr>
-                      </thead>
-                      <tbody id="car-bookings-body"></tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
+      <label class="text-sm text-gray-600">Upload images (JPG/JPEG) — select multiple</label>
+      <input type="file" name="images" id="images-input" accept=".jpg,.jpeg" multiple required class="w-full p-2 border rounded bg-gray-50" />
+
+      <div id="images-preview" class="flex gap-2 mt-2 flex-wrap"></div>
+
+      <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white w-full p-2 rounded">
+        Add Car
+      </button>
+    </form>
+  </div>
+</section>
+
+
+<!-- MANAGE CARS SECTION -->
+<section id="section-managecar" class="hidden">
+  <div class="bg-white p-4 rounded shadow">
+    <h3 class="text-lg font-semibold mb-3">Manage Cars</h3>
+    <div id="car-list" class="space-y-3"></div>
+
+    <!-- Car bookings panel -->
+    <div id="car-bookings-panel" class="hidden mt-4 bg-gray-50 p-3 rounded">
+      <div class="flex items-center justify-between mb-2">
+        <h4 class="font-medium">Bookings for <span id="car-bookings-title"></span></h4>
+        <button id="close-car-bookings" class="text-xs bg-gray-200 px-2 py-1 rounded">Close</button>
+      </div>
+      <div class="overflow-auto">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="border px-2 py-1">Booking ID</th>
+              <th class="border px-2 py-1">Customer</th>
+              <th class="border px-2 py-1">From</th>
+              <th class="border px-2 py-1">To</th>
+              <th class="border px-2 py-1">Amount</th>
+              <th class="border px-2 py-1">Paid</th>
+              <th class="border px-2 py-1">Verified</th>
+            </tr>
+          </thead>
+          <tbody id="car-bookings-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
 
           <!-- Verify Payment SECTION (hidden by default) -->
           <section id="section-verify" class="hidden">
@@ -390,7 +357,13 @@
     /* ---------------------------
        Sidebar section toggling
        --------------------------- */
-    const sectionIds = ['section-cars', 'section-verify', 'section-business'];
+    const sectionIds = [
+  'section-addcar',
+  'section-managecar',
+  'section-verify',
+  'section-business'
+];
+
 
     function showSection(which) {
       if (which === 'all') {
