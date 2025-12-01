@@ -1,7 +1,7 @@
 # ============================
 # Render Deployment Configuration
-# A6 Cars Full Project (Backend + Frontend + Database)
-# Updated: 2025-12-01 - Force Rebuild Trigger
+# A6 Cars Full Project 
+# Backend + Frontend + Database
 # ============================
 
 services:
@@ -16,6 +16,8 @@ services:
         fromDatabase:
           name: a6cars-db
           property: connectionString
+      - key: PGSSLMODE
+        value: require
       - key: JWT_SECRET
         value: secret123
       - key: ADMIN_EMAIL
@@ -33,11 +35,9 @@ services:
     name: a6cars-frontend
     env: static
     plan: free
-    buildCommand: ""
-    staticPublishPath: frontend
+    rootDir: frontend
+    staticPublishPath: .
     autoDeploy: true
-    # The static service will serve files from `frontend` by default.
-    # Custom route mappings were removed to satisfy render.yaml schema.
 
 # ---------------- DATABASE ----------------
 databases:
@@ -47,4 +47,3 @@ databases:
     plan: free
     postgresMajorVersion: "17"
     region: singapore
-
