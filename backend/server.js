@@ -41,6 +41,23 @@ const connectionString = process.env.DATABASE_URL ||
 const pool = new Pool({
   connectionString,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+// Handle pool errors
+pool.on('error', (err) => {
+  console.error('❌ Pool error:', err);
+});
+
+// Test connection on startup
+pool.query('SELECT NOW()', (err, result) => {
+  if (err) {
+    console.error('❌ Database connection error:', err.message);
+  } else {
+    console.log('✅ Database connected successfully');
+  }
 });
 
 // ============================================================
@@ -517,7 +534,30 @@ app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {
 // ============================================================
 // ✅ Start Server
 // ============================================================
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () =>
-  console.log(`🚀 A6 Cars backend running on http://localhost:${PORT}`)
-);
+const PORT = process.env.PORT || 10000;
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 A6 Cars backend running on http://0.0.0.0:${PORT}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('⚠️ SIGTERM received, shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    pool.end(() => {
+      console.log('✅ Database pool closed');
+      process.exit(0);
+    });
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('⚠️ SIGINT received, shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    pool.end(() => {
+      console.log('✅ Database pool closed');
+      process.exit(0);
+    });
+  });
+});
