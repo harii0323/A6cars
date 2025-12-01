@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:convert';
-import 'package:qr_code_scanner/qr_code_scanner.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:http/http.dart' as http;
 import '../widgets/center_hero.dart';
 import 'qr_scanner.dart';

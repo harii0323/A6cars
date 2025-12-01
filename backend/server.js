@@ -469,6 +469,124 @@ app.post("/api/payment/confirm", async (req, res) => {
 });
 
 // ============================================================
+// ✅ CUSTOMER: Verify payment by reference ID
+// ============================================================
+app.post("/api/verify-payment", async (req, res) => {
+  const { booking_id, payment_reference_id, customer_id } = req.body;
+  
+  if (!booking_id || !payment_reference_id || !customer_id) {
+    return res.status(400).json({ message: "Missing required fields: booking_id, payment_reference_id, customer_id" });
+  }
+
+  const client = await pool.connect();
+  try {
+    // 1. Verify booking exists and belongs to customer
+    const booking = await client.query(
+      `SELECT b.id, b.customer_id, b.car_id, b.amount, b.start_date, b.end_date, b.paid,
+              c.name AS customer_name, c.email AS customer_email, c.phone AS customer_phone,
+              ca.brand, ca.model, ca.location
+       FROM bookings b
+       JOIN customers c ON b.customer_id = c.id
+       JOIN cars ca ON b.car_id = ca.id
+       WHERE b.id = $1 AND b.customer_id = $2`,
+      [booking_id, customer_id]
+    );
+    
+    if (!booking.rows.length) {
+      return res.status(404).json({ message: "Booking not found or does not belong to this customer." });
+    }
+
+    const bookingData = booking.rows[0];
+    
+    // 2. Check if payment already verified for this booking
+    if (bookingData.paid) {
+      return res.status(409).json({ message: "Payment already verified for this booking." });
+    }
+
+    // 3. Verify payment reference exists and matches customer, car, booking
+    // (First, ensure payment_reference_id column exists in payments table)
+    const paymentCheck = await client.query(
+      `SELECT p.id, p.booking_id, p.amount, p.status
+       FROM payments p
+       WHERE p.booking_id = $1 AND p.amount = $2`,
+      [booking_id, bookingData.amount]
+    );
+
+    if (!paymentCheck.rows.length) {
+      return res.status(404).json({ message: "No payment found for this booking amount." });
+    }
+
+    // 4. Update payment with reference ID and mark as verified
+    await client.query(
+      `UPDATE payments 
+       SET payment_reference_id = $1, status = 'verified', updated_at = NOW()
+       WHERE booking_id = $2`,
+      [payment_reference_id, booking_id]
+    );
+
+    // 5. Mark booking as paid and confirmed
+    await client.query(
+      `UPDATE bookings 
+       SET paid = true, status = 'confirmed', updated_at = NOW()
+       WHERE id = $1`,
+      [booking_id]
+    );
+
+    // 6. Generate Collection QR (pickup)
+    const collectionQRData = {
+      qr_type: "collection",
+      booking_id: bookingData.id,
+      customer_id: bookingData.customer_id,
+      customer_name: bookingData.customer_name,
+      customer_phone: bookingData.phone,
+      car_id: bookingData.car_id,
+      car: `${bookingData.brand} ${bookingData.model}`,
+      location: bookingData.location,
+      start_date: bookingData.start_date,
+      amount: bookingData.amount,
+      payment_reference_id: payment_reference_id
+    };
+    const collectionQR = await QRCode.toDataURL(JSON.stringify(collectionQRData));
+
+    // 7. Generate Return QR (dropoff)
+    const returnQRData = {
+      qr_type: "return",
+      booking_id: bookingData.id,
+      customer_id: bookingData.customer_id,
+      customer_name: bookingData.customer_name,
+      customer_phone: bookingData.phone,
+      car_id: bookingData.car_id,
+      car: `${bookingData.brand} ${bookingData.model}`,
+      location: bookingData.location,
+      end_date: bookingData.end_date,
+      amount: bookingData.amount,
+      payment_reference_id: payment_reference_id
+    };
+    const returnQR = await QRCode.toDataURL(JSON.stringify(returnQRData));
+
+    res.json({
+      message: "✅ Payment verified successfully!",
+      payment_reference_id: payment_reference_id,
+      collection_qr: collectionQR,
+      return_qr: returnQR,
+      booking_details: {
+        booking_id: bookingData.id,
+        customer_name: bookingData.customer_name,
+        car: `${bookingData.brand} ${bookingData.model}`,
+        amount: bookingData.amount,
+        start_date: bookingData.start_date,
+        end_date: bookingData.end_date
+      }
+    });
+  } catch (err) {
+    console.error("❌ Payment verification error:", err);
+    res.status(500).json({ message: "Error verifying payment: " + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
 // ✅ ADMIN: Verify QR from mobile app / scanner
 // ============================================================
 app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {

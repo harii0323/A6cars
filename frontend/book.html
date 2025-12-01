@@ -251,8 +251,8 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Booking failed.");
 
-        // ✅ Show payment QR with countdown timer (180 seconds)
-        showPaymentQRWithCountdown(data.booking_id, data.payment_qr, data.total, 180);
+        // ✅ Show payment reference input modal
+        showPaymentReferenceModal(data.booking_id, data.payment_qr, data.total, start, end);
 
       } catch (err) {
         alert("❌ " + err.message);
@@ -261,129 +261,105 @@
       }
     }
 
-    // ✅ Show payment QR with 180-second countdown
-    function showPaymentQRWithCountdown(booking_id, qr, amount, seconds) {
-      let remaining = seconds;
-      
-      const qrPopup = document.createElement("div");
-      qrPopup.id = `payment-qr-${booking_id}`;
-      qrPopup.className = "fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50";
-      qrPopup.innerHTML = `
-        <div class="bg-white p-8 rounded-lg text-center max-w-sm shadow-2xl">
-          <h2 class="text-2xl font-bold mb-2 text-blue-700">💳 Scan to Pay</h2>
-          <p class="text-gray-600 mb-4 text-lg">Amount: <span class="font-bold text-green-600">₹${amount}</span></p>
-          <img src="${qr}" alt="Payment QR" class="mx-auto w-64 h-64 rounded border-4 border-blue-200 mb-4">
-          <p class="text-red-600 font-bold text-lg mb-3">⏱️ QR expires in: <span id="countdown-${booking_id}" class="text-2xl text-red-700">${remaining}</span>s</p>
-          <p class="text-sm text-gray-500 mb-4">Waiting for payment confirmation...</p>
-          <button class="bg-red-600 text-white px-6 py-2 rounded w-full hover:bg-red-700 font-semibold" onclick="document.getElementById('payment-qr-${booking_id}').remove()">Cancel Payment</button>
+    // ✅ Show payment reference modal
+    function showPaymentReferenceModal(booking_id, qr, amount, start_date, end_date) {
+      const modal = document.createElement("div");
+      modal.id = `payment-modal-${booking_id}`;
+      modal.className = "fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50";
+      modal.innerHTML = `
+        <div class="bg-white p-8 rounded-lg text-center max-w-md shadow-2xl">
+          <h2 class="text-2xl font-bold mb-2 text-blue-700">💳 Payment Required</h2>
+          <p class="text-gray-600 mb-4">Booking Details</p>
+          
+          <div class="bg-blue-50 p-4 rounded mb-4 text-left text-sm border-l-4 border-blue-600">
+            <p><strong>Booking ID:</strong> ${booking_id}</p>
+            <p><strong>From:</strong> ${start_date}</p>
+            <p><strong>To:</strong> ${end_date}</p>
+            <p><strong>Amount:</strong> ₹${amount}</p>
+          </div>
+
+          <p class="text-gray-600 mb-4 font-semibold">Scan QR or pay manually:</p>
+          <img src="${qr}" alt="Payment QR" class="mx-auto w-48 h-48 rounded border-4 border-blue-200 mb-4">
+          
+          <p class="text-sm text-gray-500 mb-4">After payment, enter your payment reference ID below</p>
+          
+          <div class="mb-4">
+            <label class="block text-sm font-semibold text-gray-700 mb-2">Payment Reference ID:</label>
+            <input type="text" id="ref-${booking_id}" placeholder="Enter payment reference ID (e.g., UPI123456)" class="border rounded p-3 w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+          
+          <div class="flex gap-2">
+            <button class="bg-blue-600 text-white px-4 py-2 rounded flex-1 hover:bg-blue-700 font-semibold" onclick="verifyPaymentReference(${booking_id})">✓ Paid - Verify</button>
+            <button class="bg-red-600 text-white px-4 py-2 rounded flex-1 hover:bg-red-700 font-semibold" onclick="document.getElementById('payment-modal-${booking_id}').remove()">✗ Cancel</button>
+          </div>
         </div>`;
-      document.body.appendChild(qrPopup);
-
-      // Countdown timer
-      const timer = setInterval(() => {
-        remaining--;
-        const countdownEl = document.getElementById(`countdown-${booking_id}`);
-        if (countdownEl) {
-          countdownEl.textContent = remaining;
-          // Change color as it gets lower
-          if (remaining <= 30) {
-            countdownEl.className = "text-3xl text-red-700 font-bold";
-          }
-        }
-        
-        if (remaining <= 0) {
-          clearInterval(timer);
-          const popup = document.getElementById(`payment-qr-${booking_id}`);
-          if (popup) {
-            popup.innerHTML = `
-              <div class="bg-white p-8 rounded-lg text-center max-w-sm shadow-2xl">
-                <h2 class="text-2xl font-bold mb-2 text-red-700">❌ QR Code Expired</h2>
-                <p class="text-gray-600 mb-4">Please try booking again</p>
-                <button class="bg-blue-600 text-white px-6 py-2 rounded w-full hover:bg-blue-700 font-semibold" onclick="location.reload()">Try Again</button>
-              </div>
-            `;
-          }
-        }
-      }, 1000);
-
-      // Poll for payment confirmation
-      pollForPaymentConfirmation(booking_id, timer, () => {
-        clearInterval(timer);
-        const popup = document.getElementById(`payment-qr-${booking_id}`);
-        if (popup) popup.remove();
-      });
+      document.body.appendChild(modal);
     }
 
-    // ✅ Poll for payment confirmation
-    async function pollForPaymentConfirmation(booking_id, timer, onQRClose) {
-      const maxAttempts = 180; // 180 seconds / 1 second poll = 180 attempts
-      let attempts = 0;
+    // ✅ Verify payment reference
+    async function verifyPaymentReference(booking_id) {
+      const refInput = document.getElementById(`ref-${booking_id}`);
+      const refId = refInput.value.trim();
 
-      const interval = setInterval(async () => {
-        attempts++;
-        try {
-          const res = await fetch(`${BACKEND_URL}/api/payment/status/${booking_id}`);
-          const data = await res.json();
+      if (!refId) {
+        alert("Please enter a payment reference ID");
+        refInput.focus();
+        return;
+      }
 
-          if (data.paid) {
-            // Payment detected! Clear everything
-            clearInterval(interval);
-            clearInterval(timer);
-            
-            // Update QR popup to show "Payment Successful ✔"
-            const qrPopup = document.getElementById(`payment-qr-${booking_id}`);
-            if (qrPopup) {
-              qrPopup.innerHTML = `
-                <div class="bg-white p-8 rounded-lg text-center max-w-sm shadow-2xl">
-                  <h2 class="text-4xl font-bold mb-2 text-green-600">✔️ Payment Successful!</h2>
-                  <p class="text-gray-600 mb-4 text-lg">Processing your booking...</p>
-                  <div class="flex justify-center mb-4">
-                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
-                  </div>
-                </div>`;
-            }
-            
-            // Wait 1 second for UX, then get QRs
-            setTimeout(async () => {
-              try {
-                // Confirm payment and get QRs
-                const confirmRes = await fetch(`${BACKEND_URL}/api/payment/confirm`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ booking_id })
-                });
+      refInput.disabled = true;
 
-                const confirmData = await confirmRes.json();
-                if (!confirmRes.ok) throw new Error(confirmData.message);
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/verify-payment`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            booking_id, 
+            payment_reference_id: refId,
+            customer_id
+          })
+        });
 
-                // Close QR popup and redirect
-                onQRClose();
-
-                // Auto-redirect to Collection QR
-                showCollectionQRModal("🎫 Collection QR", confirmData.collection_qr, booking_id, confirmData.booking_details);
-                
-                // Auto-download collection QR
-                downloadQR(confirmData.collection_qr, `collection_qr_${booking_id}.png`);
-
-                // Show return QR after 4 seconds
-                setTimeout(() => {
-                  showReturnQRModal("🔄 Return QR", confirmData.return_qr, booking_id, confirmData.booking_details);
-                  downloadQR(confirmData.return_qr, `return_qr_${booking_id}.png`);
-                }, 4000);
-              } catch (err) {
-                alert("❌ Error getting QRs: " + err.message);
-                if (qrPopup) qrPopup.remove();
-              }
-            }, 1000);
-          }
-        } catch (err) {
-          // Silent polling - no console spam
+        const data = await res.json();
+        
+        if (!res.ok) {
+          alert("❌ " + (data.message || "Payment verification failed"));
+          refInput.disabled = false;
+          return;
         }
 
-        if (attempts >= maxAttempts) {
-          clearInterval(interval);
+        // ✅ Payment verified! Show success
+        const modal = document.getElementById(`payment-modal-${booking_id}`);
+        if (modal) {
+          modal.innerHTML = `
+            <div class="bg-white p-8 rounded-lg text-center max-w-md shadow-2xl">
+              <h2 class="text-4xl font-bold mb-2 text-green-600">✔️ Payment Verified!</h2>
+              <p class="text-gray-600 mb-4 text-lg">Your booking is confirmed</p>
+              <div class="flex justify-center mb-4">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
+              </div>
+            </div>`;
         }
-      }, 1000);
+
+        // Wait 1 second, then show collection QR
+        setTimeout(() => {
+          if (modal) modal.remove();
+          
+          // Get booking details for QR display
+          showCollectionQRModal("🎫 Collection QR", data.collection_qr, booking_id, data.booking_details);
+          downloadQR(data.collection_qr, `collection_qr_${booking_id}.png`);
+
+          // Show return QR after 4 seconds
+          setTimeout(() => {
+            showReturnQRModal("🔄 Return QR", data.return_qr, booking_id, data.booking_details);
+            downloadQR(data.return_qr, `return_qr_${booking_id}.png`);
+          }, 4000);
+        }, 1000);
+
+      } catch (err) {
+        alert("❌ Error: " + err.message);
+        refInput.disabled = false;
+      }
     }
 
     // ✅ Show Collection QR Modal
