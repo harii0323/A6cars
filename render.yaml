@@ -1,6 +1,7 @@
 # ============================
 # Render Deployment Configuration
 # A6 Cars Full Project (Backend + Frontend + Database)
+# Updated: 2025-12-01 - Force Rebuild Trigger
 # ============================
 
 services:
