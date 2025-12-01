@@ -51,7 +51,7 @@ services:
   - type: web
     name: a6cars-frontend
     env: static
-    rootDir: .
+    rootDir: frontend
     staticPublishPath: .
     autoDeploy: true
 
