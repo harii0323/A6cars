@@ -136,19 +136,19 @@ Or copy and paste the SQL from `setup_pg.sql` into the Render SQL editor.
 ### **Backend Health Check:**
 ```bash
 # Replace with your Render backend URL
-curl https://a6cars-backend.onrender.com/
+curl https://a6cars.onrender.com/
 # Should return: "🚗 A6 Cars Backend is running successfully!"
 ```
 
 ### **Test Endpoints:**
 ```bash
 # Register user
-curl -X POST https://a6cars-backend.onrender.com/api/register \
+curl -X POST https://a6cars.onrender.com/api/register \
   -H "Content-Type: application/json" \
   -d '{"name":"Test","email":"test@example.com","phone":"9876543210","password":"test123"}'
 
 # Login
-curl -X POST https://a6cars-backend.onrender.com/api/login \
+curl -X POST https://a6cars.onrender.com/api/login \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"test123"}'
 ```
@@ -208,7 +208,7 @@ https://a6cars-frontend.onrender.com
 
 | Service | URL Format |
 |---------|-----------|
-| Backend API | `https://a6cars-backend.onrender.com` |
+| Backend API | `https://a6cars.onrender.com` |
 | Frontend | `https://a6cars-frontend.onrender.com` |
 | Database | `postgresql://user:pass@host:5432/a6cars_db` |
 

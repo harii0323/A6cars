@@ -75,7 +75,7 @@
 - **Feature**: Backend responds to health checks
 - **Test**:
   ```bash
-  curl https://a6cars-latest.onrender.com/
+  curl https://a6cars.onrender.com/
   # Expected: "🚗 A6 Cars Backend is running successfully!"
   ```
 
@@ -83,7 +83,7 @@
 - **Feature**: Fetch all available cars
 - **Test**:
   ```bash
-  curl https://a6cars-latest.onrender.com/api/cars
+  curl https://a6cars.onrender.com/api/cars
   # Expected: JSON array of cars with images, price, location
   ```
 
@@ -91,7 +91,7 @@
 - **Feature**: Get booked dates for a specific car
 - **Test**:
   ```bash
-  curl https://a6cars-latest.onrender.com/api/bookings/1
+  curl https://a6cars.onrender.com/api/bookings/1
   # Expected: Array of {start_date, end_date} for car_id=1
   ```
 
@@ -99,7 +99,7 @@
 - **Feature**: Create new booking with conflict detection
 - **Test**:
   ```bash
-  curl -X POST https://a6cars-latest.onrender.com/api/book \
+  curl -X POST https://a6cars.onrender.com/api/book \
     -H "Content-Type: application/json" \
     -d '{
       "car_id": 1,
@@ -114,7 +114,7 @@
 - **Feature**: Check if payment is done
 - **Test**:
   ```bash
-  curl https://a6cars-latest.onrender.com/api/payment/status/1
+  curl https://a6cars.onrender.com/api/payment/status/1
   # Expected: {paid: true/false, status: "pending"/"confirmed"}
   ```
 
@@ -122,7 +122,7 @@
 - **Feature**: Confirm payment, generate collection + return QRs
 - **Test**:
   ```bash
-  curl -X POST https://a6cars-latest.onrender.com/api/payment/confirm \
+  curl -X POST https://a6cars.onrender.com/api/payment/confirm \
     -H "Content-Type: application/json" \
     -d '{"booking_id": 1}'
   # Expected: collection_qr, return_qr (both as data URLs)
@@ -132,7 +132,7 @@
 - **Feature**: Admin verifies QR and sees full details
 - **Test**:
   ```bash
-  curl -X POST https://a6cars-latest.onrender.com/api/admin/verify-qr \
+  curl -X POST https://a6cars.onrender.com/api/admin/verify-qr \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer <admin_token>" \
     -d '{
@@ -202,8 +202,8 @@ curl -X POST http://localhost:3000/api/book \
 - **Home Page**: https://a6cars-frontend-4i84.onrender.com/home.html
 
 ### Backend URL
-- **Base**: https://a6cars-latest.onrender.com
-- **Health**: https://a6cars-latest.onrender.com/
+- **Base**: https://a6cars.onrender.com
+- **Health**: https://a6cars.onrender.com/
 
 ### Test User Credentials
 - **Email**: john@example.com

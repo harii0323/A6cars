@@ -16,7 +16,7 @@ The frontend was configured with incorrect backend URLs:
 - **Purpose:** Auto-detects backend URL based on environment
 - **Features:**
   - Automatically uses `http://localhost:3000` for local development
-  - Automatically uses `https://a6cars-backend.onrender.com` for production
+  - Automatically uses `https://a6cars.onrender.com` for production
   - Provides helper functions for API calls
 
 ### **2. Updated All Frontend Files**
@@ -91,7 +91,7 @@ Database: localhost:5432
 ### **Render Production**
 ```
 Frontend: https://a6cars-frontend.onrender.com
-Backend:  https://a6cars-backend.onrender.com
+Backend:  https://a6cars.onrender.com
 Database: [PostgreSQL connection string from Render]
 ```
 
@@ -118,13 +118,13 @@ location.reload();
 ```javascript
 // Open DevTools Console
 console.log(window.API_CONFIG.BACKEND_URL);
-// Should show: https://a6cars-backend.onrender.com
+  // Should show: https://a6cars.onrender.com
 ```
 
 ### **Problem: API calls failing with 404**
 
 **Check:**
-1. Backend is running: `curl https://a6cars-backend.onrender.com/`
+1. Backend is running: `curl https://a6cars.onrender.com/`
 2. Database is initialized: Run `setup_pg.sql`
 3. Environment variables set in Render
 4. CORS is enabled in backend (should be)
@@ -133,7 +133,7 @@ console.log(window.API_CONFIG.BACKEND_URL);
 
 **Solution:**
 - Check image paths in console
-- Should be: `https://a6cars-backend.onrender.com/uploads/...`
+ - Should be: `https://a6cars.onrender.com/uploads/...`
 - If showing different URL, there's a mismatch
 
 ### **Problem: Login redirects to wrong page**

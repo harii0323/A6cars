@@ -15,7 +15,7 @@
     BACKEND_URL = 'http://localhost:3000';
   } else if (hostname.includes('onrender.com')) {
     // On Render platform - use the actual backend URL
-    BACKEND_URL = 'https://a6cars-latest.onrender.com';
+    BACKEND_URL = 'https://a6cars.onrender.com';
   } else {
     // Production with custom domain or other platform
     BACKEND_URL = `${protocol}//api.${hostname}` || `${protocol}//backend.${hostname}`;

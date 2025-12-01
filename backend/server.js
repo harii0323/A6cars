@@ -16,7 +16,7 @@ const app = express();
 app.use(cors({
   origin: [
     "https://a6cars-frontend-4i84.onrender.com",
-    "https://a6cars-latest.onrender.com",
+    "https://a6cars.onrender.com",
     "http://localhost:5173"
   ],
   methods: ["GET", "POST", "PUT", "DELETE"],
