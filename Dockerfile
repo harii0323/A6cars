@@ -2,12 +2,25 @@ FROM node:18-alpine
 
 WORKDIR /usr/src/app
 
-COPY backend/package.json backend/package-lock.json* ./
+# Copy package files
+COPY backend/package*.json ./
+
+# Install dependencies
 RUN npm install --production || npm install
 
-COPY backend ./
+# Copy backend application
+COPY backend .
+
+# Create uploads directory
 RUN mkdir -p uploads
 
-EXPOSE 3000
+# Port configuration for Render
+ENV PORT=10000
+EXPOSE 10000
 
-CMD ["npm", "start"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:10000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+
+# Start application
+CMD ["node", "server.js"]

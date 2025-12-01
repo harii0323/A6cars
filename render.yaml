@@ -7,11 +7,10 @@ services:
   # ---------------- BACKEND SERVICE ----------------
   - type: web
     name: a6cars-backend
-    env: node
+    env: docker
     region: singapore
     plan: free
-    buildCommand: "cd backend && npm install"
-    startCommand: "cd backend && node server.js"
+    dockerfile: Dockerfile
     envVars:
       - key: DATABASE_URL
         fromDatabase:
