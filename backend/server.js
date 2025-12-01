@@ -522,12 +522,25 @@ app.post("/api/verify-payment", async (req, res) => {
     }
 
     // 4. Update payment with reference ID and mark as verified
-    await client.query(
-      `UPDATE payments 
-       SET payment_reference_id = $1, status = 'verified', updated_at = NOW()
-       WHERE booking_id = $2`,
-      [payment_reference_id, booking_id]
-    );
+    // Note: payment_reference_id column may not exist if migration hasn't been applied
+    // Try to update, but catch if column doesn't exist
+    try {
+      await client.query(
+        `UPDATE payments 
+         SET payment_reference_id = $1, status = 'verified'
+         WHERE booking_id = $2`,
+        [payment_reference_id, booking_id]
+      );
+    } catch (colErr) {
+      // If column doesn't exist, just update status and log warning
+      console.warn('⚠️ payment_reference_id column missing - run migration: migration_add_payment_reference.sql');
+      await client.query(
+        `UPDATE payments 
+         SET status = 'verified'
+         WHERE booking_id = $2`,
+        [booking_id]
+      );
+    }
 
     // 5. Mark booking as paid and confirmed
     await client.query(
@@ -584,7 +597,14 @@ app.post("/api/verify-payment", async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("❌ Payment verification error:", err);
+    console.error("❌ Payment verification error:", err.message);
+    console.error("Error details:", err);
+    
+    // Provide helpful error messages for common issues
+    if (err.message && err.message.includes('payment_reference_id')) {
+      return res.status(500).json({ message: "Database schema missing payment_reference_id column. Run migration: migration_add_payment_reference.sql" });
+    }
+    
     res.status(500).json({ message: "Error verifying payment: " + err.message });
   } finally {
     client.release();
