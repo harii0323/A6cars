@@ -25,17 +25,10 @@
       .then(res => res.text())
       .then(html => {
         document.getElementById("navbar").innerHTML = html;
-        setupNavbar();
+        if (typeof setupNavbar === "function") {
+          setupNavbar();
+        }
       });
-
-    function setupNavbar() {
-      const logoutBtn = document.getElementById("nav-logout");
-      if (logoutBtn)
-        logoutBtn.onclick = () => {
-          localStorage.clear();
-          window.location.href = "/login.html";
-        };
-    }
   </script>
 
   <div class="h-20"></div>

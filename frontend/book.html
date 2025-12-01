@@ -21,6 +21,9 @@
       .then(res => res.text())
       .then(html => {
         document.getElementById("navbar").innerHTML = html;
+        setTimeout(() => {
+          if (typeof setupNavbar === "function") setupNavbar();
+        }, 0);
       });
   </script>
 

@@ -6,7 +6,7 @@
     <ul id="navMenu" class="flex space-x-6 items-center">
 
       <li><a href="/home.html" id="nav-home" class="hover:text-gray-300 hidden">Home</a></li>
-      <li><a href="/booking.html" id="nav-book" class="hover:text-gray-300 hidden">Book Car</a></li>
+      <li><a href="/book.html" id="nav-book" class="hover:text-gray-300 hidden">Book Car</a></li>
       <li><a href="/history.html" id="nav-history" class="hover:text-gray-300 hidden">My Bookings</a></li>
 
       <li><a href="/admin-dashboard.html" id="nav-admin" class="hover:text-yellow-300 hidden font-semibold">Admin Dashboard</a></li>
@@ -25,9 +25,9 @@
 </nav>
 
 <script>
-function setupNavbar() {
+(function setupNavbar() {
   try {
-    // Debug (SAFE because inside function)
+    console.log("🔍 Navbar setup running...");
     console.log("customer_id =", localStorage.getItem("customer_id"));
     console.log("customer_name =", localStorage.getItem("customer_name"));
     console.log("auth_token =", localStorage.getItem("auth_token"));
@@ -47,6 +47,12 @@ function setupNavbar() {
     const navBook = document.getElementById("nav-book");
     const navHistory = document.getElementById("nav-history");
 
+    if (!userEl) {
+      console.error("❌ Navbar elements not found - navbar.html may not be injected yet");
+      setTimeout(setupNavbar, 100);
+      return;
+    }
+
     const isUserLoggedIn = Boolean(customerId && authToken);
     const isAdminLoggedIn = Boolean(adminLogged && adminToken);
 
@@ -60,8 +66,12 @@ function setupNavbar() {
     const show = (...els) => els.forEach(el => el?.classList.remove("hidden"));
     const hide = (...els) => els.forEach(el => el?.classList.add("hidden"));
 
+    console.log("isUserLoggedIn =", isUserLoggedIn);
+    console.log("isAdminLoggedIn =", isAdminLoggedIn);
+
     // Admin
     if (isAdminLoggedIn) {
+      console.log("✅ Showing admin navbar");
       hide(authLinks, navHome, navBook, navHistory);
       show(adminLink, logoutBtn, userEl);
       userEl.textContent = "🧑‍💼 Admin";
@@ -69,6 +79,7 @@ function setupNavbar() {
 
     // User
     else if (isUserLoggedIn) {
+      console.log("✅ Showing user navbar");
       hide(authLinks, adminLink);
       show(userEl, logoutBtn);
       userEl.textContent = `👋 Hello, ${customerName || "User"}`;
@@ -92,6 +103,7 @@ function setupNavbar() {
 
     // Guest
     else {
+      console.log("✅ Showing guest navbar");
       show(authLinks);
       hide(userEl, logoutBtn, adminLink, navHome, navBook, navHistory);
     }
@@ -104,14 +116,7 @@ function setupNavbar() {
     });
 
   } catch (err) {
-    console.error("Navbar setup error:", err);
+    console.error("❌ Navbar setup error:", err);
   }
-}
-
-// Run immediately and on DOMContentLoaded
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", setupNavbar);
-} else {
-  setupNavbar();
-}
+})();
 </script>

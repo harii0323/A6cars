@@ -23,6 +23,9 @@
     .then(res => res.text())
     .then(html => {
       document.getElementById("navbar-container").innerHTML = html;
+      setTimeout(() => {
+        if (typeof setupNavbar === "function") setupNavbar();
+      }, 0);
     })
     .catch(err => console.error("Navbar load failed:", err));
 </script>
