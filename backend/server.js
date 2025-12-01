@@ -69,8 +69,71 @@ pool.query('SELECT NOW()', (err, result) => {
     console.error('   Connection string:', connectionString.replace(/:[^:]*@/, ':****@'));
   } else {
     console.log('✅ Database connected successfully at', result.rows[0].now);
+    // Run auto-migration on successful connection
+    runDatabaseMigrations();
   }
 });
+
+// ============================================================
+// ✅ Auto-Migration: Ensure payment_reference_id column exists
+// ============================================================
+async function runDatabaseMigrations() {
+  try {
+    console.log('📋 Checking database schema...');
+    
+    // Check if payment_reference_id column exists
+    const checkColumn = await pool.query(
+      `SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'payments' AND column_name = 'payment_reference_id'
+      )`
+    );
+    
+    if (!checkColumn.rows[0].exists) {
+      console.log('⚠️ Column payment_reference_id missing - running migration...');
+      
+      // Add payment_reference_id column
+      await pool.query(
+        `ALTER TABLE payments ADD COLUMN payment_reference_id VARCHAR(255) UNIQUE`
+      );
+      console.log('✅ Added payment_reference_id column');
+      
+      // Add updated_at column if missing
+      const checkUpdatedAt = await pool.query(
+        `SELECT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'payments' AND column_name = 'updated_at'
+        )`
+      );
+      
+      if (!checkUpdatedAt.rows[0].exists) {
+        await pool.query(
+          `ALTER TABLE payments ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
+        );
+        console.log('✅ Added updated_at column');
+      }
+      
+      // Create indexes
+      await pool.query(
+        `CREATE INDEX IF NOT EXISTS idx_payment_reference_id ON payments(payment_reference_id)`
+      );
+      console.log('✅ Created idx_payment_reference_id index');
+      
+      await pool.query(
+        `CREATE INDEX IF NOT EXISTS idx_payment_booking_status ON payments(booking_id, status)`
+      );
+      console.log('✅ Created idx_payment_booking_status index');
+      
+      console.log('✅ Database migration completed successfully!');
+    } else {
+      console.log('✅ Database schema is up to date (payment_reference_id column exists)');
+    }
+  } catch (err) {
+    console.error('❌ Migration error:', err.message);
+    console.error('   Please run migration manually: migration_add_payment_reference.sql');
+  }
+}
+
 
 // ============================================================
 // ✅ Multer Configuration (Car Image Uploads)
