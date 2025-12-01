@@ -19,13 +19,19 @@
   </script>
   -->
 
-  <!-- backend base -->
+  <!-- backend base (use centralized api-config) -->
+  <script src="/api-config.js"></script>
   <script>
-    // Adjust backend URL for dev / prod
-    const BACKEND_URL = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? 'http://localhost:3000' : 'https://a6cars.onrender.com';
+    // Use centralized API_CONFIG from /api-config.js if available
     function api(path) {
-      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return path;
-      return BACKEND_URL + path;
+      if (window.API_CONFIG && typeof window.API_CONFIG.getEndpoint === 'function') {
+        return window.API_CONFIG.getEndpoint(path);
+      }
+      // Fallback: treat path as absolute on prod or local path during dev
+      try {
+        if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return path;
+      } catch(e) {}
+      return 'https://a6cars.onrender.com' + path;
     }
   </script>
 
@@ -297,7 +303,9 @@
         let imgs = Array.isArray(car.images) ? car.images : [];
         imgs = imgs.map(u => {
           if (!u) return '';
-          return u.startsWith('http') ? u : (u.startsWith('/') ? BACKEND_URL + u : BACKEND_URL + '/' + u);
+          if (u.startsWith('http')) return u;
+          const base = (window.API_CONFIG && window.API_CONFIG.BACKEND_URL) ? window.API_CONFIG.BACKEND_URL : 'https://a6cars.onrender.com';
+          return u.startsWith('/') ? base + u : base + '/' + u;
         }).filter(Boolean);
 
         const thumb = imgs[0] || 'https://via.placeholder.com/160x100?text=No+Image';
