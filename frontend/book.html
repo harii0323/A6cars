@@ -68,11 +68,24 @@
 
         container.innerHTML = "";
         cars.forEach(car => {
+          // Use placeholder images with car model as fallback
+          const carPlaceholders = {
+            "Maruti Suzuki Baleno": "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=400&h=300&fit=crop",
+            "Maruti Suzuki Swift": "https://images.unsplash.com/photo-1552820728-8ac41f1ce891?w=400&h=300&fit=crop",
+            "Honda City": "https://images.unsplash.com/photo-1542282088-fe8426682b8f?w=400&h=300&fit=crop",
+            "Toyota Innova": "https://images.unsplash.com/photo-1605559424843-9e4c3dec3371?w=400&h=300&fit=crop",
+            "Hyundai i20": "https://images.unsplash.com/photo-1566023967268-4500d50a4e00?w=400&h=300&fit=crop",
+            "Tata Nexon": "https://images.unsplash.com/photo-1552820728-8ac41f1ce891?w=400&h=300&fit=crop"
+          };
+          
+          const carName = `${car.brand} ${car.model}`;
+          const fallbackImage = carPlaceholders[carName] || "https://via.placeholder.com/400x300?text=Car+Image";
+          
           const images = car.images && car.images.length
             ? car.images.map(img =>
-                `<div class="swiper-slide"><img src="${BACKEND_URL}${img}" class="w-full h-48 object-cover rounded-lg"></div>`
+                `<div class="swiper-slide"><img src="${BACKEND_URL}${img}" alt="${carName}" onerror="this.src='${fallbackImage}'" class="w-full h-48 object-cover rounded-lg"></div>`
               ).join("")
-            : `<div class="swiper-slide"><img src="https://via.placeholder.com/400x300?text=No+Image" class="w-full h-48 object-cover rounded-lg"></div>`;
+            : `<div class="swiper-slide"><img src="${fallbackImage}" alt="${carName}" class="w-full h-48 object-cover rounded-lg"></div>`;
 
           const div = document.createElement("div");
           div.className = "bg-white p-4 rounded-lg shadow text-center";
