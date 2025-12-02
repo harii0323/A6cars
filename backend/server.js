@@ -248,6 +248,80 @@ async function runDatabaseMigrations() {
     } else {
       console.log('✅ Database schema is up to date (payment_reference_id column exists)');
     }
+
+    // Always ensure refund-related tables and payment refund columns exist
+    try {
+      console.log('🔎 Ensuring refund/discount/notification tables and refund columns exist');
+
+      // Ensure refund-related columns exist on payments (safeguard if migration ran partially)
+      const ensureColumn = async (colName, colDef) => {
+        const exists = await pool.query(
+          `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payments' AND column_name=$1)`,
+          [colName]
+        );
+        if (!exists.rows[0].exists) {
+          await pool.query(`ALTER TABLE payments ADD COLUMN ${colDef}`);
+          console.log(`✅ Added ${colName} column to payments`);
+        }
+      };
+
+      await ensureColumn('refund_amount', `refund_amount NUMERIC(10,2)`);
+      await ensureColumn('refund_status', `refund_status VARCHAR(50) DEFAULT 'none'`);
+      await ensureColumn('refund_requested_at', `refund_requested_at TIMESTAMP`);
+      await ensureColumn('refund_processed_at', `refund_processed_at TIMESTAMP`);
+      await ensureColumn('refund_due_by', `refund_due_by TIMESTAMP`);
+
+      // Create tables if they do not exist
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS refunds (
+          id SERIAL PRIMARY KEY,
+          payment_id INTEGER REFERENCES payments(id) ON DELETE SET NULL,
+          booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+          customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+          amount NUMERIC(10,2) NOT NULL,
+          status VARCHAR(50) DEFAULT 'pending',
+          reason TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          processed_at TIMESTAMP
+        )`
+      );
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS booking_cancellations (
+          id SERIAL PRIMARY KEY,
+          booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
+          admin_email VARCHAR(255),
+          reason TEXT,
+          cancelled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`
+      );
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS discounts (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+          car_id INTEGER REFERENCES cars(id) ON DELETE CASCADE,
+          percent NUMERIC(5,2) NOT NULL,
+          start_date DATE,
+          end_date DATE,
+          code VARCHAR(100),
+          used BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`
+      );
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS notifications (
+          id SERIAL PRIMARY KEY,
+          customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
+          title VARCHAR(255),
+          message TEXT,
+          read BOOLEAN DEFAULT false,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )`
+      );
+
+      console.log('✅ Ensured refund/discount/notification tables and payments refund columns exist');
+    } catch (errInner) {
+      console.error('❌ Failed to ensure refund-related tables/columns:', errInner.message);
+    }
   } catch (err) {
     console.error('❌ Migration error:', err.message);
     console.error('   Please run migration manually: migration_add_payment_reference.sql');
