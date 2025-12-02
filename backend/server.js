@@ -424,9 +424,18 @@ app.post('/api/admin/cancel-booking', verifyAdmin, async (req, res) => {
 
     // Record cancellation with refund details (refundAmount may be 0 if unpaid)
     await client.query(
-      `INSERT INTO booking_cancellations (booking_id, reason, refund_percent, refund_amount, canceled_by, admin_email)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [booking_id, reason, refundPercent, refundAmount, adminEmail || 'admin', adminEmail]
+      `INSERT INTO booking_cancellations 
+       (booking_id, customer_id, reason, refund_percent, refund_amount, canceled_by, admin_email, cancelled_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+      [
+        booking_id,
+        booking.customer_id,         // ✔ ALWAYS available
+        reason,
+        refundPercent,
+        refundAmount,
+        'admin',
+        adminEmail
+      ]
     );
 
     // If paid, schedule full refund
