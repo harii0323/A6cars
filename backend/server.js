@@ -614,88 +614,143 @@ app.get('/api/admin/car-schedule/:car_id', verifyAdmin, async (req, res) => {
 });
 
 // ============================================================
-// ✅ Customer: Cancel booking and request refund
-// Rules:
-// - Full refund if cancellation is made >= 48 hours before booking start
-// - 50% refund otherwise
-// - Refund should be processed within 72 hours (we schedule and mark as pending)
-// - If booking not paid, simply cancel without refund
+// ✅ CANCEL BOOKING (admin or user)
+// - Admin cancellations: full refund (100%)
+// - User cancellations: full refund if >=48 hours before start, else 50%
+// - Refunds are scheduled and marked pending; admin can process them
 // ============================================================
 app.post('/api/cancel-booking', async (req, res) => {
-  const { booking_id, customer_id } = req.body;
-  if (!booking_id || !customer_id) return res.status(400).json({ message: 'Missing booking_id or customer_id' });
+  console.log('🔍 Cancel Booking API called:', req.body);
+
+  const {
+    booking_id,
+    cancelled_by,       // 'admin' or 'user'
+    reason,
+    admin_email,        // optional, when admin cancels
+    customer_id         // optional, fallback to booking.customer_id
+  } = req.body;
+
+  if (!booking_id || !cancelled_by) {
+    return res.status(400).json({ message: 'Missing booking_id or cancelled_by' });
+  }
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const q = await client.query(
-      `SELECT b.id, b.customer_id, b.start_date, b.end_date, b.amount, b.status, b.paid,
-              p.id AS payment_id, p.amount AS paid_amount, p.status AS payment_status
-       FROM bookings b
-       LEFT JOIN payments p ON p.booking_id = b.id
-       WHERE b.id = $1 AND b.customer_id = $2`,
-      [booking_id, customer_id]
-    );
-
-    if (!q.rows.length) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ message: 'Booking not found or does not belong to this customer.' });
+    // If admin cancellation, verify admin token
+    let verifiedAdminEmail = null;
+    if (cancelled_by === 'admin') {
+      const header = req.headers['authorization'];
+      if (!header) {
+        await client.query('ROLLBACK');
+        return res.status(401).json({ message: 'Admin authorization required for admin cancellations' });
+      }
+      const token = header.split(' ')[1];
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        verifiedAdminEmail = decoded.email || admin_email || 'admin';
+      } catch (e) {
+        await client.query('ROLLBACK');
+        return res.status(401).json({ message: 'Invalid admin token' });
+      }
     }
 
-    const booking = q.rows[0];
+    // Fetch booking and payment info
+    const bookingRes = await client.query(
+      `SELECT b.*, p.id AS payment_id, p.amount AS paid_amount, p.status AS payment_status
+       FROM bookings b
+       LEFT JOIN payments p ON p.booking_id = b.id
+       WHERE b.id = $1`,
+      [booking_id]
+    );
 
+    if (bookingRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ message: 'Booking not found' });
+    }
+
+    const booking = bookingRes.rows[0];
     if (booking.status === 'cancelled') {
       await client.query('ROLLBACK');
       return res.status(409).json({ message: 'Booking already cancelled.' });
     }
 
-    // If not paid, cancel booking without refund
-    if (!booking.paid) {
-      await client.query(`UPDATE bookings SET status='cancelled' WHERE id=$1`, [booking_id]);
-      await client.query('COMMIT');
-      return res.json({ message: 'Booking cancelled. No payment was recorded, so no refund necessary.' });
-    }
-
-    // Compute time difference in hours between now and booking start
-    const now = new Date();
-    const start = new Date(booking.start_date);
-    const hoursUntilStart = (start - now) / (1000 * 60 * 60);
-
+    const paidAmount = parseFloat(booking.paid_amount || booking.amount || 0);
     let refundAmount = 0;
-    if (hoursUntilStart >= 48) {
-      refundAmount = parseFloat(booking.paid_amount || booking.amount || 0);
+    let refundPercent = 0;
+
+    if (cancelled_by === 'admin') {
+      refundPercent = 100;
+      refundAmount = paidAmount;
+      console.log('🟢 Admin cancellation → Full refund:', refundAmount);
     } else {
-      refundAmount = parseFloat((parseFloat(booking.paid_amount || booking.amount || 0) * 0.5).toFixed(2));
+      // user cancellation
+      if (!booking.paid) {
+        // Not paid — just cancel
+        await client.query(`INSERT INTO booking_cancellations (booking_id, customer_id, reason, canceled_by, refund_percent, refund_amount, cancelled_at)
+                            VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
+          [booking_id, customer_id || booking.customer_id, reason || null, 'user', 0, 0]
+        );
+        await client.query(`UPDATE bookings SET status='cancelled' WHERE id=$1`, [booking_id]);
+        await client.query('COMMIT');
+        client.release();
+        return res.json({ message: 'Booking cancelled. No payment was recorded, so no refund necessary.' });
+      }
+
+      const now = new Date();
+      const startTime = new Date(booking.start_date);
+      const diffHours = (startTime - now) / (1000 * 60 * 60);
+
+      if (diffHours >= 48) {
+        refundPercent = 100;
+        refundAmount = paidAmount;
+      } else {
+        refundPercent = 50;
+        refundAmount = parseFloat((paidAmount * 0.5).toFixed(2));
+      }
+
+      console.log('🔵 User cancellation refund:', refundAmount, 'percent:', refundPercent);
     }
 
-    // Mark booking as cancelled
+    // Insert cancellation record
+    await client.query(
+      `INSERT INTO booking_cancellations (booking_id, customer_id, reason, canceled_by, admin_email, refund_percent, refund_amount, cancelled_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())`,
+      [booking_id, customer_id || booking.customer_id, reason || null, cancelled_by, verifiedAdminEmail || admin_email || null, refundPercent, refundAmount]
+    );
+
+    // Mark booking cancelled
     await client.query(`UPDATE bookings SET status='cancelled' WHERE id=$1`, [booking_id]);
 
-    // Update payments table to schedule refund
-    await client.query(
-      `UPDATE payments
-       SET refund_amount = $1,
-           refund_status = 'pending',
-           refund_requested_at = NOW(),
-           refund_due_by = NOW() + INTERVAL '72 hours'
-       WHERE booking_id = $2`,
-      [refundAmount, booking_id]
-    );
+    // If paid and refund applicable, create refund record and update payments
+    if (booking.paid && refundAmount > 0) {
+      await client.query(
+        `INSERT INTO refunds (payment_id, booking_id, customer_id, amount, status, reason)
+         VALUES ($1,$2,$3,$4,'pending',$5)`,
+        [booking.payment_id || null, booking_id, booking.customer_id, refundAmount, (cancelled_by === 'admin' ? 'Admin cancellation' : 'User cancellation') + (reason ? ': ' + reason : '')]
+      );
+
+      await client.query(
+        `UPDATE payments SET refund_amount=$1, refund_status='pending', refund_requested_at=NOW(), refund_due_by=NOW()+INTERVAL '72 hours' WHERE booking_id=$2`,
+        [refundAmount, booking_id]
+      );
+    }
+
+    // Insert notification
+    const notifyMsg = cancelled_by === 'admin'
+      ? `Your booking #${booking_id} was cancelled by admin. Reason: ${reason || 'No reason provided'}. Refund: ₹${refundAmount}`
+      : `Your booking #${booking_id} has been cancelled. Refund Amount: ₹${refundAmount}`;
+
+    await client.query(`INSERT INTO notifications (customer_id, title, message) VALUES ($1,$2,$3)`, [booking.customer_id, 'Booking Cancelled', notifyMsg]);
 
     await client.query('COMMIT');
 
-    res.json({
-      message: 'Booking cancelled successfully. Refund scheduled.',
-      booking_id,
-      refund_amount: refundAmount,
-      refund_status: 'pending',
-      refund_due_by_hours: 72
-    });
+    res.json({ message: 'Booking cancelled successfully', refundAmount, refundPercent, cancelled_by, booking_id });
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('Cancel booking error:', err);
-    res.status(500).json({ message: 'Failed to cancel booking.' });
+    console.error('❌ Cancel booking error:', err);
+    res.status(500).json({ message: 'Cancel booking failed', error: err.message });
   } finally {
     client.release();
   }
