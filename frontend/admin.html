@@ -651,7 +651,7 @@ function viewCarBookings(carId, carName) {
 
   const token = getAdminToken();
 
-  fetch(api(`/api/car-bookings/${carId}`), {
+  fetch(api(`/api/bookings/${carId}`), {
     headers: token ? { Authorization:'Bearer '+token } : {}
   })
   .then(r => r.json())
