@@ -785,9 +785,12 @@ async function loadTransactions() {
     renderTransactions();
 
     // Stats
+    // Total bookings shown
     document.getElementById('stat-bookings').innerText = allTransactions.length;
+
+    // Pending = those not marked paid. Accept both boolean true and numeric 1 as paid markers.
     document.getElementById('stat-pending').innerText =
-      allTransactions.filter(tx => tx.paid != 1).length;
+      allTransactions.filter(tx => !(tx.paid === true || tx.paid == 1)).length;
   }
   catch(err) { console.log(err); }
 }
@@ -807,20 +810,14 @@ function renderTransactions() {
     const tr = document.createElement('tr');
 
     tr.innerHTML = `
-      <td class="border px-2 py-1">${tx.payment_id ?? '-'}</td>
-      <td class="border px-2 py-1">${tx.name || tx.customer_name || ''}</td>
+      <td class="border px-2 py-1">${tx.payment_id ?? tx.id ?? '-'}</td>
+      <td class="border px-2 py-1">${tx.customer_name || tx.name || 'Unknown'}</td>
       <td class="border px-2 py-1">${tx.brand || ''} ${tx.model || ''}</td>
-      <td class="border px-2 py-1">${new Date(tx.start_date).toLocaleDateString()}</td>
-      <td class="border px-2 py-1">${new Date(tx.end_date).toLocaleDateString()}</td>
+      <td class="border px-2 py-1">${tx.start_date ? new Date(tx.start_date).toLocaleDateString() : '-'}</td>
+      <td class="border px-2 py-1">${tx.end_date ? new Date(tx.end_date).toLocaleDateString() : '-'}</td>
       <td class="border px-2 py-1">₹${tx.amount || 0}</td>
-
-      <td class="border px-2 py-1">
-        ${(tx.paid==1 || tx.is_paid==1 || tx.payment_status==1) ? 'Yes' : 'No'}
-      </td>
-
-      <td class="border px-2 py-1">
-        ${(tx.verified==1 || tx.is_verified==1 || tx.verification_status==1) ? 'Yes' : 'No'}
-      </td>
+      <td class="border px-2 py-1">${(tx.paid==true || tx.paid==1) ? 'Yes' : 'No'}</td>
+      <td class="border px-2 py-1">${(tx.verified==true || tx.verified==1) ? 'Yes' : 'No'}</td>
     `;
 
     body.appendChild(tr);
