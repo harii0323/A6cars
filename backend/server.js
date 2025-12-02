@@ -942,9 +942,12 @@ app.get("/api/bookings/:car_id", async (req, res) => {
   const { car_id } = req.params;
   try {
     const result = await pool.query(
-      `SELECT start_date, end_date FROM bookings 
-       WHERE car_id=$1 AND status IN ('pending', 'confirmed') 
-       ORDER BY start_date ASC`,
+      `SELECT b.id, b.start_date, b.end_date, b.amount, b.status, b.paid, b.verified,
+              c.name AS customer_name, c.email AS customer_email
+       FROM bookings b
+       LEFT JOIN customers c ON b.customer_id = c.id
+       WHERE b.car_id=$1 AND b.status IN ('pending', 'confirmed')
+       ORDER BY b.start_date ASC`,
       [car_id]
     );
     res.json(result.rows);
