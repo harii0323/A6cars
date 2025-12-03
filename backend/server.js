@@ -1482,6 +1482,55 @@ app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {
       );
     }
 
+    // If return scan happens before booking end_date, compute vacancies from now -> booking.end_date for this car
+    let vacancies = [];
+    try {
+      if (qr_type === 'return') {
+        const now = new Date();
+        const endWindow = bookingData.end_date ? new Date(bookingData.end_date) : null;
+        if (endWindow && endWindow > now) {
+          // fetch other bookings for this car (exclude current booking)
+          const otherRes = await pool.query(
+            `SELECT id, start_date, end_date FROM bookings WHERE car_id=$1 AND id<>$2 AND status!='cancelled' ORDER BY start_date ASC`,
+            [bookingData.car_id, booking_id]
+          );
+
+          const ranges = otherRes.rows
+            .map(r => ({ start: new Date(r.start_date), end: new Date(r.end_date) }))
+            .filter(r => r.end >= now && r.start <= endWindow)
+            .sort((a,b) => a.start - b.start);
+
+          // merge overlapping ranges
+          const merged = [];
+          for (const r of ranges) {
+            if (!merged.length) merged.push(r);
+            else {
+              const last = merged[merged.length-1];
+              if (r.start <= new Date(last.end.getTime() + 24*60*60*1000)) {
+                last.end = new Date(Math.max(last.end, r.end));
+              } else merged.push(r);
+            }
+          }
+
+          // compute vacancies between now and endWindow (exclusive of merged booked ranges)
+          let cursor = new Date(now);
+          for (const m of merged) {
+            if (m.end < now) continue;
+            if (m.start > cursor) {
+              const vacStart = cursor;
+              const vacEnd = new Date(m.start.getTime() - 24*60*60*1000);
+              if (vacStart <= vacEnd) vacancies.push({ start: vacStart.toISOString().split('T')[0], end: vacEnd.toISOString().split('T')[0] });
+            }
+            cursor = new Date(m.end.getTime() + 24*60*60*1000);
+            if (cursor > endWindow) break;
+          }
+          if (cursor <= endWindow) vacancies.push({ start: cursor.toISOString().split('T')[0], end: endWindow.toISOString().split('T')[0] });
+        }
+      }
+    } catch (vacErr) {
+      console.warn('Failed to compute vacancies for return scan:', vacErr.message);
+    }
+
     res.json({ 
       message: `${qr_type.toUpperCase()} QR verified successfully ✅`,
       qr_verification: {
@@ -1503,7 +1552,8 @@ app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {
           id: bookingData.car_id,
           model: `${bookingData.brand} ${bookingData.model}`,
           location: bookingData.location
-        }
+        },
+        vacancies
       }
     });
   } catch (err) {

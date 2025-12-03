@@ -971,6 +971,11 @@ async function verifyQrToken(token) {
         <p><b>Amount:</b> ₹${amount}</p>
       </div>
     `;
+    // Show vacancies when returned by server (early-return case)
+    if (v.vacancies && v.vacancies.length) {
+      const vacHtml = `<div class="mt-3 p-3 bg-yellow-50 rounded text-sm"><h4 class="font-semibold">Available ranges (now → booking end)</h4>` + v.vacancies.map(r => `<div>${r.start} → ${r.end}</div>`).join('') + `</div>`;
+      document.getElementById('qr-result').innerHTML += vacHtml;
+    }
 
     loadCarList();
     loadTransactions();
