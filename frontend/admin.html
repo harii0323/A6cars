@@ -951,17 +951,24 @@ async function verifyQrToken(token) {
 
     const j = await res.json();
 
-    if (!res.ok) throw new Error(j.message);
+    if (!res.ok) throw new Error(j.message || 'Verification failed');
 
     playSuccessSound();
     showToast("Booking Verified!", "green");
 
+    // The backend returns { message, qr_verification: { booking_id, customer, booking, car, ... } }
+    const v = j.qr_verification || {};
+    const bookingId = v.booking_id || v.booking?.booking_id || v.booking?.id || '-';
+    const customerName = v.customer?.name || v.customer?.customer_name || '-';
+    const carLabel = v.car?.model || v.car || (v.booking ? `${v.booking.brand || ''} ${v.booking.model || ''}` : '-');
+    const amount = v.booking?.amount ?? v.amount ?? '-';
+
     document.getElementById('qr-result').innerHTML = `
       <div class="bg-green-50 border border-green-300 p-3 rounded mt-2 text-sm">
-        <p><b>Booking ID:</b> ${j.booking_id}</p>
-        <p><b>Customer:</b> ${j.customer?.name}</p>
-        <p><b>Car:</b> ${j.car}</p>
-        <p><b>Amount:</b> ₹${j.amount}</p>
+        <p><b>Booking ID:</b> ${bookingId}</p>
+        <p><b>Customer:</b> ${customerName}</p>
+        <p><b>Car:</b> ${carLabel}</p>
+        <p><b>Amount:</b> ₹${amount}</p>
       </div>
     `;
 
