@@ -521,6 +521,38 @@ app.get('/api/admin/refunds', verifyAdmin, async (req, res) => {
 });
 
 // ============================================================
+// ✅ ADMIN: Transactions (bookings + payments) - paginated
+// Returns { data: [...], total: n }
+// ============================================================
+app.get('/api/admin/transactions', verifyAdmin, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const pageSize = parseInt(req.query.pageSize, 10) || 50;
+    const offset = (page - 1) * pageSize;
+
+    const q = await pool.query(
+      `SELECT p.id AS payment_id, p.booking_id, p.amount AS payment_amount, p.status AS payment_status,
+              b.id AS booking_id_row, b.start_date, b.end_date, b.amount AS booking_amount, b.paid, b.verified,
+              c.brand, c.model, cu.name AS customer_name, cu.email
+       FROM payments p
+       JOIN bookings b ON b.id = p.booking_id
+       JOIN cars c ON b.car_id = c.id
+       JOIN customers cu ON b.customer_id = cu.id
+       ORDER BY b.start_date DESC
+       LIMIT $1 OFFSET $2`,
+      [pageSize, offset]
+    );
+
+    const cnt = await pool.query(`SELECT COUNT(*)::int AS total FROM payments`);
+
+    res.json({ data: q.rows, total: cnt.rows[0].total });
+  } catch (err) {
+    console.error('Admin transactions error:', err);
+    res.status(500).json({ message: 'Failed to fetch transactions.' });
+  }
+});
+
+// ============================================================
 // ✅ ADMIN: Process refunds (simulate/process)
 // - If `refund_id` provided in body, process that refund, else process all pending refunds (limit 50)
 // - Marks `refunds.status='processed'`, `refunds.processed_at=NOW()` and updates `payments` refund columns
