@@ -464,11 +464,20 @@ app.post('/api/admin/cancel-booking', verifyAdmin, async (req, res) => {
 
     // Create a 50% discount for the same dates (usable for future booking across any car)
     const discountPercent = 50;
+    const dcode = `ADM50_${booking_id}_${Date.now()}`;
     await client.query(
-      `INSERT INTO discounts (customer_id, car_id, percent, start_date, end_date)
-       VALUES ($1,NULL,$2,$3,$4)`,
-      [booking.customer_id, discountPercent, booking.start_date, booking.end_date]
+      `INSERT INTO discounts (customer_id, car_id, percent, start_date, end_date, code)
+       VALUES ($1,NULL,$2,$3,$4,$5)`,
+      [booking.customer_id, discountPercent, booking.start_date, booking.end_date, dcode]
     );
+
+    // Notify customer about discount issuance
+    try {
+      const discountMsg = `You've been granted a ${discountPercent}% discount (code: ${dcode}) valid ${booking.start_date} to ${booking.end_date}.`;
+      await client.query(`INSERT INTO notifications (customer_id, title, message) VALUES ($1,$2,$3)`, [booking.customer_id, 'Discount Issued', discountMsg]);
+    } catch (nErr) {
+      console.warn('⚠️ Failed to insert discount notification:', nErr.message);
+    }
 
     await client.query('COMMIT');
 
@@ -795,12 +804,20 @@ app.post('/api/cancel-booking', async (req, res) => {
       try {
         const specificPercent = 50;
         // Issue 50% discount tied to the same dates but not restricted to the same car
+        const specificCode = `ADM50_${booking_id}_${Date.now()}`;
         await client.query(
-          `INSERT INTO discounts (customer_id, car_id, percent, start_date, end_date)
-           VALUES ($1,NULL,$2,$3,$4)`,
-          [booking.customer_id, specificPercent, booking.start_date, booking.end_date]
+          `INSERT INTO discounts (customer_id, car_id, percent, start_date, end_date, code)
+           VALUES ($1,NULL,$2,$3,$4,$5)`,
+          [booking.customer_id, specificPercent, booking.start_date, booking.end_date, specificCode]
         );
-        console.log('✅ Issued 50% specific discount to customer after admin cancellation');
+        console.log('✅ Issued 50% specific discount to customer after admin cancellation', specificCode);
+
+        try {
+          const msg = `You've been granted a ${specificPercent}% discount (code: ${specificCode}) valid ${booking.start_date} to ${booking.end_date}.`;
+          await client.query(`INSERT INTO notifications (customer_id, title, message) VALUES ($1,$2,$3)`, [booking.customer_id, 'Discount Issued', msg]);
+        } catch (nErr) {
+          console.warn('⚠️ Failed to insert specific discount notification:', nErr.message);
+        }
 
         const generalPercent = 15;
         const code = `ADM15_${booking_id}_${Date.now()}`;

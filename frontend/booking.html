@@ -225,6 +225,33 @@
     }
 
     loadBookings();
+    
+    // Fetch active discounts and display banner
+    (async () => {
+      try {
+        const cust = localStorage.getItem('customer_id');
+        if (!cust) return;
+        const resp = await fetch(`${BACKEND_URL}/api/discounts/${cust}`);
+        if (!resp.ok) return;
+        const discounts = await resp.json();
+        if (Array.isArray(discounts) && discounts.length > 0) {
+          const disc = discounts[0];
+          const percent = disc.percent || 0;
+          const code = disc.code ? ` Code: ${disc.code}` : '';
+          const start = disc.start_date ? ` from ${disc.start_date}` : '';
+          const end = disc.end_date ? ` to ${disc.end_date}` : '';
+          const msg = `You've received a ${percent}% discount${start}${end}.${code}`;
+
+          const banner = document.createElement('div');
+          banner.className = 'max-w-6xl mx-auto bg-green-100 border border-green-200 text-green-800 px-4 py-3 rounded mb-4';
+          banner.innerText = msg;
+          const ref = document.querySelector('.h-20');
+          if (ref && ref.parentNode) ref.parentNode.insertBefore(banner, ref.nextSibling);
+        }
+      } catch (e) {
+        console.warn('Could not fetch discounts:', e.message || e);
+      }
+    })();
   </script>
 </body>
 </html>
