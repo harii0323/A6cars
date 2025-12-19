@@ -268,12 +268,12 @@ npm error A complete log of this run can be found in: /root/.npm/_logs/...
 ## 📞 Next Steps
 
 1. **Monitor Render Deployment**
-  - Check: https://a6cars.onrender.com
+  - Check: https://a6cars-backend-ylx7.onrender.com
   - Logs should show port 10000 with ✅ database connection
 
 2. **Test Backend Endpoints**
   ```bash
-  curl https://a6cars.onrender.com/api/cars
+  curl https://a6cars-backend-ylx7.onrender.com/api/cars
   ```
 
 3. **Verify Payment Flow**

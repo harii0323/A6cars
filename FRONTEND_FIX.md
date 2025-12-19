@@ -3,7 +3,7 @@
 ## **Problem Identified**
 
 The frontend was configured with incorrect backend URLs:
-- ❌ Hardcoded `https://a6cars.onrender.com` (wrong domain)
+ - ❌ Hardcoded `https://a6cars-backend-ylx7.onrender.com` (wrong domain)
 - ❌ Hardcoded `http://localhost:10000` (wrong port)
 - ❌ Inconsistent URLs across different HTML files
 
@@ -16,16 +16,16 @@ The frontend was configured with incorrect backend URLs:
 - **Purpose:** Auto-detects backend URL based on environment
 - **Features:**
   - Automatically uses `http://localhost:3000` for local development
-  - Automatically uses `https://a6cars.onrender.com` for production
+  - Automatically uses `https://a6cars-backend-ylx7.onrender.com` for production
   - Provides helper functions for API calls
 
 ### **2. Updated All Frontend Files**
 
 | File | Old URL | New URL |
 |------|---------|---------|
-| `index.html` | `https://a6cars.onrender.com` | Auto-detected |
-| `login.html` | `https://a6cars.onrender.com` | Auto-detected |
-| `register.html` | `https://a6cars.onrender.com` | Auto-detected |
+| `index.html` | `https://a6cars-backend-ylx7.onrender.com` | Auto-detected |
+| `login.html` | `https://a6cars-backend-ylx7.onrender.com` | Auto-detected |
+| `register.html` | `https://a6cars-backend-ylx7.onrender.com` | Auto-detected |
 | `home.html` | `http://localhost:10000` | `http://localhost:3000` |
 | `book.html` | `http://localhost:10000` | `http://localhost:3000` |
 | `booking.html` | `http://localhost:10000` | `http://localhost:3000` |
@@ -72,7 +72,7 @@ git push origin main
 
 ```bash
 # Test frontend
-curl https://a6cars-frontend.onrender.com
+curl https://a6cars-frontend-zv4g.onrender.com
 
 # Test API call (should show no errors in browser console)
 ```
@@ -90,8 +90,8 @@ Database: localhost:5432
 
 ### **Render Production**
 ```
-Frontend: https://a6cars-frontend.onrender.com
-Backend:  https://a6cars.onrender.com
+Frontend: https://a6cars-frontend-zv4g.onrender.com
+Backend:  https://a6cars-backend-ylx7.onrender.com
 Database: [PostgreSQL connection string from Render]
 ```
 
@@ -118,13 +118,13 @@ location.reload();
 ```javascript
 // Open DevTools Console
 console.log(window.API_CONFIG.BACKEND_URL);
-  // Should show: https://a6cars.onrender.com
+  // Should show: https://a6cars-backend-ylx7.onrender.com
 ```
 
 ### **Problem: API calls failing with 404**
 
 **Check:**
-1. Backend is running: `curl https://a6cars.onrender.com/`
+1. Backend is running: `curl https://a6cars-backend-ylx7.onrender.com/`
 2. Database is initialized: Run `setup_pg.sql`
 3. Environment variables set in Render
 4. CORS is enabled in backend (should be)
@@ -133,7 +133,7 @@ console.log(window.API_CONFIG.BACKEND_URL);
 
 **Solution:**
 - Check image paths in console
- - Should be: `https://a6cars.onrender.com/uploads/...`
+ - Should be: `https://a6cars-backend-ylx7.onrender.com/uploads/...`
 - If showing different URL, there's a mismatch
 
 ### **Problem: Login redirects to wrong page**
@@ -167,7 +167,7 @@ console.log(window.API_CONFIG.BACKEND_URL);
 
 1. **Force redeploy frontend** on Render
 2. **Clear browser cache** (Ctrl+Shift+Delete)
-3. **Test login** at https://a6cars-frontend.onrender.com/login.html
+3. **Test login** at https://a6cars-frontend-zv4g.onrender.com/login.html
 4. **Check console** for any API errors (F12)
 5. **Monitor logs** in Render dashboard
 

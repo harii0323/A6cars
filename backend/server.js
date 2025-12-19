@@ -15,8 +15,8 @@ const QRCode = require("qrcode");
 const app = express();
 app.use(cors({
   origin: [
-    "https://a6cars-frontend-4i84.onrender.com",
-    "https://a6cars.onrender.com",
+    "https://a6cars-frontend-zv4g.onrender.com",
+    "https://a6cars-backend-ylx7.onrender.com",
     "http://localhost:5173"
   ],
   methods: ["GET", "POST", "PUT", "DELETE"],
