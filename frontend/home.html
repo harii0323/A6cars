@@ -167,7 +167,7 @@
         const active = data.filter(b => !b.verified && b.status !== 'cancelled');
         const past = data.filter(b => b.verified || b.status === 'cancelled');
 
-        const makeCard = (bk) => {
+        const makeCard = (bk, isPast = false) => {
           const status = bk.paid
             ? `<span class="status-paid">Paid</span>`
             : `<span class="status-pending">Pending</span>`;
@@ -184,22 +184,22 @@
               <p class="text-gray-600 mb-1">Amount: ₹${bk.amount}</p>
               <p class="text-gray-600 mb-1">Payment: ${status}</p>
               <p class="text-gray-600 mb-3">Verification: ${verified}</p>
-                  ${bk.paid ? `` : `
+                  ${!isPast ? (bk.paid ? `` : `
                     <button onclick="showPaymentQR(${bk.id}, ${bk.amount})"
                       class="bg-green-600 text-white w-full py-2 rounded hover:bg-green-700">Pay Now</button>
-                  `}
+                  `) : ``}
 
-                  ${bk.status !== 'cancelled' ? `
+                  ${!isPast ? (bk.status !== 'cancelled' ? `
                     <button onclick="cancelBooking(${bk.id})" class="mt-2 bg-red-500 text-white w-full py-2 rounded hover:bg-red-600">Cancel Booking</button>
-                  ` : `<p class="text-red-600 font-semibold mt-2">Cancelled</p>`}
+                  ` : `<p class="text-red-600 font-semibold mt-2">Cancelled</p>`) : ``}
             </div>`;
         };
 
         activeContainer.innerHTML = active.length
-          ? active.map(makeCard).join("")
+          ? active.map(b => makeCard(b, false)).join("")
           : `<p class="text-gray-500 text-center col-span-3">No active bookings.</p>`;
         pastContainer.innerHTML = past.length
-          ? past.map(makeCard).join("")
+          ? past.map(b => makeCard(b, true)).join("")
           : `<p class="text-gray-500 text-center col-span-3">No past bookings.</p>`;
 
       } catch (err) {
