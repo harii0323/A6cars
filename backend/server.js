@@ -392,7 +392,7 @@ app.post('/api/admin/cancel-booking', verifyAdmin, async (req, res) => {
     await client.query('BEGIN');
 
     const q = await client.query(
-      `SELECT b.id, b.customer_id, b.car_id, b.start_date, b.end_date, b.amount, b.paid,
+      `SELECT b.id, b.status, b.customer_id, b.car_id, b.start_date, b.end_date, b.amount, b.paid,
               p.id AS payment_id, p.amount AS paid_amount
        FROM bookings b
        LEFT JOIN payments p ON p.booking_id = b.id
