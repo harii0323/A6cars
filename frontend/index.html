@@ -75,6 +75,29 @@
         <h2 class="text-2xl font-semibold text-blue-700 mb-4">👋 Welcome back, ${userName || 'User'}!</h2>
         <a href="/home.html" class="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700">Go to Dashboard</a>
       `;
+
+      // Fetch any active discounts for the logged-in user and show a banner
+      (async () => {
+        try {
+          const resp = await fetch(`${BACKEND_URL}/api/discounts/${userId}`);
+          if (!resp.ok) return;
+          const discounts = await resp.json();
+          if (Array.isArray(discounts) && discounts.length > 0) {
+            const disc = discounts[0];
+            const percent = disc.percent || 0;
+            const start = disc.start_date ? ` from ${disc.start_date}` : '';
+            const end = disc.end_date ? ` to ${disc.end_date}` : '';
+            const msg = `You've received a ${percent}% discount${start}${end}. It will be applied on your next booking.`;
+
+            const banner = document.createElement('div');
+            banner.className = 'max-w-2xl mx-auto bg-green-100 border border-green-200 text-green-800 px-4 py-3 rounded mb-4';
+            banner.innerText = msg;
+            actionButtons.parentNode.insertBefore(banner, actionButtons);
+          }
+        } catch (e) {
+          console.warn('Could not fetch discounts:', e.message || e);
+        }
+      })();
     } 
     else {
       // 🚪 Not Logged In (default landing)

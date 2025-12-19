@@ -462,12 +462,12 @@ app.post('/api/admin/cancel-booking', verifyAdmin, async (req, res) => {
       [booking.customer_id, title, message]
     );
 
-    // Create a 50% discount for the same car and dates (usable for future booking)
+    // Create a 50% discount for the same dates (usable for future booking across any car)
     const discountPercent = 50;
     await client.query(
       `INSERT INTO discounts (customer_id, car_id, percent, start_date, end_date)
-       VALUES ($1,$2,$3,$4,$5)`,
-      [booking.customer_id, booking.car_id, discountPercent, booking.start_date, booking.end_date]
+       VALUES ($1,NULL,$2,$3,$4)`,
+      [booking.customer_id, discountPercent, booking.start_date, booking.end_date]
     );
 
     await client.query('COMMIT');
@@ -788,18 +788,30 @@ app.post('/api/cancel-booking', async (req, res) => {
 
     await client.query(`INSERT INTO notifications (customer_id, title, message) VALUES ($1,$2,$3)`, [booking.customer_id, 'Booking Cancelled', notifyMsg]);
 
-    // If admin cancelled, also grant a 50% discount for user's next booking on same car/dates
+    // If admin cancelled, grant discounts:
+    // - 50% discount for the same car + same dates (specific discount)
+    // - 15% general discount code for any future booking (fallback)
     if (cancelled_by === 'admin') {
       try {
-        const discountPercent = 50;
+        const specificPercent = 50;
+        // Issue 50% discount tied to the same dates but not restricted to the same car
         await client.query(
           `INSERT INTO discounts (customer_id, car_id, percent, start_date, end_date)
-           VALUES ($1,$2,$3,$4,$5)`,
-          [booking.customer_id, booking.car_id, discountPercent, booking.start_date, booking.end_date]
+           VALUES ($1,NULL,$2,$3,$4)`,
+          [booking.customer_id, specificPercent, booking.start_date, booking.end_date]
         );
-        console.log('✅ Issued 50% discount to customer after admin cancellation');
+        console.log('✅ Issued 50% specific discount to customer after admin cancellation');
+
+        const generalPercent = 15;
+        const code = `ADM15_${booking_id}_${Date.now()}`;
+        await client.query(
+          `INSERT INTO discounts (customer_id, car_id, percent, start_date, end_date, code)
+           VALUES ($1,NULL,$2,NULL,NULL,$3)`,
+          [booking.customer_id, generalPercent, code]
+        );
+        console.log('✅ Issued 15% general discount code to customer after admin cancellation:', code);
       } catch (dErr) {
-        console.warn('⚠️ Failed to insert discount after admin cancellation:', dErr.message);
+        console.warn('⚠️ Failed to insert discounts after admin cancellation:', dErr.message);
       }
     }
 
@@ -1028,8 +1040,13 @@ app.post("/api/book", async (req, res) => {
     // Check for available discount for this customer/car/date range
     try {
       const discRes = await client.query(
-        `SELECT * FROM discounts WHERE customer_id=$1 AND car_id=$2 AND used=false
-         AND start_date <= $3 AND end_date >= $4 ORDER BY created_at DESC LIMIT 1`,
+        `SELECT * FROM discounts WHERE customer_id=$1 AND used=false
+         AND (car_id IS NULL OR car_id=$2)
+         AND (
+           (start_date IS NULL AND end_date IS NULL)
+           OR (start_date <= $3 AND end_date >= $4)
+         )
+         ORDER BY created_at DESC LIMIT 1`,
         [customer_id, car_id, start_date, end_date]
       );
       if (discRes.rows.length) {
@@ -1185,6 +1202,41 @@ app.get("/api/bookings/status/:customer_id", async (req, res) => {
   } catch (err) {
     console.error("Status fetch error:", err);
     res.status(500).json({ message: "Failed to load booking status." });
+  }
+});
+
+// ============================================================
+// ✅ PUBLIC: Get active/un-used discounts for a customer
+// ============================================================
+app.get('/api/discounts/:customer_id', async (req, res) => {
+  const { customer_id } = req.params;
+  try {
+    const q = await pool.query(
+      `SELECT id, car_id, percent, start_date, end_date, code, used, created_at
+       FROM discounts WHERE customer_id=$1 AND used=false ORDER BY created_at DESC`,
+      [customer_id]
+    );
+    res.json(q.rows);
+  } catch (err) {
+    console.error('Fetch discounts error:', err);
+    res.status(500).json({ message: 'Failed to fetch discounts.' });
+  }
+});
+
+// ============================================================
+// ✅ PUBLIC: Get notifications for a customer (recent)
+// ============================================================
+app.get('/api/notifications/:customer_id', async (req, res) => {
+  const { customer_id } = req.params;
+  try {
+    const q = await pool.query(
+      `SELECT id, title, message, read, created_at FROM notifications WHERE customer_id=$1 ORDER BY created_at DESC LIMIT 50`,
+      [customer_id]
+    );
+    res.json(q.rows);
+  } catch (err) {
+    console.error('Fetch notifications error:', err);
+    res.status(500).json({ message: 'Failed to fetch notifications.' });
   }
 });
 
