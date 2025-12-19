@@ -1382,6 +1382,21 @@ app.post("/api/payment/confirm", async (req, res) => {
   }
 });
 
+// Retrieve payment QR for a booking (used by frontend Pay Now)
+app.post('/api/payments/qr', async (req, res) => {
+  const { booking_id, customer_id } = req.body || {};
+  if (!booking_id) return res.status(400).json({ message: 'Missing booking_id' });
+  try {
+    const q = await pool.query(`SELECT qr_code, amount, expires_at FROM payments WHERE booking_id=$1 ORDER BY id DESC LIMIT 1`, [booking_id]);
+    if (!q.rows.length) return res.status(404).json({ message: 'Payment QR not found for this booking' });
+    const row = q.rows[0];
+    res.json({ qr: row.qr_code, amount: row.amount, expires_at: row.expires_at });
+  } catch (err) {
+    console.error('Fetch payment QR error:', err);
+    res.status(500).json({ message: 'Failed to fetch payment QR' });
+  }
+});
+
 // ============================================================
 // ✅ CUSTOMER: Verify payment by reference ID
 // ============================================================
