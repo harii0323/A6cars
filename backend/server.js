@@ -788,6 +788,21 @@ app.post('/api/cancel-booking', async (req, res) => {
 
     await client.query(`INSERT INTO notifications (customer_id, title, message) VALUES ($1,$2,$3)`, [booking.customer_id, 'Booking Cancelled', notifyMsg]);
 
+    // If admin cancelled, also grant a 50% discount for user's next booking on same car/dates
+    if (cancelled_by === 'admin') {
+      try {
+        const discountPercent = 50;
+        await client.query(
+          `INSERT INTO discounts (customer_id, car_id, percent, start_date, end_date)
+           VALUES ($1,$2,$3,$4,$5)`,
+          [booking.customer_id, booking.car_id, discountPercent, booking.start_date, booking.end_date]
+        );
+        console.log('✅ Issued 50% discount to customer after admin cancellation');
+      } catch (dErr) {
+        console.warn('⚠️ Failed to insert discount after admin cancellation:', dErr.message);
+      }
+    }
+
     await client.query('COMMIT');
 
     res.json({ message: 'Booking cancelled successfully', refundAmount, refundPercent, cancelled_by, booking_id });
