@@ -425,8 +425,8 @@ app.post('/api/admin/cancel-booking', verifyAdmin, async (req, res) => {
     // Record cancellation with refund details (refundAmount may be 0 if unpaid)
     await client.query(
       `INSERT INTO booking_cancellations 
-       (booking_id, customer_id, reason, refund_percent, refund_amount, canceled_by, admin_email, cancelled_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+       (booking_id, customer_id, reason, refund_percent, refund_amount, canceled_by, admin_email, status, cancelled_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
       [
         booking_id,
         booking.customer_id,         // ✔ ALWAYS available
@@ -435,6 +435,7 @@ app.post('/api/admin/cancel-booking', verifyAdmin, async (req, res) => {
         refundAmount,
         'admin',
         adminEmail
+      , 'pending'
       ]
     );
 
@@ -741,9 +742,9 @@ app.post('/api/cancel-booking', async (req, res) => {
       // user cancellation
       if (!booking.paid) {
         // Not paid — just cancel
-        await client.query(`INSERT INTO booking_cancellations (booking_id, customer_id, reason, canceled_by, refund_percent, refund_amount, cancelled_at)
-                            VALUES ($1,$2,$3,$4,$5,$6,NOW())`,
-          [booking_id, customer_id || booking.customer_id, reason || null, 'user', 0, 0]
+        await client.query(`INSERT INTO booking_cancellations (booking_id, customer_id, reason, canceled_by, refund_percent, refund_amount, status, cancelled_at)
+                            VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())`,
+          [booking_id, customer_id || booking.customer_id, reason || null, 'user', 0, 0, 'pending']
         );
         await client.query(`UPDATE bookings SET status='cancelled' WHERE id=$1`, [booking_id]);
         await client.query('COMMIT');
@@ -768,9 +769,9 @@ app.post('/api/cancel-booking', async (req, res) => {
 
     // Insert cancellation record
     await client.query(
-      `INSERT INTO booking_cancellations (booking_id, customer_id, reason, canceled_by, admin_email, refund_percent, refund_amount, cancelled_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())`,
-      [booking_id, customer_id || booking.customer_id, reason || null, cancelled_by, verifiedAdminEmail || admin_email || null, refundPercent, refundAmount]
+      `INSERT INTO booking_cancellations (booking_id, customer_id, reason, canceled_by, admin_email, refund_percent, refund_amount, status, cancelled_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())`,
+      [booking_id, customer_id || booking.customer_id, reason || null, cancelled_by, verifiedAdminEmail || admin_email || null, refundPercent, refundAmount, 'pending']
     );
 
     // Mark booking cancelled

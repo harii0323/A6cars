@@ -24,13 +24,43 @@ CREATE TABLE IF NOT EXISTS refunds (
 );
 
 -- Booking cancellations
+-- Booking cancellations (expanded to match current schema)
 CREATE TABLE IF NOT EXISTS booking_cancellations (
   id SERIAL PRIMARY KEY,
   booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
   admin_email VARCHAR(255),
   reason TEXT,
-  cancelled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  cancelled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  refund_percent NUMERIC(5,2) DEFAULT 0,
+  refund_amount NUMERIC(10,2) DEFAULT 0,
+  canceled_by CHARACTER VARYING(20),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  status CHARACTER VARYING(50) DEFAULT 'pending'
 );
+
+-- Enforce allowed values for who cancelled and valid refund percent range
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class t ON t.oid = c.conrelid
+    WHERE t.relname = 'booking_cancellations' AND c.conname = 'chk_canceled_by'
+  ) THEN
+    ALTER TABLE booking_cancellations
+      ADD CONSTRAINT chk_canceled_by CHECK (canceled_by::text = ANY (ARRAY['user'::character varying, 'admin'::character varying]::text[]));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c
+    JOIN pg_class t ON t.oid = c.conrelid
+    WHERE t.relname = 'booking_cancellations' AND c.conname = 'chk_refund_percent'
+  ) THEN
+    ALTER TABLE booking_cancellations
+      ADD CONSTRAINT chk_refund_percent CHECK (refund_percent >= 0::numeric AND refund_percent <= 100::numeric);
+  END IF;
+END$$;
 
 -- Discounts for future bookings
 CREATE TABLE IF NOT EXISTS discounts (
