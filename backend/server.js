@@ -1192,7 +1192,7 @@ app.get("/api/bookings/status/:customer_id", async (req, res) => {
     const result = await pool.query(
       `SELECT b.*, c.brand, c.model, c.location,
               p.status AS payment_status, p.refund_amount, p.refund_status,
-              bc.reason AS cancelled_reason, bc.cancelled_at
+              bc.reason AS cancelled_reason, bc.cancelled_at, bc.canceled_by AS canceled_by, bc.admin_email AS cancel_admin_email, bc.customer_id AS cancel_customer_id, bc.refund_amount AS cancel_refund_amount, bc.refund_percent AS cancel_refund_percent
        FROM bookings b
        JOIN cars c ON b.car_id = c.id
        LEFT JOIN payments p ON p.booking_id = b.id
@@ -1270,7 +1270,7 @@ app.get("/api/history/:customer_id", async (req, res) => {
       `SELECT b.*, 
               c.brand, c.model, c.location,
               p.status AS payment_status, p.refund_amount, p.refund_status,
-              bc.reason AS cancelled_reason, bc.cancelled_at
+              bc.reason AS cancelled_reason, bc.cancelled_at, bc.canceled_by AS canceled_by, bc.admin_email AS cancel_admin_email, bc.customer_id AS cancel_customer_id, bc.refund_amount AS cancel_refund_amount, bc.refund_percent AS cancel_refund_percent
        FROM bookings b
        JOIN cars c ON b.car_id = c.id
        LEFT JOIN payments p ON p.booking_id = b.id
