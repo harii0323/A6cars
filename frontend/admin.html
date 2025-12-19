@@ -513,6 +513,12 @@ document.querySelectorAll('.side-link').forEach(btn => {
   });
 });
 
+// Start / Stop scan button bindings
+const _startScanBtn = document.getElementById('start-scan');
+const _stopScanBtn = document.getElementById('stop-scan');
+if (_startScanBtn) _startScanBtn.addEventListener('click', (e) => { e.preventDefault(); startScan(); });
+if (_stopScanBtn) _stopScanBtn.addEventListener('click', (e) => { e.preventDefault(); stopScan(); });
+
 function showSection(which) {
   if (which === 'all') {
     sectionIds.forEach(id => document.getElementById(id).classList.remove('hidden'));
