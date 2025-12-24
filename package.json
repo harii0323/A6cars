@@ -1,0 +1,16 @@
+{
+  "name": "a6cars-frontend",
+  "version": "1.0.0",
+  "description": "A6 Cars Frontend Server",
+  "main": "frontend-server.js",
+  "scripts": {
+    "start": "node frontend-server.js",
+    "dev": "node frontend-server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
