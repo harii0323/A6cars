@@ -17,6 +17,13 @@
     video.playsInline = true;
     video.setAttribute('aria-hidden', 'true');
 
+    // Add error listener BEFORE setting src
+    video.addEventListener('error', (e) => {
+      container.remove();
+      document.body.classList.remove('video-bg-active');
+      console.warn('Background video failed to load:', VIDEO_SRC, e);
+    });
+
     const sourceMp4 = document.createElement('source');
     sourceMp4.src = VIDEO_SRC;
     sourceMp4.type = 'video/mp4';
@@ -29,19 +36,22 @@
     container.appendChild(video);
     container.appendChild(overlay);
 
-    // Insert as first child of body
-    document.addEventListener('DOMContentLoaded', () => {
-      document.body.insertBefore(container, document.body.firstChild);
-      // Activate transparent backgrounds where needed
-      document.body.classList.add('video-bg-active');
+    // Insert as first child of body when DOM is ready
+    const insertVideo = () => {
+      if (document.body) {
+        document.body.insertBefore(container, document.body.firstChild);
+        // Activate transparent backgrounds where needed
+        document.body.classList.add('video-bg-active');
+        // Try to play video
+        video.play().catch(err => console.warn('Video play failed:', err));
+      }
+    };
 
-      // If the video fails to load, remove element gracefully
-      video.addEventListener('error', () => {
-        container.remove();
-        document.body.classList.remove('video-bg-active');
-        console.warn('Background video failed to load:', VIDEO_SRC);
-      });
-    });
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', insertVideo);
+    } else {
+      insertVideo();
+    }
   } catch (err) {
     console.error('Failed to initialize background video', err);
   }
