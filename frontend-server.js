@@ -4,6 +4,7 @@ const path = require('path');
 
 const PORT = 8080;
 const FRONTEND_DIR = path.join(__dirname, 'frontend');
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
 const server = http.createServer((req, res) => {
   // Default to index.html for root path
@@ -12,14 +13,22 @@ const server = http.createServer((req, res) => {
   // Normalize the requested path (remove ../ etc)
   filePath = path.normalize('/' + filePath).substring(1);
   
-  // Construct full path
-  const fullPath = path.join(FRONTEND_DIR, filePath);
+  // Determine which directory to serve from
+  let fullPath;
+  let allowedDir;
+  
+  if (filePath.startsWith('uploads/')) {
+    fullPath = path.join(UPLOADS_DIR, filePath.substring('uploads/'.length));
+    allowedDir = path.resolve(UPLOADS_DIR);
+  } else {
+    fullPath = path.join(FRONTEND_DIR, filePath);
+    allowedDir = path.resolve(FRONTEND_DIR);
+  }
 
   // Security: prevent directory traversal - use resolve for absolute comparison
   const resolvedPath = path.resolve(fullPath);
-  const resolvedDir = path.resolve(FRONTEND_DIR);
   
-  if (!resolvedPath.startsWith(resolvedDir)) {
+  if (!resolvedPath.startsWith(allowedDir)) {
     res.writeHead(403, { 'Content-Type': 'text/plain' });
     res.end('Forbidden');
     return;
@@ -43,6 +52,7 @@ const server = http.createServer((req, res) => {
     if (resolvedPath.endsWith('.jpg')) contentType = 'image/jpeg';
     if (resolvedPath.endsWith('.gif')) contentType = 'image/gif';
     if (resolvedPath.endsWith('.svg')) contentType = 'image/svg+xml';
+    if (resolvedPath.endsWith('.mp4')) contentType = 'video/mp4';
 
     res.writeHead(200, { 'Content-Type': contentType });
     res.end(data);
