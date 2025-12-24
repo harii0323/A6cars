@@ -50,9 +50,17 @@ services:
   # ---------------- FRONTEND SERVICE ----------------
   - type: web
     name: a6cars-frontend
-    env: static
-    rootDir: frontend
-    staticPublishPath: .
+    env: node
+    rootDir: .
+    buildCommand: "npm install --prefix . 2>/dev/null || true"
+    startCommand: "node frontend-server.js"
+    region: singapore
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
     autoDeploy: true
 
 # ---------------- DATABASE ----------------
