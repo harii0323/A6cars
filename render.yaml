@@ -52,7 +52,6 @@ services:
     name: a6cars-frontend
     env: node
     rootDir: .
-    buildCommand: "npm install --prefix . 2>/dev/null || true"
     startCommand: "node frontend-server.js"
     region: singapore
     plan: free

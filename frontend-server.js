@@ -39,7 +39,9 @@ const server = http.createServer((req, res) => {
 
   // Try to serve the file
   fs.stat(resolvedPath, (statErr, stats) => {
-    if (statErr || !stats.isFile()) {
+    if (statErr || !stats || !stats.isFile()) {
+      console.warn(`[404] File not found: ${filePath} (resolved to ${resolvedPath})`);
+      if (statErr) console.warn(`     Error: ${statErr.message}`);
       // Return 404 for missing files
       res.writeHead(404, { 'Content-Type': 'text/html' });
       res.end('<h1>404 - File Not Found</h1>');
@@ -88,4 +90,6 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`🌐 Frontend server running at http://localhost:${PORT}`);
   console.log(`📁 Serving files from: ${FRONTEND_DIR}`);
+  console.log(`📂 Uploads directory: ${UPLOADS_DIR}`);
+  console.log(`✅ Server ready to accept connections on port ${PORT}`);
 });
