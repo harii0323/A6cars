@@ -1,10 +1,15 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 const FRONTEND_DIR = path.join(__dirname, 'frontend');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
+
+// Check if directories exist
+console.log(`📁 FRONTEND_DIR: ${FRONTEND_DIR} - exists: ${fs.existsSync(FRONTEND_DIR)}`);
+console.log(`📂 UPLOADS_DIR: ${UPLOADS_DIR} - exists: ${fs.existsSync(UPLOADS_DIR)}`);
 
 // Middleware to log requests
 app.use((req, res, next) => {
@@ -13,8 +18,12 @@ app.use((req, res, next) => {
 });
 
 // Serve uploads directory with proper headers
-app.use('/uploads', express.static(UPLOADS_DIR, {
+app.use('/uploads', (req, res, next) => {
+  console.log(`📤 Uploads request: ${req.url}`);
+  next();
+}, express.static(UPLOADS_DIR, {
   setHeaders: (res, filePath) => {
+    console.log(`📄 Serving file: ${filePath}`);
     if (filePath.endsWith('.mp4')) {
       res.setHeader('Content-Type', 'video/mp4');
       res.setHeader('Accept-Ranges', 'bytes');
