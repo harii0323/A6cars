@@ -1,0 +1,16 @@
+/* Video background styles for all pages */
+/* Add `video-bg-active` class to body to enable transparent page background */
+html, body { height: 100%; }
+body.video-bg-active { background: transparent !important; }
+
+#site-bg-video { position: fixed; inset: 0; overflow: hidden; z-index: -1; }
+#site-bg-video video { position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; transform: translate(-50%, -50%); object-fit: cover; }
+#site-bg-video .bg-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.35); }
+
+/* Make sure main content sits above the video */
+main, header, footer, .max-w-6xl, .h-20 { position: relative; z-index: 1; }
+
+/* Small-screen performance tweak */
+@media (max-width: 640px) {
+  #site-bg-video video { filter: saturate(0.95) brightness(0.85); }
+}
