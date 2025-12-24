@@ -7,6 +7,9 @@ const FRONTEND_DIR = path.join(__dirname, 'frontend');
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
 const server = http.createServer((req, res) => {
+  // Log requests for debugging
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  
   // Default to index.html for root path
   let filePath = req.url === '/' ? '/index.html' : req.url;
   
@@ -35,8 +38,8 @@ const server = http.createServer((req, res) => {
   }
 
   // Try to serve the file
-  fs.readFile(resolvedPath, (err, data) => {
-    if (err) {
+  fs.stat(resolvedPath, (statErr, stats) => {
+    if (statErr || !stats.isFile()) {
       // Return 404 for missing files
       res.writeHead(404, { 'Content-Type': 'text/html' });
       res.end('<h1>404 - File Not Found</h1>');
@@ -54,8 +57,31 @@ const server = http.createServer((req, res) => {
     if (resolvedPath.endsWith('.svg')) contentType = 'image/svg+xml';
     if (resolvedPath.endsWith('.mp4')) contentType = 'video/mp4';
 
-    res.writeHead(200, { 'Content-Type': contentType });
-    res.end(data);
+    // Handle Range requests for video streaming
+    const fileSize = stats.size;
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+      const chunksize = (end - start) + 1;
+
+      res.writeHead(206, {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': contentType
+      });
+      fs.createReadStream(resolvedPath, {start: start, end: end}).pipe(res);
+    } else {
+      res.writeHead(200, {
+        'Content-Length': fileSize,
+        'Accept-Ranges': 'bytes',
+        'Content-Type': contentType
+      });
+      fs.createReadStream(resolvedPath).pipe(res);
+    }
   });
 });
 
