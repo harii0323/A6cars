@@ -11,6 +11,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const QRCode = require("qrcode");
+const { sendBookingConfirmationEmail, sendPaymentConfirmedEmail, sendCancellationEmail } = require("./emailService");
 
 const app = express();
 app.use(cors({
@@ -482,6 +483,30 @@ app.post('/api/admin/cancel-booking', verifyAdmin, async (req, res) => {
 
     await client.query('COMMIT');
 
+    // Send admin cancellation email
+    try {
+      const customer = await pool.query(
+        `SELECT id, name, email FROM customers WHERE id = $1`,
+        [booking.customer_id]
+      );
+      const car = await pool.query(
+        `SELECT id, brand, model, location FROM cars WHERE id = $1`,
+        [booking.car_id]
+      );
+      
+      if (customer.rows.length && car.rows.length) {
+        const bookingInfo = {
+          id: booking_id,
+          start_date: booking.start_date,
+          end_date: booking.end_date,
+          amount: booking.amount
+        };
+        await sendCancellationEmail(customer.rows[0], bookingInfo, car.rows[0], reason, refundAmount);
+      }
+    } catch (emailErr) {
+      console.warn('⚠️ Cancellation email failed (non-blocking):', emailErr.message);
+    }
+
     res.json({ message: 'Booking cancelled by admin. Full refund scheduled, customer notified, discount issued.' });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -835,6 +860,30 @@ app.post('/api/cancel-booking', async (req, res) => {
 
     await client.query('COMMIT');
 
+    // Send cancellation email
+    try {
+      const customer = await pool.query(
+        `SELECT id, name, email FROM customers WHERE id = $1`,
+        [booking.customer_id]
+      );
+      const car = await pool.query(
+        `SELECT id, brand, model, location FROM cars WHERE id = $1`,
+        [booking.car_id]
+      );
+      
+      if (customer.rows.length && car.rows.length) {
+        const bookingInfo = {
+          id: booking_id,
+          start_date: booking.start_date,
+          end_date: booking.end_date,
+          amount: booking.amount
+        };
+        await sendCancellationEmail(customer.rows[0], bookingInfo, car.rows[0], reason, refundAmount);
+      }
+    } catch (emailErr) {
+      console.warn('⚠️ Cancellation email failed (non-blocking):', emailErr.message);
+    }
+
     res.json({ message: 'Booking cancelled successfully', refundAmount, refundPercent, cancelled_by, booking_id });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1101,6 +1150,31 @@ app.post("/api/book", async (req, res) => {
     );
 
     await client.query("COMMIT");
+    
+    // Send booking confirmation email
+    try {
+      const customer = await pool.query(
+        `SELECT id, name, email FROM customers WHERE id = $1`,
+        [customer_id]
+      );
+      const car = await pool.query(
+        `SELECT id, brand, model, location FROM cars WHERE id = $1`,
+        [car_id]
+      );
+      
+      if (customer.rows.length && car.rows.length) {
+        const bookingInfo = {
+          id: bookingId,
+          start_date: start_date,
+          end_date: end_date,
+          amount: total
+        };
+        await sendBookingConfirmationEmail(customer.rows[0], bookingInfo, car.rows[0]);
+      }
+    } catch (emailErr) {
+      console.warn('⚠️ Email sending failed (non-blocking):', emailErr.message);
+    }
+    
     res.json({
       message: "Booking created successfully",
       booking_id: bookingId,
@@ -1507,6 +1581,29 @@ app.post("/api/verify-payment", async (req, res) => {
       payment_reference_id: payment_reference_id
     };
     const returnQR = await QRCode.toDataURL(JSON.stringify(returnQRData));
+
+    // Send payment confirmation email
+    try {
+      const carInfo = {
+        brand: bookingData.brand,
+        model: bookingData.model,
+        location: bookingData.location
+      };
+      const bookingInfo = {
+        id: bookingData.id,
+        start_date: bookingData.start_date,
+        end_date: bookingData.end_date,
+        amount: bookingData.amount
+      };
+      const customerInfo = {
+        name: bookingData.customer_name,
+        email: bookingData.customer_email
+      };
+      
+      await sendPaymentConfirmedEmail(customerInfo, bookingInfo, carInfo);
+    } catch (emailErr) {
+      console.warn('⚠️ Payment confirmation email failed (non-blocking):', emailErr.message);
+    }
 
     res.json({
       message: "✅ Payment verified successfully!",
