@@ -1,25 +1,31 @@
 //============================================================
 // ✅ Email Service - Brevo (SendinBlue) Integration
 // Handles automated emails for bookings and cancellations
+// Using Direct REST API instead of SDK
 //============================================================
 
-const brevo = require('@brevo/brevo');
+const axios = require('axios');
 require('dotenv').config();
 
-// ============================================================
-// ✅ Brevo Configuration
-// ============================================================
-const apiInstance = new brevo.TransactionalEmailsApi();
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const BREVO_API_URL = 'https://api.brevo.com/v3';
+const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@a6cars.com';
+const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'A6 Cars';
 
-// Set API key for authentication
-apiInstance.setApiKey(brevo.ApiKeyAuth.API_KEY, process.env.BREVO_API_KEY);
+// Create axios instance with Brevo API headers
+const brevoClient = axios.create({
+  baseURL: BREVO_API_URL,
+  headers: {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+    'api-key': BREVO_API_KEY
+  }
+});
 
-// Test the API connection
+// Test the API connection on startup
 (async () => {
   try {
-    const accountApi = new brevo.AccountApi();
-    accountApi.setApiKey(brevo.ApiKeyAuth.API_KEY, process.env.BREVO_API_KEY);
-    await accountApi.getAccount();
+    const response = await brevoClient.get('/account');
     console.log('✅ Brevo email service ready');
   } catch (error) {
     console.log('❌ Brevo service error:', error.message);
@@ -328,25 +334,28 @@ const sendBookingConfirmationEmail = async (customer, booking, car) => {
 
     const emailTemplate = getBookingConfirmationEmail(customer, booking, car);
     
-    const sendSmtpEmail = new brevo.SendSmtpEmail({
+    const emailPayload = {
       to: [{ email: customer.email, name: customer.name }],
       sender: { 
-        email: process.env.EMAIL_FROM || 'noreply@a6cars.com',
-        name: process.env.EMAIL_FROM_NAME || 'A6 Cars'
+        email: EMAIL_FROM,
+        name: EMAIL_FROM_NAME
       },
       subject: emailTemplate.subject,
       htmlContent: emailTemplate.htmlContent,
       replyTo: {
-        email: process.env.EMAIL_FROM || 'support@a6cars.com',
-        name: process.env.EMAIL_FROM_NAME || 'A6 Cars'
+        email: 'support@a6cars.com',
+        name: EMAIL_FROM_NAME
       }
-    });
+    };
 
-    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    const response = await brevoClient.post('/smtp/email', emailPayload);
     console.log('✅ Booking confirmation email sent to:', customer.email);
-    return result;
+    return response.data;
   } catch (error) {
     console.error('❌ Error sending booking confirmation email:', error.message);
+    if (error.response) {
+      console.error('Brevo API response:', error.response.data);
+    }
     return false;
   }
 };
@@ -363,25 +372,28 @@ const sendPaymentConfirmedEmail = async (customer, booking, car) => {
       console.warn('⚠️ Customer email not found for booking #' + booking.id);
       return false;
     }
-
-    const emailTemplate = getPaymentConfirmedEmail(customer, booking, car);
-    
-    const sendSmtpEmail = new brevo.SendSmtpEmail({
+emailPayload = {
       to: [{ email: customer.email, name: customer.name }],
       sender: { 
-        email: process.env.EMAIL_FROM || 'noreply@a6cars.com',
-        name: process.env.EMAIL_FROM_NAME || 'A6 Cars'
+        email: EMAIL_FROM,
+        name: EMAIL_FROM_NAME
       },
       subject: emailTemplate.subject,
       htmlContent: emailTemplate.htmlContent,
       replyTo: {
-        email: process.env.EMAIL_FROM || 'support@a6cars.com',
-        name: process.env.EMAIL_FROM_NAME || 'A6 Cars'
+        email: 'support@a6cars.com',
+        name: EMAIL_FROM_NAME
       }
-    });
+    };
 
-    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    const response = await brevoClient.post('/smtp/email', emailPayload);
     console.log('✅ Payment confirmation email sent to:', customer.email);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Error sending payment confirmation email:', error.message);
+    if (error.response) {
+      console.error('Brevo API response:', error.response.data);
+    }
     return result;
   } catch (error) {
     console.error('❌ Error sending payment confirmation email:', error.message);
@@ -400,25 +412,28 @@ const sendPaymentConfirmedEmail = async (customer, booking, car) => {
 const sendCancellationEmail = async (customer, booking, car, reason, refundAmount = 0) => {
   try {
     if (!customer.email) {
-      console.warn('⚠️ Customer email not found for booking #' + booking.id);
-      return false;
-    }
-
-    const emailTemplate = getCancellationEmail(customer, booking, car, reason, refundAmount);
-    
-    const sendSmtpEmail = new brevo.SendSmtpEmail({
+      consemailPayload = {
       to: [{ email: customer.email, name: customer.name }],
       sender: { 
-        email: process.env.EMAIL_FROM || 'noreply@a6cars.com',
-        name: process.env.EMAIL_FROM_NAME || 'A6 Cars'
+        email: EMAIL_FROM,
+        name: EMAIL_FROM_NAME
       },
       subject: emailTemplate.subject,
       htmlContent: emailTemplate.htmlContent,
       replyTo: {
-        email: process.env.EMAIL_FROM || 'support@a6cars.com',
-        name: process.env.EMAIL_FROM_NAME || 'A6 Cars'
+        email: 'support@a6cars.com',
+        name: EMAIL_FROM_NAME
       }
-    });
+    };
+
+    const response = await brevoClient.post('/smtp/email', emailPayload);
+    console.log('✅ Cancellation email sent to:', customer.email);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Error sending cancellation email:', error.message);
+    if (error.response) {
+      console.error('Brevo API response:', error.response.data);
+    }
 
     const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
     console.log('✅ Cancellation email sent to:', customer.email);
