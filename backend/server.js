@@ -1379,6 +1379,7 @@ app.get('/api/notifications/:customer_id', async (req, res) => {
 // ============================================================
 // ✅ USER: Full Booking History (active + past + cancelled)
 // Includes payment status and cancellation metadata when available
+// ONLY RETURNS UNUSED DISCOUNTS - used discounts are filtered out
 // ============================================================
 app.get("/api/history/:customer_id", async (req, res) => {
   const { customer_id } = req.params;
@@ -1398,9 +1399,11 @@ app.get("/api/history/:customer_id", async (req, res) => {
       [customer_id]
     );
 
-    // Also fetch any available discounts for this customer
+    // Fetch ONLY UNUSED discounts (used = FALSE) to show available offers
     const discounts = await pool.query(
-      `SELECT id, percent, code, used, created_at FROM discounts WHERE customer_id = $1 AND used = FALSE ORDER BY created_at DESC`,
+      `SELECT id, percent, code, used, created_at FROM discounts 
+       WHERE customer_id = $1 AND used = FALSE 
+       ORDER BY created_at DESC`,
       [customer_id]
     );
 

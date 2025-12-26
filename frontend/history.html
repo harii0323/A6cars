@@ -141,7 +141,8 @@
 
         // Handle both old format (array) and new format (object with bookings and discounts)
         const bookings = Array.isArray(data) ? data : (data.bookings || []);
-        const discounts = (data.discounts || []);
+        // Only show UNUSED discounts
+        const discounts = (data.discounts || []).filter(d => d.used === false || d.used === 0);
 
         if (bookings.length === 0) {
           container.innerHTML = `<p class="text-center text-gray-600 col-span-3">You have no bookings yet.</p>`;
@@ -150,12 +151,13 @@
 
         container.innerHTML = "";
 
-        // Display available discounts at the top
+        // Display available (UNUSED) discounts at the top
         if (discounts.length > 0) {
           const discountCard = document.createElement("div");
           discountCard.className = "bg-gradient-to-r from-green-50 to-green-100 p-6 rounded-lg shadow-lg border-2 border-green-500 col-span-1 md:col-span-2 lg:col-span-3";
           let discountHTML = `
             <h3 class="text-2xl font-bold text-green-700 mb-4">🎉 Available Discounts for You!</h3>
+            <p class="text-gray-600 mb-4">These discounts are not yet used. Apply them to your next booking!</p>
             <div class="grid grid-cols-1 md:grid-cols-${Math.min(discounts.length, 3)} gap-4">
           `;
           discounts.forEach(d => {
@@ -163,7 +165,7 @@
               <div class="bg-white p-4 rounded-lg border-2 border-green-400 text-center">
                 <p class="text-3xl font-bold text-green-600">${d.percent}% OFF</p>
                 <p class="text-gray-600 mt-2">Code: <span class="font-mono font-bold text-green-700">${d.code}</span></p>
-                <p class="text-sm text-gray-500 mt-2">Use on your next booking!</p>
+                <p class="text-sm text-gray-500 mt-2">✅ Ready to use!</p>
               </div>
             `;
           });
