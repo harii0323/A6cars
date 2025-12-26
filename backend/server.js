@@ -817,9 +817,9 @@ app.post('/api/cancel-booking', async (req, res) => {
     }
 
     // Issue discount on cancellation (for both user and admin)
-    // User cancellation: 10% discount for future bookings
+    // User cancellation: ALWAYS grant 10% discount for future bookings (regardless of refund status)
     // Admin cancellation: 50% specific + 15% general (handled below)
-    if (cancelled_by === 'user' && refundAmount > 0) {
+    if (cancelled_by === 'user') {
       try {
         const userDiscountPercent = 10;
         const userDiscountCode = `USER10_${booking_id}_${Date.now()}`;
