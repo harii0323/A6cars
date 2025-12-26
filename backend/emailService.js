@@ -372,7 +372,10 @@ const sendPaymentConfirmedEmail = async (customer, booking, car) => {
       console.warn('⚠️ Customer email not found for booking #' + booking.id);
       return false;
     }
-emailPayload = {
+
+    const emailTemplate = getPaymentConfirmedEmail(customer, booking, car);
+    
+    const emailPayload = {
       to: [{ email: customer.email, name: customer.name }],
       sender: { 
         email: EMAIL_FROM,
@@ -394,9 +397,6 @@ emailPayload = {
     if (error.response) {
       console.error('Brevo API response:', error.response.data);
     }
-    return result;
-  } catch (error) {
-    console.error('❌ Error sending payment confirmation email:', error.message);
     return false;
   }
 };
@@ -412,7 +412,13 @@ emailPayload = {
 const sendCancellationEmail = async (customer, booking, car, reason, refundAmount = 0) => {
   try {
     if (!customer.email) {
-      consemailPayload = {
+      console.warn('⚠️ Customer email not found for booking #' + booking.id);
+      return false;
+    }
+
+    const emailTemplate = getCancellationEmail(customer, booking, car, reason, refundAmount);
+    
+    const emailPayload = {
       to: [{ email: customer.email, name: customer.name }],
       sender: { 
         email: EMAIL_FROM,
@@ -434,12 +440,6 @@ const sendCancellationEmail = async (customer, booking, car, reason, refundAmoun
     if (error.response) {
       console.error('Brevo API response:', error.response.data);
     }
-
-    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log('✅ Cancellation email sent to:', customer.email);
-    return result;
-  } catch (error) {
-    console.error('❌ Error sending cancellation email:', error.message);
     return false;
   }
 };
