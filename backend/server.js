@@ -1564,6 +1564,25 @@ app.post("/api/verify-payment", async (req, res) => {
       return res.status(409).json({ message: "Payment already verified for this booking." });
     }
 
+    // 2.5. Check if this payment_reference_id is already used (must be unique)
+    try {
+      const existingRef = await client.query(
+        `SELECT p.id, p.booking_id FROM payments p 
+         WHERE p.payment_reference_id = $1 AND p.status = 'verified'`,
+        [payment_reference_id]
+      );
+      
+      if (existingRef.rows.length > 0) {
+        return res.status(409).json({ 
+          message: "This payment reference ID has already been used. Please use a different reference ID.",
+          details: `Reference already used for booking ${existingRef.rows[0].booking_id}`
+        });
+      }
+    } catch (refErr) {
+      // Column might not exist yet, continue
+      console.log('ℹ️ Could not check payment_reference_id uniqueness - column may not exist yet');
+    }
+
     // 3. Verify payment reference exists and matches customer, car, booking
     // (First, ensure payment_reference_id column exists in payments table)
     const paymentCheck = await client.query(
