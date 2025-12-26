@@ -1593,7 +1593,7 @@ app.post("/api/verify-payment", async (req, res) => {
       await client.query(
         `UPDATE payments 
          SET status = 'verified'
-         WHERE booking_id = $2`,
+         WHERE booking_id = $1`,
         [booking_id]
       );
     }
