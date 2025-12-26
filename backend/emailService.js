@@ -213,7 +213,7 @@ const getPaymentConfirmedEmail = (customer, booking, car) => {
   };
 };
 
-const getCancellationEmail = (customer, booking, car, reason, refundAmount) => {
+const getCancellationEmail = (customer, booking, car, reason, refundAmount, discount = null) => {
   const bookingDate = new Date(booking.start_date).toLocaleDateString('en-IN');
   const returnDate = new Date(booking.end_date).toLocaleDateString('en-IN');
   
@@ -229,6 +229,8 @@ const getCancellationEmail = (customer, booking, car, reason, refundAmount) => {
           .header { background-color: #dc3545; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
           .content { background-color: #f9f9f9; padding: 20px; }
           .cancel-box { background-color: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 15px; border-radius: 5px; margin: 15px 0; }
+          .discount-box { background-color: #d4edda; border: 2px solid #28a745; color: #155724; padding: 15px; border-radius: 5px; margin: 15px 0; }
+          .discount-code { background-color: #fff3cd; font-family: monospace; font-size: 16px; font-weight: bold; padding: 10px; text-align: center; border-radius: 3px; margin: 10px 0; }
           .booking-details { background-color: white; padding: 15px; margin: 15px 0; border-left: 4px solid #dc3545; }
           .detail-row { display: flex; justify-content: space-between; margin: 10px 0; }
           .label { font-weight: bold; color: #dc3545; }
@@ -293,8 +295,27 @@ const getCancellationEmail = (customer, booking, car, reason, refundAmount) => {
             </ul>
             ` : ''}
             
+            ${discount ? `
+            <div class="discount-box">
+              <h3 style="margin-top: 0; color: #155724;">🎉 Special Discount for Next Booking!</h3>
+              <p>We're sorry to see you go! As a token of our appreciation, we've issued you a special discount:</p>
+              <div style="background-color: white; padding: 15px; border-radius: 5px; margin: 10px 0;">
+                <p style="margin: 5px 0; font-size: 18px;"><strong>${discount.percent}% OFF</strong> on your next booking</p>
+                ${discount.code ? `
+                  <p style="margin: 10px 0; color: #666;">Discount Code:</p>
+                  <div class="discount-code">${discount.code}</div>
+                  <p style="margin: 5px 0; font-size: 12px; color: #666;">Copy and paste this code when booking your next car</p>
+                ` : ''}
+                ${discount.validUntil ? `
+                  <p style="margin: 10px 0 5px 0; color: #666;">Valid until: ${discount.validUntil}</p>
+                ` : ''}
+              </div>
+              <p style="margin-bottom: 0;">This discount will be automatically applied when you book with us again! 🚗</p>
+            </div>
+            ` : ''}
+            
             <p><strong>Book Again:</strong></p>
-            <p>We'd love to have you back! Feel free to explore our available vehicles and book again anytime.</p>
+            <p>We'd love to have you back! Explore our available vehicles and book again anytime.</p>
             
             <p><strong>Contact Information:</strong></p>
             <p>If you have any questions about this cancellation, please contact us at:<br>
@@ -408,15 +429,16 @@ const sendPaymentConfirmedEmail = async (customer, booking, car) => {
  * @param {Object} car - Car object with brand, model
  * @param {String} reason - Cancellation reason
  * @param {Number} refundAmount - Refund amount
+ * @param {Object} discount - Optional discount object with { percent, code, validUntil }
  */
-const sendCancellationEmail = async (customer, booking, car, reason, refundAmount = 0) => {
+const sendCancellationEmail = async (customer, booking, car, reason, refundAmount = 0, discount = null) => {
   try {
     if (!customer.email) {
       console.warn('⚠️ Customer email not found for booking #' + booking.id);
       return false;
     }
 
-    const emailTemplate = getCancellationEmail(customer, booking, car, reason, refundAmount);
+    const emailTemplate = getCancellationEmail(customer, booking, car, reason, refundAmount, discount);
     
     const emailPayload = {
       to: [{ email: customer.email, name: customer.name }],

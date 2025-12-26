@@ -816,6 +816,31 @@ app.post('/api/cancel-booking', async (req, res) => {
       );
     }
 
+    // Issue discount on cancellation (for both user and admin)
+    // User cancellation: 10% discount for future bookings
+    // Admin cancellation: 50% specific + 15% general (handled below)
+    if (cancelled_by === 'user' && refundAmount > 0) {
+      try {
+        const userDiscountPercent = 10;
+        const userDiscountCode = `USER10_${booking_id}_${Date.now()}`;
+        await client.query(
+          `INSERT INTO discounts (customer_id, car_id, percent, code, used)
+           VALUES ($1,NULL,$2,$3,FALSE)`,
+          [booking.customer_id, userDiscountPercent, userDiscountCode]
+        );
+        console.log('✅ Issued 10% discount to customer after user cancellation:', userDiscountCode);
+        
+        try {
+          const msg = `You've been granted a ${userDiscountPercent}% discount (code: ${userDiscountCode}) for your next booking!`;
+          await client.query(`INSERT INTO notifications (customer_id, title, message) VALUES ($1,$2,$3)`, [booking.customer_id, 'Discount Issued', msg]);
+        } catch (nErr) {
+          console.warn('⚠️ Failed to insert discount notification:', nErr.message);
+        }
+      } catch (dErr) {
+        console.warn('⚠️ Failed to insert discount after user cancellation:', dErr.message);
+      }
+    }
+
     // Insert notification
     const notifyMsg = cancelled_by === 'admin'
       ? `Your booking #${booking_id} was cancelled by admin. Reason: ${reason || 'No reason provided'}. Refund: ₹${refundAmount}`
@@ -878,7 +903,26 @@ app.post('/api/cancel-booking', async (req, res) => {
           end_date: booking.end_date,
           amount: booking.amount
         };
-        await sendCancellationEmail(customer.rows[0], bookingInfo, car.rows[0], reason, refundAmount);
+        
+        // Fetch discount info if created
+        let discountInfo = null;
+        try {
+          const discountRes = await pool.query(
+            `SELECT percent, code FROM discounts WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 1`,
+            [booking.customer_id]
+          );
+          if (discountRes.rows.length > 0) {
+            discountInfo = {
+              percent: discountRes.rows[0].percent,
+              code: discountRes.rows[0].code,
+              validUntil: null
+            };
+          }
+        } catch (dErr) {
+          console.warn('⚠️ Failed to fetch discount info:', dErr.message);
+        }
+        
+        await sendCancellationEmail(customer.rows[0], bookingInfo, car.rows[0], reason, refundAmount, discountInfo);
       }
     } catch (emailErr) {
       console.warn('⚠️ Cancellation email failed (non-blocking):', emailErr.message);
@@ -1354,7 +1398,16 @@ app.get("/api/history/:customer_id", async (req, res) => {
       [customer_id]
     );
 
-    res.json(result.rows);
+    // Also fetch any available discounts for this customer
+    const discounts = await pool.query(
+      `SELECT id, percent, code, used, created_at FROM discounts WHERE customer_id = $1 AND used = FALSE ORDER BY created_at DESC`,
+      [customer_id]
+    );
+
+    res.json({
+      bookings: result.rows,
+      discounts: discounts.rows || []
+    });
   } catch (err) {
     console.error("History fetch error:", err);
     res.status(500).json({ message: "Failed to load booking history." });
