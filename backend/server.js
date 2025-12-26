@@ -816,29 +816,12 @@ app.post('/api/cancel-booking', async (req, res) => {
       );
     }
 
-    // Issue discount on cancellation (for both user and admin)
-    // User cancellation: ALWAYS grant 10% discount for future bookings (regardless of refund status)
+    // Issue discount on cancellation admin
+    // User cancellation: No discount for future bookings (regardless of refund status)
     // Admin cancellation: 50% specific + 15% general (handled below)
     if (cancelled_by === 'user') {
-      try {
-        const userDiscountPercent = 10;
-        const userDiscountCode = `USER10_${booking_id}_${Date.now()}`;
-        await client.query(
-          `INSERT INTO discounts (customer_id, car_id, percent, code, used)
-           VALUES ($1,NULL,$2,$3,FALSE)`,
-          [booking.customer_id, userDiscountPercent, userDiscountCode]
-        );
+      
         console.log('✅ Issued 10% discount to customer after user cancellation:', userDiscountCode);
-        
-        try {
-          const msg = `You've been granted a ${userDiscountPercent}% discount (code: ${userDiscountCode}) for your next booking!`;
-          await client.query(`INSERT INTO notifications (customer_id, title, message) VALUES ($1,$2,$3)`, [booking.customer_id, 'Discount Issued', msg]);
-        } catch (nErr) {
-          console.warn('⚠️ Failed to insert discount notification:', nErr.message);
-        }
-      } catch (dErr) {
-        console.warn('⚠️ Failed to insert discount after user cancellation:', dErr.message);
-      }
     }
 
     // Insert notification
