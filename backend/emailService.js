@@ -3,7 +3,7 @@
 // Handles automated emails for bookings and cancellations
 //============================================================
 
-const brevo = require('brevo');
+const brevo = require('@brevo/brevo');
 require('dotenv').config();
 
 // ============================================================
