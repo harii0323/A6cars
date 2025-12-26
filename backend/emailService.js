@@ -1,32 +1,30 @@
 //============================================================
-// ✅ Email Service - SMTP Integration for Nodemailer
+// ✅ Email Service - Brevo (SendinBlue) Integration
 // Handles automated emails for bookings and cancellations
 //============================================================
 
-const nodemailer = require('nodemailer');
+const brevo = require('brevo');
 require('dotenv').config();
 
 // ============================================================
-// ✅ SMTP Configuration
+// ✅ Brevo Configuration
 // ============================================================
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT || 587),
-  secure: process.env.SMTP_SECURE === 'true' || false, // true for 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS // Use app password for Gmail
-  }
-});
+const apiInstance = new brevo.TransactionalEmailsApi();
 
-// Test the transporter connection
-transporter.verify((error, success) => {
-  if (error) {
-    console.log('❌ Email service error:', error.message);
-  } else {
-    console.log('✅ Email service ready:', success);
+// Set API key for authentication
+apiInstance.setApiKey(brevo.ApiKeyAuth.API_KEY, process.env.BREVO_API_KEY);
+
+// Test the API connection
+(async () => {
+  try {
+    const accountApi = new brevo.AccountApi();
+    accountApi.setApiKey(brevo.ApiKeyAuth.API_KEY, process.env.BREVO_API_KEY);
+    await accountApi.getAccount();
+    console.log('✅ Brevo email service ready');
+  } catch (error) {
+    console.log('❌ Brevo service error:', error.message);
   }
-});
+})();
 
 // ============================================================
 // ✅ Email Templates
@@ -38,7 +36,7 @@ const getBookingConfirmationEmail = (customer, booking, car) => {
   
   return {
     subject: `Booking Confirmation - A6 Cars #${booking.id}`,
-    html: `
+    htmlContent: `
       <!DOCTYPE html>
       <html>
       <head>
@@ -124,7 +122,7 @@ const getPaymentConfirmedEmail = (customer, booking, car) => {
   
   return {
     subject: `Payment Confirmed - A6 Cars Booking #${booking.id}`,
-    html: `
+    htmlContent: `
       <!DOCTYPE html>
       <html>
       <head>
@@ -215,7 +213,7 @@ const getCancellationEmail = (customer, booking, car, reason, refundAmount) => {
   
   return {
     subject: `Booking Cancelled - A6 Cars #${booking.id}`,
-    html: `
+    htmlContent: `
       <!DOCTYPE html>
       <html>
       <head>
@@ -328,13 +326,23 @@ const sendBookingConfirmationEmail = async (customer, booking, car) => {
       return false;
     }
 
-    const mailOptions = {
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
-      to: customer.email,
-      ...getBookingConfirmationEmail(customer, booking, car)
-    };
+    const emailTemplate = getBookingConfirmationEmail(customer, booking, car);
+    
+    const sendSmtpEmail = new brevo.SendSmtpEmail({
+      to: [{ email: customer.email, name: customer.name }],
+      sender: { 
+        email: process.env.EMAIL_FROM || 'noreply@a6cars.com',
+        name: process.env.EMAIL_FROM_NAME || 'A6 Cars'
+      },
+      subject: emailTemplate.subject,
+      htmlContent: emailTemplate.htmlContent,
+      replyTo: {
+        email: process.env.EMAIL_FROM || 'support@a6cars.com',
+        name: process.env.EMAIL_FROM_NAME || 'A6 Cars'
+      }
+    });
 
-    const result = await transporter.sendMail(mailOptions);
+    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
     console.log('✅ Booking confirmation email sent to:', customer.email);
     return result;
   } catch (error) {
@@ -356,13 +364,23 @@ const sendPaymentConfirmedEmail = async (customer, booking, car) => {
       return false;
     }
 
-    const mailOptions = {
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
-      to: customer.email,
-      ...getPaymentConfirmedEmail(customer, booking, car)
-    };
+    const emailTemplate = getPaymentConfirmedEmail(customer, booking, car);
+    
+    const sendSmtpEmail = new brevo.SendSmtpEmail({
+      to: [{ email: customer.email, name: customer.name }],
+      sender: { 
+        email: process.env.EMAIL_FROM || 'noreply@a6cars.com',
+        name: process.env.EMAIL_FROM_NAME || 'A6 Cars'
+      },
+      subject: emailTemplate.subject,
+      htmlContent: emailTemplate.htmlContent,
+      replyTo: {
+        email: process.env.EMAIL_FROM || 'support@a6cars.com',
+        name: process.env.EMAIL_FROM_NAME || 'A6 Cars'
+      }
+    });
 
-    const result = await transporter.sendMail(mailOptions);
+    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
     console.log('✅ Payment confirmation email sent to:', customer.email);
     return result;
   } catch (error) {
@@ -386,13 +404,23 @@ const sendCancellationEmail = async (customer, booking, car, reason, refundAmoun
       return false;
     }
 
-    const mailOptions = {
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
-      to: customer.email,
-      ...getCancellationEmail(customer, booking, car, reason, refundAmount)
-    };
+    const emailTemplate = getCancellationEmail(customer, booking, car, reason, refundAmount);
+    
+    const sendSmtpEmail = new brevo.SendSmtpEmail({
+      to: [{ email: customer.email, name: customer.name }],
+      sender: { 
+        email: process.env.EMAIL_FROM || 'noreply@a6cars.com',
+        name: process.env.EMAIL_FROM_NAME || 'A6 Cars'
+      },
+      subject: emailTemplate.subject,
+      htmlContent: emailTemplate.htmlContent,
+      replyTo: {
+        email: process.env.EMAIL_FROM || 'support@a6cars.com',
+        name: process.env.EMAIL_FROM_NAME || 'A6 Cars'
+      }
+    });
 
-    const result = await transporter.sendMail(mailOptions);
+    const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
     console.log('✅ Cancellation email sent to:', customer.email);
     return result;
   } catch (error) {
