@@ -52,10 +52,29 @@
     // Insert as first child of body when DOM is ready
     const insertVideo = () => {
       if (document.body) {
+        // Remove conflicting bg colors
+        document.body.classList.remove('bg-gray-100', 'bg-gray-50', 'bg-white');
         document.body.insertBefore(container, document.body.firstChild);
         // Activate transparent backgrounds where needed
         document.body.classList.add('video-bg-active');
         console.log('✅ Video container inserted into DOM');
+        console.log('📊 Video element details:', {
+          width: video.videoWidth,
+          height: video.videoHeight,
+          duration: video.duration,
+          readyState: video.readyState,
+          networkState: video.networkState
+        });
+        
+        // Verify container is visible
+        const rect = container.getBoundingClientRect();
+        console.log('📐 Container position:', {
+          top: rect.top,
+          left: rect.left,
+          width: rect.width,
+          height: rect.height,
+          isVisible: rect.width > 0 && rect.height > 0
+        });
         
         // Try to play video
         const playPromise = video.play();
