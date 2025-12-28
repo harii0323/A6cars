@@ -1156,13 +1156,17 @@ app.post("/api/deletecar", verifyAdmin, async (req, res) => {
         
         if (emailSent) {
           // Store the discount code in the database for future use
-          await client.query(
-            `INSERT INTO discounts (customer_id, discount_code, discount_percentage, valid_until, created_reason)
-             VALUES ($1, $2, $3, $4, $5)
-             ON CONFLICT DO NOTHING`,
-            [booking.customer_id, discountCode, discountPercent, validUntilDate, 'Car deletion compensation']
-          );
-          emailResults.push({ booking_id: booking.id, emailSent: true, discountCode });
+          try {
+            await client.query(
+              `INSERT INTO discounts (customer_id, percent, code, start_date, end_date)
+               VALUES ($1, $2, $3, NOW(), $4)`,
+              [booking.customer_id, discountPercent, discountCode, validUntilDate]
+            );
+            emailResults.push({ booking_id: booking.id, emailSent: true, discountCode });
+          } catch (discountErr) {
+            console.error(`Failed to save discount for booking ${booking.id}:`, discountErr.message);
+            emailResults.push({ booking_id: booking.id, emailSent: true, discountCode, discountSaved: false });
+          }
         } else {
           emailResults.push({ booking_id: booking.id, emailSent: false });
         }
