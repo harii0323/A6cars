@@ -1110,7 +1110,7 @@ app.post("/api/deletecar", verifyAdmin, async (req, res) => {
     
     // Get all bookings for this car WITH customer details
     const bookingsWithCustomers = await client.query(
-      `SELECT b.id, b.customer_id, b.start_date, b.end_date, b.total_price,
+      `SELECT b.id, b.customer_id, b.start_date, b.end_date, b.amount,
               c.email, c.name 
        FROM bookings b 
        JOIN customers c ON b.customer_id = c.id 
@@ -1127,8 +1127,8 @@ app.post("/api/deletecar", verifyAdmin, async (req, res) => {
           id: booking.id, 
           start_date: booking.start_date, 
           end_date: booking.end_date,
-          total_price: booking.total_price,
-          amount: booking.total_price
+          total_price: booking.amount,
+          amount: booking.amount
         };
         const car = { brand: carInfo.rows[0].brand, model: carInfo.rows[0].model };
         
@@ -1150,7 +1150,7 @@ app.post("/api/deletecar", verifyAdmin, async (req, res) => {
           bookingData, 
           car, 
           "Car has been removed from our fleet",
-          booking.total_price,  // Full refund
+          booking.amount,  // Full refund
           discount  // 25% discount on next booking
         );
         
