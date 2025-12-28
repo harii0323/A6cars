@@ -1108,11 +1108,72 @@ app.post("/api/deletecar", verifyAdmin, async (req, res) => {
     // Delete car images
     await client.query("DELETE FROM car_images WHERE car_id=$1", [car_id]);
     
-    // Get all bookings for this car
-    const bookings = await client.query("SELECT id FROM bookings WHERE car_id=$1", [car_id]);
+    // Get all bookings for this car WITH customer details
+    const bookingsWithCustomers = await client.query(
+      `SELECT b.id, b.customer_id, b.start_date, b.end_date, b.total_price,
+              c.email, c.name 
+       FROM bookings b 
+       JOIN customers c ON b.customer_id = c.id 
+       WHERE b.car_id=$1`,
+      [car_id]
+    );
+    
+    // Send cancellation emails to all customers BEFORE deleting bookings
+    const emailResults = [];
+    for (const booking of bookingsWithCustomers.rows) {
+      try {
+        const customer = { id: booking.customer_id, email: booking.email, name: booking.name };
+        const bookingData = { 
+          id: booking.id, 
+          start_date: booking.start_date, 
+          end_date: booking.end_date,
+          total_price: booking.total_price,
+          amount: booking.total_price
+        };
+        const car = { brand: carInfo.rows[0].brand, model: carInfo.rows[0].model };
+        
+        // Generate discount code for customer compensation
+        const discountCode = `CAR-DELETE-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+        const discountPercent = 25; // 25% discount as compensation
+        const validUntilDate = new Date();
+        validUntilDate.setDate(validUntilDate.getDate() + 90); // Valid for 90 days
+        const validUntil = validUntilDate.toLocaleDateString('en-IN');
+        
+        const discount = {
+          code: discountCode,
+          percent: discountPercent,
+          validUntil: validUntil
+        };
+        
+        const emailSent = await sendCancellationEmail(
+          customer, 
+          bookingData, 
+          car, 
+          "Car has been removed from our fleet",
+          booking.total_price,  // Full refund
+          discount  // 25% discount on next booking
+        );
+        
+        if (emailSent) {
+          // Store the discount code in the database for future use
+          await client.query(
+            `INSERT INTO discounts (customer_id, discount_code, discount_percentage, valid_until, created_reason)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT DO NOTHING`,
+            [booking.customer_id, discountCode, discountPercent, validUntilDate, 'Car deletion compensation']
+          );
+          emailResults.push({ booking_id: booking.id, emailSent: true, discountCode });
+        } else {
+          emailResults.push({ booking_id: booking.id, emailSent: false });
+        }
+      } catch (emailErr) {
+        console.error(`Failed to send email for booking ${booking.id}:`, emailErr.message);
+        emailResults.push({ booking_id: booking.id, emailSent: false, error: emailErr.message });
+      }
+    }
     
     // Delete refunds for all bookings of this car
-    for (const booking of bookings.rows) {
+    for (const booking of bookingsWithCustomers.rows) {
       await client.query("DELETE FROM refunds WHERE booking_id=$1", [booking.id]);
       await client.query("DELETE FROM payments WHERE booking_id=$1", [booking.id]);
     }
@@ -1124,7 +1185,14 @@ app.post("/api/deletecar", verifyAdmin, async (req, res) => {
     await client.query("DELETE FROM cars WHERE id=$1", [car_id]);
     
     await client.query("COMMIT");
-    res.json({ message: `Car "${carInfo.rows[0].brand} ${carInfo.rows[0].model}" and its ${bookings.rows.length} booking(s) deleted successfully!` });
+    
+    const successfulEmails = emailResults.filter(e => e.emailSent).length;
+    res.json({ 
+      message: `Car "${carInfo.rows[0].brand} ${carInfo.rows[0].model}" and its ${bookingsWithCustomers.rows.length} booking(s) deleted successfully!`,
+      bookingsDeleted: bookingsWithCustomers.rows.length,
+      emailsNotified: successfulEmails,
+      emailDetails: emailResults
+    });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Delete car error:", err);
