@@ -14,7 +14,7 @@
       --primary-dark: #1e40af;
       --success: #10b981;
       --danger: #ef4444;
-      --warning: #f59e0b;
+      --warning: #e6b765;
       --light: #f3f4f6;
       --border: #e5e7eb;
     }
@@ -441,10 +441,10 @@
       </div>
 
       <div class="border-t mt-4 pt-4 px-4">
-        <button class="w-full btn btn-danger text-sm justify-center" id="logoutBtn">
+       <!-- <button class="w-full btn btn-danger text-sm justify-center" id="logoutBtn">
           <i class="fas fa-sign-out-alt"></i>
           Logout
-        </button>
+        </button>-->
       </div>
     </nav>
   </aside>
@@ -821,20 +821,36 @@
       const password = document.getElementById('adminPassword').value;
       const errorDiv = document.getElementById('loginError');
 
+      errorDiv.classList.add('hidden');
+
       try {
+        console.log('Attempting login with:', { email });
         const res = await fetch(api('/api/admin/login'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password })
         });
 
-        const data = await res.json();
+        const text = await res.text();
+        console.log('Login response status:', res.status);
+        console.log('Login response text:', text);
+
+        let data = {};
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          console.error('Failed to parse response:', e);
+          throw new Error('Invalid server response');
+        }
+
         if (!res.ok) throw new Error(data.message || 'Login failed');
 
+        console.log('Login successful, token:', data.token);
         setAdminToken(data.token);
         showToast('✅ Login successful!', 'success');
       } catch (err) {
-        errorDiv.textContent = err.message;
+        console.error('Login error:', err);
+        errorDiv.textContent = '❌ ' + err.message;
         errorDiv.classList.remove('hidden');
       }
     });
@@ -867,16 +883,41 @@
     // Add Car Form Submit
     document.getElementById('addCarForm').addEventListener('submit', async (e) => {
       e.preventDefault();
+      
+      const token = getAdminToken();
+      if (!token) {
+        showToast('❌ Not authenticated. Please login again.', 'error');
+        return;
+      }
+
       const formData = new FormData(e.target);
+      console.log('Adding car with form data:', {
+        brand: formData.get('brand'),
+        model: formData.get('model'),
+        year: formData.get('year'),
+        daily_rate: formData.get('daily_rate'),
+        location: formData.get('location'),
+        imageCount: formData.getAll('images').length
+      });
 
       try {
         const res = await fetch(api('/api/admin/addcar'), {
           method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + getAdminToken() },
+          headers: { 'Authorization': 'Bearer ' + token },
           body: formData
         });
 
-        const data = await res.json();
+        const text = await res.text();
+        console.log('Add car response:', res.status, text);
+
+        let data = {};
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          console.error('Failed to parse add car response:', e);
+          throw new Error('Invalid server response');
+        }
+
         if (!res.ok) throw new Error(data.message || 'Failed to add car');
 
         showToast('✅ Car added successfully!', 'success');
@@ -884,70 +925,104 @@
         imagesPreview.innerHTML = '';
         loadCarList();
       } catch (err) {
-        showToast('❌ ' + err.message, 'error');
         console.error('Add car error:', err);
+        showToast('❌ ' + err.message, 'error');
       }
     });
 
     // Load Dashboard
     async function loadDashboard() {
       try {
+        console.log('Loading dashboard...');
         const res = await fetch(api('/api/cars'));
         const cars = await res.json();
+        console.log('Cars loaded:', cars.length);
         document.getElementById('statCars').textContent = cars.length;
 
         const txRes = await fetch(api('/api/admin/transactions'), {
           headers: { 'Authorization': 'Bearer ' + getAdminToken() }
         });
-        const transactions = await txRes.json();
+        
+        if (!txRes.ok) {
+          console.warn('Transactions fetch failed:', txRes.status);
+          document.getElementById('statBookings').textContent = '0';
+          document.getElementById('transactionBody').innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">No transactions found</td></tr>';
+          return;
+        }
+
+        const txData = await txRes.json();
+        console.log('Transactions response:', txData);
+        
+        // Handle both { data: [] } and [] response formats
+        const transactions = txData.data || txData;
+        console.log('Transactions loaded:', transactions.length);
         document.getElementById('statBookings').textContent = transactions.length || 0;
 
         const tbody = document.getElementById('transactionBody');
         tbody.innerHTML = (transactions || []).slice(0, 10).map(tx => `
           <tr>
-            <td>${tx.id}</td>
+            <td>${tx.payment_id || tx.id}</td>
             <td>${tx.customer_name || 'N/A'}</td>
             <td>${tx.brand} ${tx.model}</td>
-            <td>₹${(tx.amount || 0).toLocaleString()}</td>
-            <td><span class="badge ${tx.status === 'completed' ? 'badge-success' : 'badge-warning'}">${tx.status || 'pending'}</span></td>
-            <td>${new Date(tx.created_at || Date.now()).toLocaleDateString()}</td>
+            <td>₹${(tx.payment_amount || tx.amount || 0).toLocaleString()}</td>
+            <td><span class="badge ${tx.payment_status === 'completed' || tx.status === 'completed' ? 'badge-success' : 'badge-warning'}">${tx.payment_status || tx.status || 'pending'}</span></td>
+            <td>${new Date(tx.start_date || Date.now()).toLocaleDateString()}</td>
           </tr>
         `).join('') || '<tr><td colspan="6" class="text-center py-4 text-gray-500">No transactions found</td></tr>';
       } catch (err) {
         console.error('Dashboard load error:', err);
+        document.getElementById('statBookings').textContent = '—';
+        document.getElementById('statCars').textContent = '—';
+        document.getElementById('transactionBody').innerHTML = '<tr><td colspan="6" class="text-center py-4 text-red-500">Error loading: ' + err.message + '</td></tr>';
       }
     }
 
     // Load Cars List
     async function loadCarList() {
       try {
+        console.log('Loading cars list...');
         const res = await fetch(api('/api/cars'));
+        
+        if (!res.ok) {
+          console.error('Cars fetch failed:', res.status);
+          document.getElementById('carsList').innerHTML = '<p class="text-red-500">Failed to load cars</p>';
+          return;
+        }
+
         const cars = await res.json();
+        console.log('Cars fetched:', cars);
         const carsList = document.getElementById('carsList');
 
-        if (!cars.length) {
+        if (!cars || !Array.isArray(cars) || cars.length === 0) {
           carsList.innerHTML = '<p class="text-center text-gray-500 py-8">No cars found</p>';
           return;
         }
 
-        carsList.innerHTML = cars.map(car => `
-          <div class="border rounded-lg p-4 flex justify-between items-start md:items-center gap-4 hover:shadow-lg">
-            <div class="flex gap-4 items-start flex-1">
-              <img src="${car.images?.[0] ? (car.images[0].startsWith('http') ? car.images[0] : BACKEND_URL + '/' + car.images[0]) : 'https://via.placeholder.com/100x80'}" class="w-24 h-20 rounded object-cover">
-              <div>
-                <h4 class="font-semibold text-gray-900">${car.brand} ${car.model}</h4>
-                <p class="text-sm text-gray-600">Year: ${car.year} | ₹${car.daily_rate}/day</p>
-                <p class="text-xs text-gray-500">${car.location || 'N/A'}</p>
+        carsList.innerHTML = cars.map(car => {
+          const imageUrl = car.images && car.images[0] 
+            ? (car.images[0].startsWith('http') ? car.images[0] : BACKEND_URL + car.images[0]) 
+            : 'https://via.placeholder.com/100x80?text=No+Image';
+          
+          return `
+            <div class="border rounded-lg p-4 flex justify-between items-start md:items-center gap-4 hover:shadow-lg">
+              <div class="flex gap-4 items-start flex-1">
+                <img src="${imageUrl}" class="w-24 h-20 rounded object-cover" onerror="this.src='https://via.placeholder.com/100x80'">
+                <div>
+                  <h4 class="font-semibold text-gray-900">${car.brand} ${car.model}</h4>
+                  <p class="text-sm text-gray-600">Year: ${car.year} | ₹${car.daily_rate}/day</p>
+                  <p class="text-xs text-gray-500">${car.location || 'N/A'}</p>
+                </div>
+              </div>
+              <div class="flex gap-2 flex-col">
+                <button class="btn btn-primary text-xs" onclick="viewCarBookings(${car.id}, '${car.brand} ${car.model}')">View Bookings</button>
+                <button class="btn btn-danger text-xs" onclick="deleteCar(${car.id})">Delete</button>
               </div>
             </div>
-            <div class="flex gap-2 flex-col">
-              <button class="btn btn-primary text-xs" onclick="viewCarBookings(${car.id}, '${car.brand} ${car.model}')">View Bookings</button>
-              <button class="btn btn-danger text-xs" onclick="deleteCar(${car.id})">Delete</button>
-            </div>
-          </div>
-        `).join('');
+          `;
+        }).join('');
       } catch (err) {
         console.error('Load cars error:', err);
+        document.getElementById('carsList').innerHTML = `<p class="text-red-500">Error: ${err.message}</p>`;
       }
     }
 
@@ -956,18 +1031,30 @@
       if (!confirm("Delete this car and all its bookings?")) return;
 
       try {
+        console.log('Deleting car:', id);
         const res = await fetch(api('/api/deletecar'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAdminToken() },
           body: JSON.stringify({ car_id: id })
         });
 
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message);
+        const text = await res.text();
+        console.log('Delete response:', res.status, text);
+
+        let data = {};
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          console.error('Failed to parse delete response:', e);
+          throw new Error('Invalid server response');
+        }
+
+        if (!res.ok) throw new Error(data.message || 'Failed to delete');
 
         showToast('✅ Car deleted successfully!', 'success');
         loadCarList();
       } catch (err) {
+        console.error('Delete car error:', err);
         showToast('❌ ' + err.message, 'error');
       }
     }
@@ -1061,23 +1148,35 @@
 
     async function processQRCode(qrData) {
       try {
-        const res = await fetch(api('/api/admin/verify-payment'), {
+        // Parse QR data if it's JSON
+        let parsedData = qrData;
+        try {
+          parsedData = JSON.parse(qrData);
+        } catch (e) {
+          // If not JSON, treat as booking_id
+          parsedData = { booking_id: qrData, qr_type: 'collection' };
+        }
+
+        const res = await fetch(api('/api/admin/verify-qr'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAdminToken() },
-          body: JSON.stringify({ qr_data: qrData })
+          body: JSON.stringify({ qr_data: parsedData })
         });
 
         const result = await res.json();
         const resultDiv = document.getElementById('qrResult');
 
         if (res.ok) {
-          resultDiv.innerHTML = `<div class="p-4 bg-green-50 border border-green-200 rounded-lg"><h4 class="font-semibold text-green-800">✅ Payment Verified</h4><p class="text-sm text-green-700 mt-2">${result.message || 'Payment verified successfully'}</p></div>`;
+          resultDiv.innerHTML = `<div class="p-4 bg-green-50 border border-green-200 rounded-lg"><h4 class="font-semibold text-green-800">✅ Verified</h4><p class="text-sm text-green-700 mt-2">${result.message || 'Verification successful'}</p></div>`;
           showToast('✅ Payment verified!', 'success');
         } else {
-          resultDiv.innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-lg"><h4 class="font-semibold text-red-800">❌ Verification Failed</h4><p class="text-sm text-red-700 mt-2">${result.message || 'Failed to verify payment'}</p></div>`;
+          resultDiv.innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-lg"><h4 class="font-semibold text-red-800">❌ Verification Failed</h4><p class="text-sm text-red-700 mt-2">${result.message || 'Failed to verify'}</p></div>`;
+          showToast('❌ ' + result.message, 'error');
         }
       } catch (err) {
-        showToast('❌ Error processing QR: ' + err.message, 'error');
+        console.error('QR processing error:', err);
+        showToast('❌ Error: ' + err.message, 'error');
+        document.getElementById('qrResult').innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-lg"><p class="text-sm text-red-700">Error: ${err.message}</p></div>`;
       }
     }
 
