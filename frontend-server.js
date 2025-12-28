@@ -18,15 +18,13 @@ app.use((req, res, next) => {
 });
 
 // Serve uploads directory with proper headers
-app.use('/uploads', (req, res, next) => {
-  console.log(`📤 Uploads request: ${req.url}`);
-  next();
-}, express.static(UPLOADS_DIR, {
+app.use('/uploads', express.static(UPLOADS_DIR, {
   setHeaders: (res, filePath) => {
     console.log(`📄 Serving file: ${filePath}`);
     if (filePath.endsWith('.mp4')) {
       res.setHeader('Content-Type', 'video/mp4');
       res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
     }
   }
 }));
