@@ -1088,6 +1088,52 @@ app.get("/api/cars", async (req, res) => {
   }
 });
 
+// ============================================================
+// ✅ DELETE CAR (admin only - deletes car and all bookings)
+// ============================================================
+app.post("/api/deletecar", verifyAdmin, async (req, res) => {
+  const { car_id } = req.body;
+  const client = await pool.connect();
+  
+  try {
+    await client.query("BEGIN");
+    
+    // Get car info for response
+    const carInfo = await client.query("SELECT * FROM cars WHERE id=$1", [car_id]);
+    if (carInfo.rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Car not found." });
+    }
+    
+    // Delete car images
+    await client.query("DELETE FROM car_images WHERE car_id=$1", [car_id]);
+    
+    // Get all bookings for this car
+    const bookings = await client.query("SELECT id FROM bookings WHERE car_id=$1", [car_id]);
+    
+    // Delete refunds for all bookings of this car
+    for (const booking of bookings.rows) {
+      await client.query("DELETE FROM refunds WHERE booking_id=$1", [booking.id]);
+      await client.query("DELETE FROM payments WHERE booking_id=$1", [booking.id]);
+    }
+    
+    // Delete all bookings for this car
+    await client.query("DELETE FROM bookings WHERE car_id=$1", [car_id]);
+    
+    // Delete the car itself
+    await client.query("DELETE FROM cars WHERE id=$1", [car_id]);
+    
+    await client.query("COMMIT");
+    res.json({ message: `Car "${carInfo.rows[0].brand} ${carInfo.rows[0].model}" and its ${bookings.rows.length} booking(s) deleted successfully!` });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("Delete car error:", err);
+    res.status(500).json({ message: "Failed to delete car.", error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Book a car
 app.post("/api/book", async (req, res) => {
   const { car_id, customer_id, start_date, end_date } = req.body;
