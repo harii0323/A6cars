@@ -159,8 +159,8 @@
             <p class="text-gray-600 mb-3">Verification: ${verified}</p>
             $ {
                 !bk.paid
-                  ? `<button class="bg-blue-600 text-white py-2 rounded w-full" onclick="showPaymentQR(${bk.booking_id}, ${bk.amount})">Pay Now</button>`
-                  : `<button class="bg-green-600 text-white py-2 rounded w-full" onclick="downloadCollectionQR('${bk.collection_qr}', ${bk.booking_id})">Download Collection QR</button>`
+                  ? `<button class ="bg-blue-600 text-white py-2 rounded w-full" onclick="showPaymentQR(${bk.booking_id}, ${bk.amount})">Pay Now</button>`
+                  : `<button class ="bg-green-600 text-white py-2 rounded w-full" onclick="downloadCollectionQR('${bk.collection_qr}', ${bk.booking_id})">Download Collection QR</button>`
               }
 
               ${bk.status !== 'cancelled' ? `
@@ -254,6 +254,6 @@
       }
     })();
   </script>
-  <script src="/video-bg.js" defer></script>
+  <script src="/video-bg.js"></script>
 </body>
 </html>
