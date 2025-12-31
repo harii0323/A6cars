@@ -91,16 +91,22 @@
     container.appendChild(video);
     container.appendChild(overlay);
 
-    // Insert as first child of body when DOM is ready
+    // Function to insert video into DOM
     const insertVideo = () => {
       if (document.body) {
         // Remove conflicting bg colors
         console.log('🧹 [VIDEO-BG] Removing conflicting background classes...');
         document.body.classList.remove('bg-gray-100', 'bg-gray-50', 'bg-white');
-        document.body.insertBefore(container, document.body.firstChild);
+        
+        // Check if container is already in DOM
+        if (!document.getElementById('site-bg-video')) {
+          document.body.insertBefore(container, document.body.firstChild);
+          console.log('✅ [VIDEO-BG] Video container inserted into DOM');
+        }
+        
         // Activate transparent backgrounds where needed
         document.body.classList.add('video-bg-active');
-        console.log('✅ [VIDEO-BG] Video container inserted into DOM');
+        
         console.log('📊 [VIDEO-BG] Video element details:', {
           videoWidth: video.videoWidth,
           videoHeight: video.videoHeight,
@@ -120,25 +126,37 @@
           isVisible: rect.width > 0 && rect.height > 0
         });
         
-        // Try to play video - with delay to ensure it's fully ready
-        setTimeout(() => {
+        // Try to play video with multiple attempts
+        const attemptPlay = () => {
           console.log('⏯️ [VIDEO-BG] Attempting to play video...');
           const playPromise = video.play();
           if (playPromise !== undefined) {
             playPromise
-              .then(() => console.log('🎬 [VIDEO-BG] Video playback started successfully!'))
+              .then(() => {
+                console.log('🎬 [VIDEO-BG] Video playback started successfully!');
+              })
               .catch(err => {
                 console.error('⚠️ [VIDEO-BG] Video play failed:', err.name, err.message);
-                // Still try autoplay fallback
-                console.log('📺 [VIDEO-BG] Attempting autoplay with user interaction workaround...');
+                // Retry after a short delay
+                if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+                  setTimeout(attemptPlay, 200);
+                }
               });
           }
-        }, 100);
+        };
+        
+        // Initial attempt after container is rendered
+        if (video.readyState >= 2) {
+          attemptPlay();
+        } else {
+          video.addEventListener('canplay', attemptPlay, { once: true });
+        }
       } else {
         console.warn('⚠️ [VIDEO-BG] document.body not available yet');
       }
     };
 
+    // Insert video as soon as DOM is ready
     if (document.readyState === 'loading') {
       console.log('📄 [VIDEO-BG] DOM still loading, waiting for DOMContentLoaded...');
       document.addEventListener('DOMContentLoaded', insertVideo);

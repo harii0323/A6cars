@@ -1,5 +1,5 @@
 //============================================================
-// ✅ A6 Cars Backend - Final Updated Version (Dec 2, 2025 )
+// ✅ A6 Cars Backend - Razorpay Integration Version (Dec 29, 2025)
 // ============================================================
 require("dotenv").config();
 const express = require("express");
@@ -11,7 +11,17 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const QRCode = require("qrcode");
+const Razorpay = require("razorpay");
+const crypto = require("crypto");
 const { sendBookingConfirmationEmail, sendPaymentConfirmedEmail, sendCancellationEmail } = require("./emailService");
+
+// ============================================================
+// ✅ Razorpay Initialization
+// ============================================================
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_1DP5MMOk9HrQ9j",
+  key_secret: process.env.RAZORPAY_KEY_SECRET || "3QnOd46i7YBOeSgUeC71jFIK"
+});
 
 const app = express();
 app.use(cors({
@@ -87,54 +97,53 @@ pool.query('SELECT NOW()', (err, result) => {
 });
 
 // ============================================================
-// ✅ Auto-Migration: Ensure payment_reference_id column exists
+// ✅ Auto-Migration: Ensure Razorpay columns exist
 // ============================================================
 async function runDatabaseMigrations() {
   try {
     console.log('📋 Checking database schema...');
     
-    // Check if payment_reference_id column exists
-    const checkColumn = await pool.query(
-      `SELECT EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'payments' AND column_name = 'payment_reference_id'
-      )`
-    );
-    
-    if (!checkColumn.rows[0].exists) {
-      console.log('⚠️ Column payment_reference_id missing - running migration...');
-      
-      // Add payment_reference_id column
-      await pool.query(
-        `ALTER TABLE payments ADD COLUMN payment_reference_id VARCHAR(255) UNIQUE`
-      );
-      console.log('✅ Added payment_reference_id column');
-      
-      // Add updated_at column if missing
-      const checkUpdatedAt = await pool.query(
+    // Helper function to add columns if they don't exist
+    const ensureColumn = async (tableName, colName, colDef) => {
+      const checkColumn = await pool.query(
         `SELECT EXISTS (
           SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'payments' AND column_name = 'updated_at'
-        )`
+          WHERE table_name = $1 AND column_name = $2
+        )`,
+        [tableName, colName]
       );
       
-      if (!checkUpdatedAt.rows[0].exists) {
-        await pool.query(
-          `ALTER TABLE payments ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`
-        );
-        console.log('✅ Added updated_at column');
+      if (!checkColumn.rows[0].exists) {
+        await pool.query(`ALTER TABLE ${tableName} ADD COLUMN ${colDef}`);
+        console.log(`✅ Added ${colName} column to ${tableName}`);
       }
+    };
+
+    // Add Razorpay columns
+    await ensureColumn('payments', 'razorpay_order_id', `razorpay_order_id VARCHAR(255) UNIQUE`);
+    await ensureColumn('payments', 'razorpay_payment_id', `razorpay_payment_id VARCHAR(255) UNIQUE`);
+    await ensureColumn('payments', 'razorpay_signature', `razorpay_signature VARCHAR(255)`);
+    await ensureColumn('payments', 'payment_method', `payment_method VARCHAR(50) DEFAULT 'razorpay'`);
+    await ensureColumn('payments', 'processed_at', `processed_at TIMESTAMP`);
+
+    // Keep old columns for backward compatibility
+    await ensureColumn('payments', 'payment_reference_id', `payment_reference_id VARCHAR(255)`);
+    await ensureColumn('payments', 'updated_at', `updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
       
-      // Create indexes
-      await pool.query(
-        `CREATE INDEX IF NOT EXISTS idx_payment_reference_id ON payments(payment_reference_id)`
-      );
-      console.log('✅ Created idx_payment_reference_id index');
-      
-      await pool.query(
-        `CREATE INDEX IF NOT EXISTS idx_payment_booking_status ON payments(booking_id, status)`
-      );
-      console.log('✅ Created idx_payment_booking_status index');
+    // Create indexes
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_razorpay_order_id ON payments(razorpay_order_id)`
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_razorpay_payment_id ON payments(razorpay_payment_id)`
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_payment_reference_id ON payments(payment_reference_id)`
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_payment_booking_status ON payments(booking_id, status)`
+    );
+    console.log('✅ Created indexes for Razorpay columns');
       
       // Ensure refund-related columns exist so we can track refunds
       const checkRefundAmount = await pool.query(
@@ -1627,14 +1636,14 @@ app.post('/api/payments/qr', async (req, res) => {
 });
 
 // ============================================================
-// ✅ CUSTOMER: Verify payment by reference ID
+// ✅ RAZORPAY: Create Order for Payment
 // ============================================================
-app.post("/api/verify-payment", async (req, res) => {
-  console.log("🔍 verify-payment endpoint called with body:", req.body);
-  const { booking_id, payment_reference_id, customer_id } = req.body;
+app.post("/api/razorpay/create-order", async (req, res) => {
+  console.log("🔍 create-order endpoint called with body:", req.body);
+  const { booking_id, customer_id, amount } = req.body;
   
-  if (!booking_id || !payment_reference_id || !customer_id) {
-    return res.status(400).json({ message: "Missing required fields: booking_id, payment_reference_id, customer_id" });
+  if (!booking_id || !customer_id || !amount) {
+    return res.status(400).json({ message: "Missing required fields: booking_id, customer_id, amount" });
   }
 
   const client = await pool.connect();
@@ -1657,65 +1666,136 @@ app.post("/api/verify-payment", async (req, res) => {
 
     const bookingData = booking.rows[0];
     
-    // 2. Check if payment already verified for this booking
+    // 2. Check if payment already made
     if (bookingData.paid) {
-      return res.status(409).json({ message: "Payment already verified for this booking." });
+      return res.status(409).json({ message: "Payment already made for this booking." });
     }
 
-    // 2.5. Check if this payment_reference_id is already used (must be unique)
-    try {
-      const existingRef = await client.query(
-        `SELECT p.id, p.booking_id FROM payments p 
-         WHERE p.payment_reference_id = $1 AND p.status = 'verified'`,
-        [payment_reference_id]
-      );
-      
-      if (existingRef.rows.length > 0) {
-        return res.status(409).json({ 
-          message: "This payment reference ID has already been used. Please use a different reference ID.",
-          details: `Reference already used for booking ${existingRef.rows[0].booking_id}`
-        });
+    // 3. Create Razorpay Order
+    const orderOptions = {
+      amount: Math.round(amount * 100), // Convert to paise (Razorpay expects amount in paise)
+      currency: "INR",
+      receipt: `booking_${booking_id}_${Date.now()}`,
+      description: `A6 Cars Booking #${booking_id} - ${bookingData.brand} ${bookingData.model}`,
+      customer_notify: 1,
+      notes: {
+        booking_id: booking_id,
+        customer_id: customer_id,
+        customer_name: bookingData.customer_name,
+        customer_email: bookingData.customer_email,
+        customer_phone: bookingData.customer_phone,
+        car_name: `${bookingData.brand} ${bookingData.model}`,
+        start_date: bookingData.start_date,
+        end_date: bookingData.end_date
       }
-    } catch (refErr) {
-      // Column might not exist yet, continue
-      console.log('ℹ️ Could not check payment_reference_id uniqueness - column may not exist yet');
-    }
+    };
 
-    // 3. Verify payment reference exists and matches customer, car, booking
-    // (First, ensure payment_reference_id column exists in payments table)
-    const paymentCheck = await client.query(
-      `SELECT p.id, p.booking_id, p.amount, p.status
-       FROM payments p
-       WHERE p.booking_id = $1 AND p.amount = $2`,
-      [booking_id, bookingData.amount]
+    const order = await razorpay.orders.create(orderOptions);
+    console.log("✅ Razorpay order created:", order.id);
+
+    // 4. Store order in payments table
+    await client.query(
+      `UPDATE payments 
+       SET razorpay_order_id = $1, status = 'pending'
+       WHERE booking_id = $2`,
+      [order.id, booking_id]
     );
 
-    if (!paymentCheck.rows.length) {
-      return res.status(404).json({ message: "No payment found for this booking amount." });
+    res.json({
+      message: "Order created successfully",
+      order_id: order.id,
+      amount: order.amount / 100, // Convert back to rupees for frontend
+      currency: order.currency,
+      booking_id: booking_id,
+      customer_email: bookingData.customer_email,
+      customer_name: bookingData.customer_name
+    });
+  } catch (err) {
+    console.error("❌ Order creation error:", err.message);
+    res.status(500).json({ message: "Failed to create payment order: " + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
+// ✅ RAZORPAY: Verify Payment & Auto-Update Status
+// ============================================================
+app.post("/api/razorpay/verify-payment", async (req, res) => {
+  console.log("🔍 verify-payment endpoint called with body:", req.body);
+  
+  const { 
+    razorpay_payment_id, 
+    razorpay_order_id, 
+    razorpay_signature,
+    booking_id,
+    customer_id 
+  } = req.body;
+  
+  if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+    return res.status(400).json({ message: "Missing payment verification data" });
+  }
+
+  const client = await pool.connect();
+  try {
+    // 1. Verify Razorpay signature to ensure payment authenticity
+    const body = razorpay_order_id + "|" + razorpay_payment_id;
+    const expectedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "3QnOd46i7YBOeSgUeC71jFIK")
+      .update(body)
+      .digest("hex");
+
+    if (expectedSignature !== razorpay_signature) {
+      return res.status(400).json({ message: "❌ Payment signature verification failed. Payment may be fraudulent." });
     }
 
-    // 4. Update payment with reference ID and mark as verified
-    // Note: payment_reference_id  column may not exist if migration hasn't been applied
-    // Try to update, but catch if column doesn't exist
-    try {
-      await client.query(
-        `UPDATE payments 
-         SET payment_reference_id = $1, status = 'verified'
-         WHERE booking_id = $2`,
-        [payment_reference_id, booking_id]
-      );
-    } catch (colErr) {
-      // If column doesn't exist, just update status and log warning
-      console.warn('⚠️ payment_reference_id column missing - run migration: migration_add_payment_reference.sql');
-      await client.query(
-        `UPDATE payments 
-         SET status = 'verified'
-         WHERE booking_id = $1`,
-        [booking_id]
-      );
+    console.log("✅ Razorpay signature verified");
+
+    // 2. Fetch booking details
+    const booking = await client.query(
+      `SELECT b.id, b.customer_id, b.car_id, b.amount, b.start_date, b.end_date, b.paid,
+              c.name AS customer_name, c.email AS customer_email, c.phone AS customer_phone,
+              ca.brand, ca.model, ca.location
+       FROM bookings b
+       JOIN customers c ON b.customer_id = c.id
+       JOIN cars ca ON b.car_id = ca.id
+       WHERE b.id = $1 AND b.customer_id = $2`,
+      [booking_id, customer_id]
+    );
+    
+    if (!booking.rows.length) {
+      return res.status(404).json({ message: "Booking not found" });
     }
 
-    // 5. Mark booking as paid and confirmed
+    const bookingData = booking.rows[0];
+
+    // 3. Check if already paid
+    if (bookingData.paid) {
+      return res.status(409).json({ message: "Payment already completed for this booking" });
+    }
+
+    // 4. Verify payment status with Razorpay
+    const paymentDetails = await razorpay.payments.fetch(razorpay_payment_id);
+    console.log("Payment details:", paymentDetails.status);
+
+    if (paymentDetails.status !== "captured") {
+      return res.status(400).json({ message: "Payment not captured by Razorpay. Status: " + paymentDetails.status });
+    }
+
+    // 5. Update payments table with Razorpay payment details
+    await client.query(
+      `UPDATE payments 
+       SET razorpay_payment_id = $1, 
+           razorpay_order_id = $2, 
+           razorpay_signature = $3,
+           status = 'paid',
+           payment_method = $4,
+           processed_at = NOW()
+       WHERE booking_id = $5`,
+      [razorpay_payment_id, razorpay_order_id, razorpay_signature, paymentDetails.method || 'card', booking_id]
+    );
+
+    // 6. Mark booking as paid
     await client.query(
       `UPDATE bookings 
        SET paid = true, status = 'confirmed', updated_at = NOW()
@@ -1723,7 +1803,9 @@ app.post("/api/verify-payment", async (req, res) => {
       [booking_id]
     );
 
-    // 6. Generate Collection QR (pickup)
+    console.log("✅ Booking marked as paid");
+
+    // 7. Generate Collection QR
     const collectionQRData = {
       qr_type: "collection",
       booking_id: bookingData.id,
@@ -1735,9 +1817,210 @@ app.post("/api/verify-payment", async (req, res) => {
       location: bookingData.location,
       start_date: bookingData.start_date,
       amount: bookingData.amount,
-      payment_reference_id: payment_reference_id
+      razorpay_payment_id: razorpay_payment_id
     };
     const collectionQR = await QRCode.toDataURL(JSON.stringify(collectionQRData));
+
+    // 8. Generate Return QR
+    const returnQRData = {
+      qr_type: "return",
+      booking_id: bookingData.id,
+      customer_id: bookingData.customer_id,
+      customer_name: bookingData.customer_name,
+      customer_phone: bookingData.customer_phone,
+      car_id: bookingData.car_id,
+      car: `${bookingData.brand} ${bookingData.model}`,
+      location: bookingData.location,
+      end_date: bookingData.end_date,
+      amount: bookingData.amount,
+      razorpay_payment_id: razorpay_payment_id
+    };
+    const returnQR = await QRCode.toDataURL(JSON.stringify(returnQRData));
+
+    // 9. Send payment confirmation email
+    try {
+      const carInfo = {
+        brand: bookingData.brand,
+        model: bookingData.model,
+        location: bookingData.location
+      };
+      const bookingInfo = {
+        id: bookingData.id,
+        start_date: bookingData.start_date,
+        end_date: bookingData.end_date,
+        amount: bookingData.amount
+      };
+      const customerInfo = {
+        name: bookingData.customer_name,
+        email: bookingData.customer_email
+      };
+      
+      await sendPaymentConfirmedEmail(customerInfo, bookingInfo, carInfo);
+    } catch (emailErr) {
+      console.warn('⚠️ Payment confirmation email failed (non-blocking):', emailErr.message);
+    }
+
+    res.json({
+      message: "✅ Payment verified and booking confirmed!",
+      razorpay_payment_id: razorpay_payment_id,
+      collection_qr: collectionQR,
+      return_qr: returnQR,
+      booking_details: {
+        booking_id: bookingData.id,
+        customer_name: bookingData.customer_name,
+        car: `${bookingData.brand} ${bookingData.model}`,
+        amount: bookingData.amount,
+        start_date: bookingData.start_date,
+        end_date: bookingData.end_date
+      }
+    });
+  } catch (err) {
+    console.error("❌ Payment verification error:", err.message);
+    res.status(500).json({ message: "Payment verification failed: " + err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
+// ✅ RAZORPAY: Webhook Handler for Automated Payment Verification
+// Razorpay will call this endpoint when payment status changes
+// ============================================================
+app.post("/api/razorpay/webhook", async (req, res) => {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET || "webhook_secret_key";
+  const signature = req.headers["x-razorpay-signature"];
+  const body = JSON.stringify(req.body);
+
+  // Verify webhook signature
+  const expectedSignature = crypto
+    .createHmac("sha256", secret)
+    .update(body)
+    .digest("hex");
+
+  if (signature !== expectedSignature) {
+    console.warn("⚠️ Invalid webhook signature");
+    return res.status(400).json({ message: "Invalid signature" });
+  }
+
+  const client = await pool.connect();
+  try {
+    const event = req.body.event;
+    const payload = req.body.payload;
+
+    console.log("🔔 Razorpay webhook received:", event);
+
+    if (event === "payment.captured") {
+      const paymentId = payload.payment.entity.id;
+      const orderId = payload.payment.entity.order_id;
+      const amount = payload.payment.entity.amount / 100; // Convert from paise
+
+      // Find booking by order_id
+      const booking = await client.query(
+        `SELECT b.id, b.booking_id FROM payments p
+         JOIN bookings b ON p.booking_id = b.id
+         WHERE p.razorpay_order_id = $1`,
+        [orderId]
+      );
+
+      if (booking.rows.length > 0) {
+        const bookingId = booking.rows[0].id;
+
+        // Update payment status
+        await client.query(
+          `UPDATE payments 
+           SET razorpay_payment_id = $1, status = 'paid', processed_at = NOW()
+           WHERE razorpay_order_id = $2`,
+          [paymentId, orderId]
+        );
+
+        // Mark booking as paid
+        await client.query(
+          `UPDATE bookings SET paid = true, status = 'confirmed' WHERE id = $1`,
+          [bookingId]
+        );
+
+        console.log("✅ Booking auto-verified via webhook:", bookingId);
+      }
+    } else if (event === "payment.failed") {
+      const paymentId = payload.payment.entity.id;
+      const orderId = payload.payment.entity.order_id;
+
+      // Update payment status to failed
+      await client.query(
+        `UPDATE payments 
+         SET razorpay_payment_id = $1, status = 'failed'
+         WHERE razorpay_order_id = $2`,
+        [paymentId, orderId]
+      );
+
+      console.log("❌ Payment failed:", paymentId);
+    }
+
+    res.json({ status: "ok" });
+  } catch (err) {
+    console.error("❌ Webhook processing error:", err.message);
+    res.status(500).json({ message: "Webhook processing failed" });
+  } finally {
+    client.release();
+  }
+});
+
+// ============================================================
+// ✅ RAZORPAY: Check Payment Status
+// ============================================================
+app.get("/api/razorpay/payment-status/:booking_id", async (req, res) => {
+  const { booking_id } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT p.status, p.razorpay_payment_id, b.paid 
+       FROM payments p
+       JOIN bookings b ON p.booking_id = b.id
+       WHERE b.id = $1
+       ORDER BY p.created_at DESC LIMIT 1`,
+      [booking_id]
+    );
+    
+    if (!result.rows.length) {
+      return res.status(404).json({ message: "Payment not found" });
+    }
+
+    const payment = result.rows[0];
+    res.json({
+      status: payment.status,
+      paid: payment.paid,
+      razorpay_payment_id: payment.razorpay_payment_id
+    });
+  } catch (err) {
+    console.error("Payment status error:", err);
+    res.status(500).json({ message: "Error checking payment status." });
+  }
+});
+
+// Retrieve payment QR for a booking (used by frontend Pay Now)
+app.post('/api/payments/qr', async (req, res) => {
+  const { booking_id, customer_id } = req.body || {};
+  if (!booking_id) return res.status(400).json({ message: 'Missing booking_id' });
+  try {
+    const q = await pool.query(`SELECT qr_code, amount, expires_at FROM payments WHERE booking_id=$1 ORDER BY id DESC LIMIT 1`, [booking_id]);
+    if (!q.rows.length) return res.status(404).json({ message: 'Payment QR not found for this booking' });
+    const row = q.rows[0];
+    res.json({ qr: row.qr_code, amount: row.amount, expires_at: row.expires_at });
+  } catch (err) {
+    console.error('Fetch payment QR error:', err);
+    res.status(500).json({ message: 'Failed to fetch payment QR' });
+  }
+});
+
+// ============================================================
+// ✅ LEGACY: Verify payment by reference ID (deprecated - for backward compatibility)
+// ============================================================
+app.post("/api/verify-payment", async (req, res) => {
+  console.log("⚠️ DEPRECATED: verify-payment endpoint called - use Razorpay flow instead");
+  return res.status(410).json({ 
+    message: "Manual payment verification has been deprecated. Please use Razorpay payment gateway.",
+    use_razorpay_instead: true
+  });
+});
 
     // 7. Generate Return QR (dropoff)
     const returnQRData = {

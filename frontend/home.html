@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
   <link rel="stylesheet" href="/video-bg.css">
+  <script src="/voice-assistant.js" defer></script>
 
   <style>
     .status-paid { color: #16a34a; font-weight: bold; }
@@ -412,7 +413,46 @@
         console.warn('Could not fetch discounts:', e.message || e);
       }
     })();
+
+    // 🎤 Initialize Voice Assistant for Home Page
+    document.addEventListener('DOMContentLoaded', () => {
+      const voiceAssistant = initializeVoiceAssistant();
+      if (voiceAssistant) {
+        createVoiceUI('body');
+
+        // Custom commands for home page
+        voiceAssistant.addCommand('en', 'book_new', ['new booking', 'book new', 'next booking'], '🚗 Redirecting to booking page...');
+        voiceAssistant.addCommand('en', 'view_bookings', ['my bookings', 'view', 'show bookings'], '📋 Showing your bookings...');
+
+        voiceAssistant.addCommand('hi', 'book_new', ['नई बुकिंग', 'नई गाड़ी', 'अगली बुकिंग'], '🚗 बुकिंग पृष्ठ पर जा रहे हैं...');
+        voiceAssistant.addCommand('hi', 'view_bookings', ['मेरी बुकिंग', 'देखें', 'बुकिंग दिखाएं'], '📋 आपकी बुकिंग दिखा रहे हैं...');
+
+        voiceAssistant.addCommand('ta', 'book_new', ['புதிய முன்பதிவு', 'புதிய கார்', 'அடுத்த முன்பதிவு'], '🚗 முன்பதிவு பக்கத்திற்கு திருப்பிக்கொண்டுள்ளோம்...');
+        voiceAssistant.addCommand('ta', 'view_bookings', ['என் முன்பதிவுகள்', 'பார்க்க', 'முன்பதிவுகளைக் காட்டு'], '📋 உங்கள் முன்பதிவுகளைக் காட்டுகிறது...');
+
+        voiceAssistant.addCommand('te', 'book_new', ['నూ బుకింగ్', 'నూ కార్', 'నెక్స్ట్ బుకింగ్'], '🚗 బుకింగ్ పేజీకి రీడిరెక్ట్ చేస్తున్నాము...');
+        voiceAssistant.addCommand('te', 'view_bookings', ['నా బుకింగ్‌లు', 'వీక్షించు', 'బుకింగ్‌లను చూపించు'], '📋 మీ బుకింగ్‌లను చూపిస్తున్నది...');
+
+        // NOTE: Payment commands are disabled for security reasons
+        // Users must manually click payment buttons to ensure security
+
+        // Listen for voice commands
+        document.addEventListener('voiceCommand', (e) => {
+          const { commandType } = e.detail;
+          
+          if (commandType === 'book_new') {
+            window.location.href = '/book.html';
+          } else if (commandType === 'view_bookings') {
+            const scrollTarget = document.getElementById('activeBookings');
+            if (scrollTarget) scrollTarget.scrollIntoView({ behavior: 'smooth' });
+          }
+        });
+
+        console.log('🎤 Voice Assistant ready for Home Page!');
+        console.log('ℹ️ Payment actions require manual confirmation (not via voice)');
+      }
+    });
   </script>
-  <script src="/video-bg.js" defer></script>
+  <script src="/video-bg.js"></script>
 </body>
 </html>
