@@ -1700,6 +1700,9 @@ app.post("/api/razorpay/create-order", async (req, res) => {
       }
     };
 
+    console.log("📦 Creating Razorpay order with options:", JSON.stringify(orderOptions, null, 2));
+    console.log("🔑 Razorpay instance:", razorpay ? "initialized" : "NOT initialized");
+    
     const order = await razorpay.orders.create(orderOptions);
     console.log("✅ Razorpay order created:", order.id);
 
@@ -1721,8 +1724,10 @@ app.post("/api/razorpay/create-order", async (req, res) => {
       customer_name: bookingData.customer_name
     });
   } catch (err) {
-    console.error("❌ Order creation error:", err.message);
-    res.status(500).json({ message: "Failed to create payment order: " + err.message });
+    const errorMessage = err?.message || err?.toString() || JSON.stringify(err) || "Unknown error";
+    console.error("❌ Order creation error:", errorMessage);
+    console.error("❌ Full error object:", err);
+    res.status(500).json({ message: "Failed to create payment order: " + errorMessage });
   } finally {
     client.release();
   }
