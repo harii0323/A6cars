@@ -144,6 +144,16 @@ async function runDatabaseMigrations() {
       `CREATE INDEX IF NOT EXISTS idx_payment_booking_status ON payments(booking_id, status)`
     );
     console.log('✅ Created indexes for Razorpay columns');
+    
+    // Check if payment_reference_id column exists to determine if migrations have run
+    const checkPaymentRef = await pool.query(
+      `SELECT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'payments' AND column_name = 'payment_reference_id'
+      )`
+    );
+
+    if (checkPaymentRef.rows[0].exists === false) {
       
       // Ensure refund-related columns exist so we can track refunds
       const checkRefundAmount = await pool.query(
@@ -2020,74 +2030,6 @@ app.post("/api/verify-payment", async (req, res) => {
     message: "Manual payment verification has been deprecated. Please use Razorpay payment gateway.",
     use_razorpay_instead: true
   });
-});
-
-    // 7. Generate Return QR (dropoff)
-    const returnQRData = {
-      qr_type: "return",
-      booking_id: bookingData.id,
-      customer_id: bookingData.customer_id,
-      customer_name: bookingData.customer_name,
-      customer_phone: bookingData.customer_phone,
-      car_id: bookingData.car_id,
-      car: `${bookingData.brand} ${bookingData.model}`,
-      location: bookingData.location,
-      end_date: bookingData.end_date,
-      amount: bookingData.amount,
-      payment_reference_id: payment_reference_id
-    };
-    const returnQR = await QRCode.toDataURL(JSON.stringify(returnQRData));
-
-    // Send payment confirmation email
-    try {
-      const carInfo = {
-        brand: bookingData.brand,
-        model: bookingData.model,
-        location: bookingData.location
-      };
-      const bookingInfo = {
-        id: bookingData.id,
-        start_date: bookingData.start_date,
-        end_date: bookingData.end_date,
-        amount: bookingData.amount
-      };
-      const customerInfo = {
-        name: bookingData.customer_name,
-        email: bookingData.customer_email
-      };
-      
-      await sendPaymentConfirmedEmail(customerInfo, bookingInfo, carInfo);
-    } catch (emailErr) {
-      console.warn('⚠️ Payment confirmation email failed (non-blocking):', emailErr.message);
-    }
-
-    res.json({
-      message: "✅ Payment verified successfully!",
-      payment_reference_id: payment_reference_id,
-      collection_qr: collectionQR,
-      return_qr: returnQR,
-      booking_details: {
-        booking_id: bookingData.id,
-        customer_name: bookingData.customer_name,
-        car: `${bookingData.brand} ${bookingData.model}`,
-        amount: bookingData.amount,
-        start_date: bookingData.start_date,
-        end_date: bookingData.end_date
-      }
-    });
-  } catch (err) {
-    console.error("❌ Payment verification error:", err.message);
-    console.error("Error details:", err);
-    
-    // Provide helpful error messages for common issues
-    if (err.message && err.message.includes('payment_reference_id')) {
-      return res.status(500).json({ message: "Database schema missing payment_reference_id column. Run migration: migration_add_payment_reference.sql" });
-    }
-    
-    res.status(500).json({ message: "Error verifying payment: " + err.message });
-  } finally {
-    client.release();
-  }
 });
 
 // ============================================================
