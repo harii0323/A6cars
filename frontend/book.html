@@ -467,35 +467,605 @@
       document.body.removeChild(a);
     }
 
+    // ✅ Advanced Voice Booking - Parse car name and dates from voice input (Multi-language support)
+    async function voiceBookCar(input) {
+      try {
+        console.log('🎤 Processing voice booking request:', input);
+        
+        // Parse input for car name and dates
+        const parseResult = parseVoiceBookingInput(input);
+        if (!parseResult.success) {
+          return { success: false, message: parseResult.message };
+        }
+
+        const { carName, startDate, endDate, voiceAssistant, language } = parseResult;
+
+        // 1. Search for matching car
+        const cars = await fetch(`${BACKEND_URL}/api/cars`).then(r => r.json());
+        const matchedCar = cars.find(car => {
+          const fullName = `${car.brand} ${car.model}`.toLowerCase();
+          return fullName.includes(carName.toLowerCase()) || carName.toLowerCase().includes(car.brand.toLowerCase());
+        });
+
+        if (!matchedCar) {
+          const availableCars = cars.map(c => `${c.brand} ${c.model}`).join(', ');
+          const message = language === 'hi-IN' ? 
+            `गाड़ी "${carName}" नहीं मिली। उपलब्ध गाड़ियाँ: ${availableCars}` :
+            language === 'ta-IN' ?
+            `"${carName}" கார் கிடைக்கவில்லை. கிடைக்கும் கார்கள்: ${availableCars}` :
+            language === 'te-IN' ?
+            `"${carName}" కారు కనుగొనబడలేదు. అందుబాటులో ఉన్న కార్లు: ${availableCars}` :
+            `Car "${carName}" not found. Available cars: ${availableCars}`;
+          
+          if (voiceAssistant) voiceAssistant.speak(message);
+          return { success: false, message };
+        }
+
+        // 2. Fetch booked dates for this car
+        const bookings = await fetch(`${BACKEND_URL}/api/bookings/${matchedCar.id}`).then(r => r.json());
+        const disabledDates = [];
+        bookings.forEach(booking => {
+          const start = new Date(booking.start_date);
+          const end = new Date(booking.end_date);
+          for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            disabledDates.push(new Date(d).toISOString().split('T')[0]);
+          }
+        });
+
+        // 3. Check if requested dates are available
+        const dateRangeStr = `${startDate} to ${endDate}`;
+        const requestedStart = new Date(startDate);
+        const requestedEnd = new Date(endDate);
+
+        let hasConflict = false;
+        for (let d = new Date(requestedStart); d <= requestedEnd; d.setDate(d.getDate() + 1)) {
+          const dateStr = d.toISOString().split('T')[0];
+          if (disabledDates.includes(dateStr)) {
+            hasConflict = true;
+            break;
+          }
+        }
+
+        if (hasConflict) {
+          // Find available dates
+          const availablePeriods = findAvailablePeriods(disabledDates, language);
+          const message = language === 'hi-IN' ?
+            `${matchedCar.brand} ${matchedCar.model} ${dateRangeStr} के लिए उपलब्ध नहीं है। उपलब्ध अवधि: ${availablePeriods}` :
+            language === 'ta-IN' ?
+            `${matchedCar.brand} ${matchedCar.model} ${dateRangeStr} நேரத்தில் கிடைக்கவில்லை. கிடைக்கும் நேரம்: ${availablePeriods}` :
+            language === 'te-IN' ?
+            `${matchedCar.brand} ${matchedCar.model} ${dateRangeStr} సమయంలో అందుబాటులో లేదు. అందుబాటులో ఉన్న కాలం: ${availablePeriods}` :
+            `${matchedCar.brand} ${matchedCar.model} is not available from ${dateRangeStr}. Available periods: ${availablePeriods}`;
+          
+          if (voiceAssistant) voiceAssistant.speak(message);
+          return { success: false, message, availableDates: availablePeriods };
+        }
+
+        // 4. Dates are available - Ask for confirmation before booking
+        const formattedStartDate = formatDateForConfirmation(startDate, language);
+        const formattedEndDate = formatDateForConfirmation(endDate, language);
+        
+        const confirmation_msg = language === 'hi-IN' ?
+          `क्या मैं सही समझ रहा हूँ? आप ${matchedCar.brand} ${matchedCar.model} को ${formattedStartDate} से ${formattedEndDate} तक बुक करना चाहते हैं?` :
+          language === 'ta-IN' ?
+          `சரியாக புரிந்தேன் என்று நினைக்கிறீர்கள்? நீங்கள் ${matchedCar.brand} ${matchedCar.model} ஐ ${formattedStartDate} முதல் ${formattedEndDate} வரை முன்பதிவு செய்ய விரும்புகிறீர்கள்?` :
+          language === 'te-IN' ?
+          `నేను సరిగ్గా అర్థం చేసుకున్నాను అని భావిస్తున్నాను? మీరు ${matchedCar.brand} ${matchedCar.model} ను ${formattedStartDate} నుండి ${formattedEndDate} వరకు బుక్ చేయాలనుకుంటున్నారు?` :
+          `Let me confirm: Do you want to book ${matchedCar.brand} ${matchedCar.model} from ${formattedStartDate} to ${formattedEndDate}?`;
+        
+        if (voiceAssistant) voiceAssistant.speak(confirmation_msg);
+        
+        // Show confirmation modal and wait for user response
+        showConfirmationModal(confirmation_msg, matchedCar, startDate, endDate, language, voiceAssistant);
+
+        return { success: true, car: matchedCar, startDate, endDate };
+
+      } catch (err) {
+        console.error('❌ Voice booking error:', err);
+        return { success: false, message: 'Error processing booking: ' + err.message };
+      }
+    }
+
+    // ✅ Parse voice input to extract car name and dates (Multi-language support + Flexible Ordering)
+    // FLEXIBLE ORDER SUPPORT: Customer can say car name THEN dates OR dates THEN car name
+    // Examples:
+    //   "Maruti Swift from January 10 to 12"  ✓
+    //   "January 10 to 12, Maruti Swift"      ✓
+    //   "Book me Maruti Swift Jan 10-12"      ✓
+    //   "Jan 10 to 12 Maruti Swift"           ✓
+    function parseVoiceBookingInput(input) {
+      try {
+        const lowerInput = input.toLowerCase();
+        const voiceAssistant = window.voiceAssistant;
+        const currentLanguage = voiceAssistant?.language || 'en-IN';
+
+        console.log(`🌐 Parsing in language: ${currentLanguage}`);
+
+        // Extract car name - look for brand names
+        const carBrands = ['maruti', 'honda', 'toyota', 'hyundai', 'tata', 'mahindra', 'bmw', 'audi', 'skoda', 'volkswagen'];
+        let carName = '';
+        
+        for (const brand of carBrands) {
+          if (lowerInput.includes(brand)) {
+            // Extract brand + model (next word)
+            const regex = new RegExp(`${brand}\\s+(\\w+)`, 'i');
+            const match = lowerInput.match(regex);
+            carName = match ? `${brand} ${match[1]}` : brand;
+            break;
+          }
+        }
+
+        if (!carName) {
+          const message = currentLanguage === 'hi-IN' ?
+            'गाड़ी का नाम समझ नहीं आया। कृपया कार ब्रांड का नाम कहें।' :
+            currentLanguage === 'ta-IN' ?
+            'கார் பெயர் புரியவில்லை. கார் ব்র்যান்ட் பெயரைச் சொல்லவும்.' :
+            currentLanguage === 'te-IN' ?
+            'కారు పేరు అర్థం కాలేదు. కారు ఖ్యాతిని చెప్పండి.' :
+            'Car name not recognized. Please say the car brand name.';
+          
+          return { success: false, message, voiceAssistant };
+        }
+
+        // Extract dates - Enhanced to support regional month names
+        const { startDate, endDate } = extractDatesFromInput(lowerInput, currentLanguage);
+
+        if (!startDate || !endDate) {
+          const message = currentLanguage === 'hi-IN' ?
+            'तारीखें समझ नहीं आईं। कृपया कहें: "Maruti Swift को January 10 से January 12 तक बुक करें"' :
+            currentLanguage === 'ta-IN' ?
+            'தேதிகளைப் புரியவில்லை. கூறவும்: "Maruti Swift ஐ January 10 முதல் January 12 வரை முன்பதிவு செய்யவும்"' :
+            currentLanguage === 'te-IN' ?
+            'తేదీలను అర్థం చేసుకోలేను. చెప్పండి: "Maruti Swift ను January 10 నుండి January 12 వరకు బుక్ చేయండి"' :
+            'Could not understand the dates. Please say: "Book Maruti Swift from January 10 to January 12"';
+          
+          return { success: false, message, voiceAssistant };
+        }
+
+        console.log(`✅ Parsed - Car: ${carName}, Start: ${startDate}, End: ${endDate}, Language: ${currentLanguage}`);
+        return { success: true, carName, startDate, endDate, voiceAssistant, language: currentLanguage };
+
+      } catch (err) {
+        console.error('Date parsing error:', err);
+        return { success: false, message: 'Error parsing input', voiceAssistant: window.voiceAssistant };
+      }
+    }
+
+    // ✅ Extract dates from input (supports English and regional month names)
+    function extractDatesFromInput(lowerInput, language) {
+      // Month mappings for all languages
+      const monthMappings = {
+        'en-IN': {
+          'january': 1, 'jan': 1, 'february': 2, 'feb': 2, 'march': 3, 'mar': 3, 'april': 4, 'apr': 4,
+          'may': 5, 'june': 6, 'jun': 6, 'july': 7, 'jul': 7, 'august': 8, 'aug': 8,
+          'september': 9, 'sep': 9, 'october': 10, 'oct': 10, 'november': 11, 'nov': 11, 'december': 12, 'dec': 12
+        },
+        'hi-IN': {
+          'जनवरी': 1, 'जन': 1, 'फरवरी': 2, 'फर': 2, 'मार्च': 3, 'अप्रैल': 4,
+          'मई': 5, 'जून': 6, 'जुलाई': 7, 'अगस्त': 8, 'सितंबर': 9, 'सितम्बर': 9,
+          'अक्टूबर': 10, 'नवंबर': 11, 'दिसंबर': 12,
+          'january': 1, 'jan': 1, 'february': 2, 'feb': 2, 'march': 3, 'may': 5, 'june': 6, 'july': 7, 'august': 8
+        },
+        'ta-IN': {
+          'ஜனவரி': 1, 'பிப்ரவரி': 2, 'மார்চ்': 3, 'ஏப்ரல்': 4,
+          'மே': 5, 'ஜூன்': 6, 'ஜூலை': 7, 'ஆகஸ்ட்': 8, 'செப்டம்பர்': 9,
+          'அக்டோபர்': 10, 'நவம்பர்': 11, 'டிசம்பர்': 12,
+          'january': 1, 'february': 2, 'march': 3
+        },
+        'te-IN': {
+          'జనవరి': 1, 'ఫిబ్రవరి': 2, 'మార్చ్': 3, 'ఏప్రిల్': 4,
+          'మే': 5, 'జూన్': 6, 'జూలై': 7, 'ఆగస్టు': 8, 'సెప్టెంబర్': 9,
+          'అక్టోబర్': 10, 'నవంబర్': 11, 'డిసెంబర్': 12,
+          'january': 1, 'february': 2, 'march': 3
+        }
+      };
+
+      const months = monthMappings[language] || monthMappings['en-IN'];
+      let startDate = '', endDate = '';
+      const year = new Date().getFullYear();
+
+      // Pattern 1: "month day to day" (e.g., "january 10 to 12")
+      const pattern1 = /(\w+)\s+(\d{1,2})\s+(?:to|-)\s+(\d{1,2})/i;
+      const match1 = lowerInput.match(pattern1);
+      if (match1) {
+        const monthStr = match1[1].toLowerCase();
+        const month = months[monthStr];
+        if (month) {
+          startDate = `${year}-${String(month).padStart(2, '0')}-${String(match1[2]).padStart(2, '0')}`;
+          endDate = `${year}-${String(month).padStart(2, '0')}-${String(match1[3]).padStart(2, '0')}`;
+          return { startDate, endDate };
+        }
+      }
+
+      // Pattern 2: "from month day to month day" (e.g., "from january 10 to january 12")
+      const pattern2 = /(?:from\s+)?(\w+)\s+(\d{1,2})\s+(?:to\s+)?(\w+)?\s*(\d{1,2})/i;
+      const match2 = lowerInput.match(pattern2);
+      if (match2) {
+        const month1Str = match2[1].toLowerCase();
+        const month1 = months[month1Str];
+        const month2Str = (match2[3] || match2[1]).toLowerCase();
+        const month2 = months[month2Str];
+        
+        if (month1 && month2) {
+          startDate = `${year}-${String(month1).padStart(2, '0')}-${String(match2[2]).padStart(2, '0')}`;
+          endDate = `${year}-${String(month2).padStart(2, '0')}-${String(match2[4]).padStart(2, '0')}`;
+          return { startDate, endDate };
+        }
+      }
+
+      // Pattern 3: "day month to day month" (e.g., "10 january to 12 january")
+      const pattern3 = /(\d{1,2})\s+(\w+)\s+(?:to|-)\s+(\d{1,2})\s+(\w+)?/i;
+      const match3 = lowerInput.match(pattern3);
+      if (match3) {
+        const month1Str = match3[2].toLowerCase();
+        const month1 = months[month1Str];
+        const month2Str = (match3[4] || match3[2]).toLowerCase();
+        const month2 = months[month2Str];
+        
+        if (month1 && month2) {
+          startDate = `${year}-${String(month1).padStart(2, '0')}-${String(match3[1]).padStart(2, '0')}`;
+          endDate = `${year}-${String(month2).padStart(2, '0')}-${String(match3[3]).padStart(2, '0')}`;
+          return { startDate, endDate };
+        }
+      }
+
+      return { startDate: '', endDate: '' };
+    }
+
+    // ✅ Find available periods from disabled dates (Language-aware)
+    function findAvailablePeriods(disabledDates, language = 'en-IN') {
+      if (disabledDates.length === 0) {
+        const available = {
+          'hi-IN': 'सभी तारीखें उपलब्ध हैं',
+          'ta-IN': 'அனைத்து தேதிகளும் கிடைக்கிறது',
+          'te-IN': 'అన్ని తేదీలు అందుబాటులో ఉన్నాయి',
+          'en-IN': 'All dates available'
+        };
+        return available[language] || available['en-IN'];
+      }
+      
+      const today = new Date();
+      const nextMonth = new Date(today);
+      nextMonth.setMonth(nextMonth.getMonth() + 1);
+      
+      const monthNames = {
+        'en-IN': ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+        'hi-IN': ['जनवरी', 'फरवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर'],
+        'ta-IN': ['ஜனவரி', 'பிப்ரவரி', 'மார்চ்', 'ஏப்ரல்', 'மே', 'ஜூன்', 'ஜூலை', 'ஆகஸ்ட்', 'செப்டம்பர்', 'அக்டோபர்', 'நவம்பர்', 'டிசம்பர்'],
+        'te-IN': ['జనవరి', 'ఫిబ్రవరి', 'మార్చ్', 'ఏప్రిల్', 'మే', 'జూన్', 'జూలై', 'ఆగస్టు', 'సెప్టెంబర్', 'అక్టోబర్', 'నవంబర్', 'డిసెంబర్']
+      };
+
+      const months = monthNames[language] || monthNames['en-IN'];
+      const monthName = months[nextMonth.getMonth()];
+      const day = nextMonth.getDate();
+      
+      const suggestions = {
+        'hi-IN': `कृपया ${monthName} ${day} से आगे की तारीख चुनें`,
+        'ta-IN': `தயவுசெய்து ${monthName} ${day} இல் இருந்து தேர்ந்தெடுக்கவும்`,
+        'te-IN': `దయచేసి ${monthName} ${day} నుండి ఎంచుకోండి`,
+        'en-IN': `Please try ${monthName} ${day} onwards`
+      };
+      
+      return suggestions[language] || suggestions['en-IN'];
+    }
+
+    // Helper function to format date with ordinal for confirmation
+    function formatDateForConfirmation(dateStr, language) {
+      if (!dateStr) return '';
+      
+      const [year, month, day] = dateStr.split('-');
+      const dayNum = parseInt(day);
+      
+      const months = {
+        'hi-IN': ['जनवरी', 'फरवरी', 'मार्च', 'अप्रैल', 'मई', 'जून', 
+                 'जुलाई', 'अगस्त', 'सितंबर', 'अक्टूबर', 'नवंबर', 'दिसंबर'],
+        'ta-IN': ['ஜனவரி', 'பிப்ரவரி', 'மார்சு', 'ஏப்ரல்', 'மே', 'ஜூன்', 
+                 'ஜூலை', 'ஆகஸ்ட்', 'செப்டம்பர்', 'அக்டோபர்', 'நவம்பர்', 'டிசம்பர்'],
+        'te-IN': ['జనవరి', 'ఫిబ్రవరి', 'మార్చి', 'ఏప్రిల్', 'మే', 'జూన్', 
+                 'జూలై', 'ఆగస్టు', 'సెప్టెంబర్', 'అక్టోబర్', 'నవంబర్', 'డిసెంబర్'],
+        'en-IN': ['January', 'February', 'March', 'April', 'May', 'June', 
+                 'July', 'August', 'September', 'October', 'November', 'December']
+      };
+      
+      // Get ordinal suffix based on language
+      const getOrdinalSuffix = (num, lang) => {
+        if (lang === 'en-IN') {
+          if (num > 3 && num < 21) return 'th';
+          if (num % 10 === 1) return 'st';
+          if (num % 10 === 2) return 'nd';
+          if (num % 10 === 3) return 'rd';
+          return 'th';
+        }
+        // Hindi, Tamil, Telugu use same number format without suffix
+        return '';
+      };
+      
+      const monthIndex = parseInt(month) - 1;
+      const monthName = (months[language] || months['en-IN'])[monthIndex];
+      const suffix = getOrdinalSuffix(dayNum, language);
+      
+      return `${dayNum}${suffix} ${monthName}`;
+    }
+    
+    // Helper function to show confirmation modal with voice support
+    function showConfirmationModal(message, car, startDate, endDate, language, voiceAssistant) {
+      // Create modal if not exists
+      let modal = document.getElementById('confirmation-modal');
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'confirmation-modal';
+        modal.style.cssText = `
+          position: fixed;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: white;
+          border-radius: 12px;
+          padding: 30px;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+          z-index: 10000;
+          max-width: 400px;
+          text-align: center;
+          font-family: Arial, sans-serif;
+          min-width: 300px;
+        `;
+        
+        modal.innerHTML = `
+          <div style="margin-bottom: 20px;">
+            <h3 style="color: #333; margin: 0 0 15px 0; font-size: 18px;" id="confirm-message"></h3>
+            <p style="color: #666; font-size: 14px; margin: 10px 0;">
+              <span id="voice-instruction"></span>
+            </p>
+          </div>
+          <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+            <button id="confirm-yes" style="
+              background: #4CAF50;
+              color: white;
+              border: none;
+              padding: 10px 20px;
+              border-radius: 6px;
+              cursor: pointer;
+              font-weight: bold;
+              font-size: 14px;
+            ">
+              ✓ Confirm
+            </button>
+            <button id="confirm-no" style="
+              background: #f44336;
+              color: white;
+              border: none;
+              padding: 10px 20px;
+              border-radius: 6px;
+              cursor: pointer;
+              font-weight: bold;
+              font-size: 14px;
+            ">
+              ✗ Retry
+            </button>
+          </div>
+          <div id="confirmation-overlay" style="
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 9999;
+          "></div>
+        `;
+        document.body.appendChild(modal);
+      }
+      
+      // Update modal content
+      const messageEl = modal.querySelector('#confirm-message');
+      const instructionEl = modal.querySelector('#voice-instruction');
+      const confirmBtn = modal.querySelector('#confirm-yes');
+      const retryBtn = modal.querySelector('#confirm-no');
+      
+      messageEl.textContent = message;
+      
+      // Set instruction based on language
+      const instructions = {
+        'hi-IN': 'कृपया पुष्टि करने के लिए "हाँ" या "सही है" कहें, या पुनः कोशिश करने के लिए "नहीं" कहें',
+        'ta-IN': 'உறுதிப்படுத்த "ஆம்" அல்லது "சரி" என்று சொல்லவும் அல்லது மீண்டும் முயற்சிக்க "இல்லை" என்று சொல்லவும்',
+        'te-IN': 'నిర్ధారించడానికి "అవును" లేదా "సరి" చెప్పండి లేదా మళ్లీ ప్రయత్నించడానికి "కాదు" చెప్పండి',
+        'en-IN': 'Say "Yes" or "Correct" to confirm, or "No" to retry'
+      };
+      
+      instructionEl.textContent = instructions[language] || instructions['en-IN'];
+      
+      // Remove existing listeners and attach new ones
+      confirmBtn.replaceWith(confirmBtn.cloneNode(true));
+      retryBtn.replaceWith(retryBtn.cloneNode(true));
+      
+      const newConfirmBtn = modal.querySelector('#confirm-yes');
+      const newRetryBtn = modal.querySelector('#confirm-no');
+      
+      // Show modal
+      modal.style.display = 'block';
+      
+      // Confirmation handler
+      const handleConfirmation = (confirmed) => {
+        modal.style.display = 'none';
+        document.getElementById('confirmation-overlay').style.display = 'none';
+        
+        if (confirmed) {
+          const success_msg = language === 'hi-IN' ?
+            `बहुत अच्छा! आपकी बुकिंग प्रक्रिया शुरू हो रही है...` :
+            language === 'ta-IN' ?
+            `சிறப்பு! உங்கள் முன்பதிவு செயல்முறை தொடங்கிறது...` :
+            language === 'te-IN' ?
+            `గ్రేట్! మీ బుకింగ్ ప్రక్రియ ప్రారంభమవుతుంది...` :
+            `Great! Processing your booking...`;
+          
+          if (voiceAssistant) voiceAssistant.speak(success_msg);
+          
+          // Auto-fill dates and book
+          const carId = car.id;
+          const startInput = document.getElementById(`start-${carId}`);
+          const endInput = document.getElementById(`end-${carId}`);
+          
+          if (startInput) startInput.value = startDate;
+          if (endInput) endInput.value = endDate;
+          
+          // Scroll and book
+          const carElement = document.querySelector(`button[id="book-btn-${carId}"]`);
+          if (carElement) {
+            carElement.scrollIntoView({ behavior: 'smooth' });
+            setTimeout(() => bookCar(carId), 500);
+          }
+        } else {
+          const retry_msg = language === 'hi-IN' ?
+            `ठीक है, कृपया फिर से बताएँ। आप कौन सी गाड़ी बुक करना चाहते हैं और किस तारीख से?` :
+            language === 'ta-IN' ?
+            `சரி, மீண்டும் சொல்லுங்கள். நீங்கள் எந்த கார் மற்றும் எந்த தேதியில் முன்பதிவு செய்ய விரும்புகிறீர்கள்?` :
+            language === 'te-IN' ?
+            `సరేనండి, మళ్లీ చెప్పండి. మీరు ఏ కారు మరియు ఏ తేదీకి బుక్ చేయాలనుకుంటున్నారు?` :
+            `Okay, please tell me again. Which car and which dates do you want to book?`;
+          
+          if (voiceAssistant) voiceAssistant.speak(retry_msg);
+        }
+      };
+      
+      newConfirmBtn.addEventListener('click', () => handleConfirmation(true));
+      newRetryBtn.addEventListener('click', () => handleConfirmation(false));
+      
+      // Listen for voice confirmation commands
+      if (voiceAssistant) {
+        const yesPatterns = {
+          'hi-IN': ['हाँ', 'जी', 'सही', 'सही है', 'हाँ सही है', 'जी बिल्कुल', 'ठीक है'],
+          'ta-IN': ['ஆம்', 'சரி', 'சரியாக', 'ஆம் சரி', 'சரியாக உள்ளது'],
+          'te-IN': ['అవును', 'సరిగ్గా', 'సరి', 'అవును సరిగ్గా'],
+          'en-IN': ['yes', 'yeah', 'correct', 'that\'s right', 'that is right', 'confirm', 'proceed']
+        };
+        
+        const noPatterns = {
+          'hi-IN': ['नहीं', 'न', 'गलत', 'फिर से', 'दोबारा'],
+          'ta-IN': ['இல்லை', 'தவறு', 'மீண்டும்'],
+          'te-IN': ['కాదు', 'లేదు', 'తప్పు', 'మళ్లీ'],
+          'en-IN': ['no', 'nope', 'wrong', 'retry', 'again', 'change']
+        };
+        
+        const voiceListener = (event) => {
+          const transcript = event.detail.transcript.toLowerCase();
+          const patterns = yesPatterns[language] || yesPatterns['en-IN'];
+          const noPatterns_lang = noPatterns[language] || noPatterns['en-IN'];
+          
+          const isYes = patterns.some(p => transcript.includes(p.toLowerCase()));
+          const isNo = noPatterns_lang.some(p => transcript.includes(p.toLowerCase()));
+          
+          if (isYes) {
+            document.removeEventListener('voice-command-received', voiceListener);
+            handleConfirmation(true);
+          } else if (isNo) {
+            document.removeEventListener('voice-command-received', voiceListener);
+            handleConfirmation(false);
+          }
+        };
+        
+        // Listen for voice response with 10 second timeout
+        document.addEventListener('voice-command-received', voiceListener);
+        
+        setTimeout(() => {
+          document.removeEventListener('voice-command-received', voiceListener);
+        }, 10000);
+      }
+    }
+
     // Load cars on start
     loadCars();
 
-    // 🎤 Initialize Voice Assistant for booking
+    // 🎤 Initialize Voice Assistant for booking with enhanced language support
     document.addEventListener('DOMContentLoaded', () => {
       // Initialize voice assistant
       const voiceAssistant = initializeVoiceAssistant();
+      window.voiceAssistant = voiceAssistant;
+      
       if (voiceAssistant) {
         createVoiceUI('body');
+        const currentLanguage = voiceAssistant.language;
 
-        // Enhanced commands for booking page
-        voiceAssistant.addCommand('en', 'pick_car', ['select', 'pick', 'choose', 'want'], '🎤 Which car would you like to book?');
-        voiceAssistant.addCommand('en', 'set_dates', ['dates', 'when', 'start', 'end'], '🎤 Please select your start and end dates');
-        voiceAssistant.addCommand('en', 'complete_booking', ['complete', 'finished', 'ready'], '✅ Proceeding to payment...');
+        console.log(`🌐 Voice Assistant initialized in language: ${currentLanguage}`);
 
-        voiceAssistant.addCommand('hi', 'pick_car', ['चुनें', 'पिक करें', 'चाहिए'], '🎤 कौन सी गाड़ी चाहिए?');
-        voiceAssistant.addCommand('hi', 'set_dates', ['तारीख', 'कब', 'से', 'तक'], '🎤 कृपया तारीख चुनें');
+        // ============ ENGLISH COMMANDS ============
+        voiceAssistant.addCommand('en', 'book_with_details', 
+          ['book a car', 'book', 'reserve a car', 'car from', 'book me', 'book for me'], 
+          '🎤 Please say the car name and dates. Example: "Book Maruti Swift from January 10 to January 12"');
 
-        voiceAssistant.addCommand('ta', 'pick_car', ['தேர்ந்தெடுக்க', 'பிக்', 'வேண்டும்'], '🎤 எந்த காரைத் தேர்ந்தெடுக்கவேண்டுமென்று விரும்புகிறீர்கள்?');
-        voiceAssistant.addCommand('ta', 'set_dates', ['தேதிகள்', 'எப்போது', 'பிக்அப்', 'ரிட்டர்ன்'], '🎤 தயவுசெய்து தேதிகளை தேர்ந்தெடுக்கவும்');
+        voiceAssistant.addCommand('en', 'pick_car', 
+          ['select', 'pick', 'choose', 'want', 'show me'], 
+          '🎤 Which car would you like to book?');
 
-        voiceAssistant.addCommand('te', 'pick_car', ['ఎంచుకోండి', 'పిక్', 'కావాలి'], '🎤 మీరు ఏ కారును ఎంచుకోవాలనుకుంటున్నారు?');
-        voiceAssistant.addCommand('te', 'set_dates', ['తేదీలు', 'ఎప్పుడు', 'పికప్', 'రిటర్న్'], '🎤 దయచేసి తేదీలను ఎంచుకోండి');
+        voiceAssistant.addCommand('en', 'set_dates', 
+          ['dates', 'when', 'start', 'end', 'from', 'to'], 
+          '🎤 Please select your start and end dates');
+
+        voiceAssistant.addCommand('en', 'complete_booking', 
+          ['complete', 'finished', 'ready', 'proceed', 'go ahead'], 
+          '✅ Proceeding to payment...');
+
+        // ============ HINDI COMMANDS ============
+        voiceAssistant.addCommand('hi', 'book_with_details',
+          ['गाड़ी बुक करें', 'बुक करो', 'बुक', 'कार बुक करनी है', 'रिजर्व', 'मुझे गाड़ी चाहिए', 'गाड़ी चाहिए'],
+          '🎤 कार का नाम और तारीख बताएं। उदाहरण: "मुझे Maruti Swift को 10 जनवरी से 12 जनवरी तक बुक करना है"');
+
+        voiceAssistant.addCommand('hi', 'pick_car', 
+          ['चुनें', 'चुनो', 'पिक करें', 'सलेक्ट', 'कौन सी', 'कार चुनें', 'कार चुनो'], 
+          '🎤 कौन सी गाड़ी चाहिए?');
+
+        voiceAssistant.addCommand('hi', 'set_dates', 
+          ['तारीख', 'तारीखें', 'कब', 'से', 'तक', 'शुरुआत', 'अंत'], 
+          '🎤 कृपया तारीख चुनें');
+
+        voiceAssistant.addCommand('hi', 'complete_booking', 
+          ['पूरा करो', 'पूरा', 'तैयार हूँ', 'जारी रखें', 'आगे बढ़ो'], 
+          '✅ भुगतान प्रक्रिया शुरू हो रही है...');
+
+        // ============ TAMIL COMMANDS ============
+        voiceAssistant.addCommand('ta', 'book_with_details',
+          ['கார் முன்பதிவு செய்', 'முன்பதிவு செய்', 'முன்பதிவு', 'நான் ஒரு கார் வேண்டும்', 'கார் வேண்டும்', 'பதிவு செய்'],
+          '🎤 காரின் பெயர் மற்றும் தேதிகளைச் சொல்லவும்');
+
+        voiceAssistant.addCommand('ta', 'pick_car', 
+          ['தேர்ந்தெடுக்க', 'தேர்ந்து', 'பிக்', 'பிக் செய்', 'கார் தேர்ந்து', 'வேண்டும்'], 
+          '🎤 எந்த காரைத் தேர்ந்தெடுக்கவேண்டுமென்று விரும்புகிறீர்கள்?');
+
+        voiceAssistant.addCommand('ta', 'set_dates', 
+          ['தேதி', 'தேதிகள்', 'எப்போது', 'பிக்அப்', 'ரிட்டர்ன்', 'இருந்து', 'வரை'], 
+          '🎤 தயவுசெய்து தேதிகளை தேர்ந்தெடுக்கவும்');
+
+        voiceAssistant.addCommand('ta', 'complete_booking', 
+          ['முடிக்க', 'முடிந்தது', 'தயாரிருக்கு', 'முன்னிலை', 'செல்லுக்'], 
+          '✅ பணம் செலுத்தும் செயல்முறை தொடங்கிறது...');
+
+        // ============ TELUGU COMMANDS ============
+        voiceAssistant.addCommand('te', 'book_with_details',
+          ['కారు బుకింగ్', 'బుక్ చేయు', 'బుక్', 'నాకు కారు కావాలి', 'కారు కావాలి', 'రిజర్వ్'],
+          '🎤 కారు పేరు మరియు తేదీలను చెప్పండి');
+
+        voiceAssistant.addCommand('te', 'pick_car', 
+          ['ఎంచుకోండి', 'ఎంచుకో', 'పిక్', 'సిలెక్ట్', 'కారు ఎంచుకోండి', 'కావాలి'], 
+          '🎤 మీరు ఏ కారును ఎంచుకోవాలనుకుంటున్నారు?');
+
+        voiceAssistant.addCommand('te', 'set_dates', 
+          ['తేదీ', 'తేదీలు', 'ఎప్పుడు', 'పికప్', 'రిటర్న్', 'నుండి', 'వరకు'], 
+          '🎤 దయచేసి తేదీలను ఎంచుకోండి');
+
+        voiceAssistant.addCommand('te', 'complete_booking', 
+          ['పూర్తి చేయు', 'పూర్తి', 'సిద్ధం', 'ముందుకు', 'ఏర్పడు'], 
+          '✅ చెల్లింపు ప్రక్రియ ప్రారంభమవుతుంది...');
 
         // Listen for voice commands and perform actions
         document.addEventListener('voiceCommand', (e) => {
-          const { commandType } = e.detail;
+          const { commandType, transcript } = e.detail;
           
-          if (commandType === 'pick_car' || commandType === 'book_car') {
+          console.log(`📍 Voice Command Detected: ${commandType} | Language: ${voiceAssistant.language}`);
+          
+          if (commandType === 'book_with_details') {
+            // Advanced booking with car name and dates
+            console.log('🔄 Processing advanced booking with transcript:', transcript);
+            voiceBookCar(transcript);
+          } else if (commandType === 'pick_car' || commandType === 'book_car') {
             // Scroll to cars section
             const carsContainer = document.getElementById('cars');
             if (carsContainer) {
@@ -508,7 +1078,13 @@
           }
         });
 
-        console.log('🎤 Voice Assistant ready for car booking!');
+        console.log('✅ Voice Assistant ready for car booking!');
+        console.log(`🌐 Auto-detected Language: ${currentLanguage}`);
+        console.log('💡 Voice Command Examples:');
+        console.log('   English: "Book Maruti Swift from January 10 to 12"');
+        console.log('   Hindi: "मुझे Maruti Swift को 10 से 12 जनवरी तक बुक करना है"');
+        console.log('   Tamil: "Maruti Swift ஐ January 10 முதல் 12 வரை முன்பதிவு செய்யவும்"');
+        console.log('   Telugu: "Maruti Swift ను January 10 నుండి 12 వరకు బుక్ చేయండి"');
       }
     });
   </script>

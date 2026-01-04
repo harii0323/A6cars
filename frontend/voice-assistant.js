@@ -179,22 +179,85 @@ class VoiceAssistant {
   }
 
   /**
-   * Process voice command
+   * Process voice command with enhanced language context awareness
    */
   processCommand(text) {
     const langCommands = this.commands[this.language] || this.commands['en-IN'];
     
+    // Enhanced pattern matching with fuzzy matching for regional languages
+    let bestMatch = null;
+    let bestScore = 0;
+
     for (const [commandType, command] of Object.entries(langCommands)) {
       for (const pattern of command.patterns) {
+        // Exact match (highest priority)
         if (text.includes(pattern)) {
           this.handleCommand(commandType, command.response);
           return;
         }
+        
+        // Fuzzy match for regional languages (allows for typos and variations)
+        const score = this.calculateSimilarity(text, pattern);
+        if (score > 0.7 && score > bestScore) {
+          bestScore = score;
+          bestMatch = { commandType, response: command.response };
+        }
       }
     }
 
-    // Default response if no match
-    this.speak('Sorry, I did not understand. Please try again or say help for guidance.');
+    // If fuzzy match found (especially useful for regional language speech variations)
+    if (bestMatch) {
+      this.handleCommand(bestMatch.commandType, bestMatch.response);
+      return;
+    }
+
+    // Default response if no match (language-aware)
+    const errorResponses = {
+      'en-IN': 'Sorry, I did not understand. Please try again or say help for guidance.',
+      'hi-IN': 'क्षमा करें, मुझे समझ नहीं आया। कृपया फिर से कोशिश करें या "मदद" कहें।',
+      'ta-IN': 'மன்னிக்கவும், நான் புரியவில்லை. மீண்டும் முயற்சி செய்யவும் அல்லது உதவி சொல்லவும்.',
+      'te-IN': 'క్షమించండి, నాకు అర్థం కాలేదు. దయచేసి మళ్లీ ప్రయత్నించండి లేదా సహాయం చెప్పండి.',
+    };
+    
+    const errorMsg = errorResponses[this.language] || errorResponses['en-IN'];
+    this.speak(errorMsg);
+  }
+
+  /**
+   * Calculate similarity between two strings (for fuzzy matching)
+   */
+  calculateSimilarity(str1, str2) {
+    const longer = str1.length > str2.length ? str1 : str2;
+    const shorter = str1.length > str2.length ? str2 : str1;
+    
+    if (longer.length === 0) return 1.0;
+    
+    const editDistance = this.getEditDistance(longer, shorter);
+    return (longer.length - editDistance) / longer.length;
+  }
+
+  /**
+   * Calculate Levenshtein distance for fuzzy matching
+   */
+  getEditDistance(s1, s2) {
+    const costs = [];
+    for (let i = 0; i <= s1.length; i++) {
+      let lastValue = i;
+      for (let j = 0; j <= s2.length; j++) {
+        if (i === 0) {
+          costs[j] = j;
+        } else if (j > 0) {
+          let newValue = costs[j - 1];
+          if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
+            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+          }
+          costs[j - 1] = lastValue;
+          lastValue = newValue;
+        }
+      }
+      if (i > 0) costs[s2.length] = lastValue;
+    }
+    return costs[s2.length];
   }
 
   /**

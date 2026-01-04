@@ -18,9 +18,17 @@ const { sendBookingConfirmationEmail, sendPaymentConfirmedEmail, sendCancellatio
 // ============================================================
 // ✅ Razorpay Initialization
 // ============================================================
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || "rzp_test_1DP5MMOk9HrQ9j";
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || "3QnOd46i7YBOeSgUeC71jFIK";
+
+console.log("🔐 Razorpay Configuration:");
+console.log(`   - Key ID: ${RAZORPAY_KEY_ID.substring(0, 20)}...`);
+console.log(`   - Key Secret: ${RAZORPAY_KEY_SECRET ? "SET" : "NOT SET"}`);
+console.log(`   - From environment: RAZORPAY_KEY_ID=${!!process.env.RAZORPAY_KEY_ID}, RAZORPAY_KEY_SECRET=${!!process.env.RAZORPAY_KEY_SECRET}`);
+
 const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_1DP5MMOk9HrQ9j",
-  key_secret: process.env.RAZORPAY_KEY_SECRET || "3QnOd46i7YBOeSgUeC71jFIK"
+  key_id: RAZORPAY_KEY_ID,
+  key_secret: RAZORPAY_KEY_SECRET
 });
 
 const app = express();
