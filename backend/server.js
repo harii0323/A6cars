@@ -1,19 +1,5 @@
 const OpenAI = require("openai");
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-// ============================================================
-// ✅ AI Intent Extraction Endpoint (ChatGPT intent)
-// ============================================================
-app.post("/api/ai-intent", async (req, res) => {
-  const { command } = req.body;
-  try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          const OpenAI = require("openai");
-          const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const crypto = require("crypto");
 const { sendBookingConfirmationEmail, sendPaymentConfirmedEmail, sendCancellationEmail } = require("./emailService");
 
