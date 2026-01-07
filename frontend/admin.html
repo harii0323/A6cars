@@ -1166,54 +1166,118 @@
       }
     }
 
-    function stopScanner() {
-      scanning = false;
-      const video = document.getElementById('video');
-      if (video.srcObject) {
-        video.srcObject.getTracks().forEach(track => track.stop());
-      }
-      clearInterval(scannerInterval);
-      document.getElementById('scanStatus').textContent = 'Scanner stopped';
-    }
-
-    async function processQRCode(qrData) {
+    async function loadCarList() {
       try {
-        // Parse QR data if it's JSON
-        let parsedData = qrData;
-        try {
-          parsedData = JSON.parse(qrData);
-        } catch (e) {
-          // If not JSON, treat as booking_id
-          parsedData = { booking_id: qrData, qr_type: 'collection' };
+        console.log('Loading cars list...');
+        const res = await fetch(api('/api/cars'));
+        
+        if (!res.ok) {
+          console.error('Cars fetch failed:', res.status);
+          document.getElementById('carsList').innerHTML = '<p class="text-red-500">Failed to load cars</p>';
+          return;
         }
 
-        const res = await fetch(api('/api/admin/verify-qr'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAdminToken() },
-          body: JSON.stringify({ qr_data: parsedData })
-        });
+        const cars = await res.json();
+        console.log('Cars fetched:', cars);
+        const carsList = document.getElementById('carsList');
 
-        const result = await res.json();
-        const resultDiv = document.getElementById('qrResult');
-
-        if (res.ok) {
-          resultDiv.innerHTML = `<div class="p-4 bg-green-50 border border-green-200 rounded-lg"><h4 class="font-semibold text-green-800">✅ Verified</h4><p class="text-sm text-green-700 mt-2">${result.message || 'Verification successful'}</p></div>`;
-          showToast('✅ Payment verified!', 'success');
-        } else {
-          resultDiv.innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-lg"><h4 class="font-semibold text-red-800">❌ Verification Failed</h4><p class="text-sm text-red-700 mt-2">${result.message || 'Failed to verify'}</p></div>`;
-          showToast('❌ ' + result.message, 'error');
+        if (!cars || !Array.isArray(cars) || cars.length === 0) {
+          carsList.innerHTML = '<p class="text-center text-gray-500 py-8">No cars found</p>';
+          return;
         }
+
+        // Combined CSV export button
+        carsList.innerHTML = `<div class="mb-4"><button class="btn btn-success text-xs" onclick="exportAllCarsCSV()">Export All Cars CSV</button></div>`;
+
+        carsList.innerHTML += cars.map(car => {
+          const imageUrl = car.images && car.images[0] 
+            ? (car.images[0].startsWith('http') ? car.images[0] : BACKEND_URL + car.images[0]) 
+            : 'https://via.placeholder.com/100x80?text=No+Image';
+          
+          return `
+            <div class="border rounded-lg p-4 flex justify-between items-start md:items-center gap-4 hover:shadow-lg">
+              <div class="flex gap-4 items-start flex-1">
+                <img src="${imageUrl}" class="w-24 h-20 rounded object-cover" onerror="this.src='https://via.placeholder.com/100x80'">
+                <div>
+                  <h4 class="font-semibold text-gray-900">${car.brand} ${car.model}</h4>
+                  <p class="text-sm text-gray-600">Year: ${car.year} | ₹${car.daily_rate}/day</p>
+                  <p class="text-xs text-gray-500">${car.location || 'N/A'}</p>
+                </div>
+              </div>
+              <div class="flex gap-2 flex-col">
+                <button class="btn btn-primary text-xs" onclick="viewCarBookings(${car.id}, '${car.brand} ${car.model}')">View Bookings</button>
+                <button class="btn btn-danger text-xs" onclick="deleteCar(${car.id})">Delete</button>
+                <button class="btn btn-secondary text-xs" onclick="exportCarCSV(${car.id}, '${car.brand}', '${car.model}')">Export CSV</button>
+              </div>
+            </div>
+          `;
+        }).join('');
       } catch (err) {
-        console.error('QR processing error:', err);
-        showToast('❌ Error: ' + err.message, 'error');
-        document.getElementById('qrResult').innerHTML = `<div class="p-4 bg-red-50 border border-red-200 rounded-lg"><p class="text-sm text-red-700">Error: ${err.message}</p></div>`;
+        console.error('Load cars error:', err);
+        document.getElementById('carsList').innerHTML = `<p class="text-red-500">Error: ${err.message}</p>`;
       }
     }
+            // Export CSV for a single car
+            window.exportCarCSV = async function(carId, brand, model) {
+              try {
+                const res = await fetch(api(`/api/bookings/${carId}`), {
+                  headers: { 'Authorization': 'Bearer ' + getAdminToken() }
+                });
+                const bookings = await res.json();
+                if (!Array.isArray(bookings) || bookings.length === 0) {
+                  showToast('No bookings to export for this car', 'info');
+                  return;
+                }
+                const headers = Object.keys(bookings[0]);
+                const csvRows = [headers.join(',')];
+                bookings.forEach(row => {
+                  csvRows.push(headers.map(h => JSON.stringify(row[h] ?? '')).join(','));
+                });
+                const csvContent = csvRows.join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${brand}_${model}_bookings.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              } catch (err) {
+                showToast('❌ Failed to export CSV: ' + err.message, 'error');
+              }
+            }
 
-    // Load Schedule
-    document.getElementById('viewScheduleBtn').addEventListener('click', async () => {
-      const carId = document.getElementById('scheduleCarSelect').value;
-      if (!carId) {
+            // Export CSV for all cars (combined)
+            window.exportAllCarsCSV = async function() {
+              try {
+                const res = await fetch(api('/api/bookings/all'), {
+                  headers: { 'Authorization': 'Bearer ' + getAdminToken() }
+                });
+                const bookings = await res.json();
+                if (!Array.isArray(bookings) || bookings.length === 0) {
+                  showToast('No bookings to export', 'info');
+                  return;
+                }
+                const headers = Object.keys(bookings[0]);
+                const csvRows = [headers.join(',')];
+                bookings.forEach(row => {
+                  csvRows.push(headers.map(h => JSON.stringify(row[h] ?? '')).join(','));
+                });
+                const csvContent = csvRows.join('\n');
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `all_cars_bookings.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              } catch (err) {
+                showToast('❌ Failed to export CSV: ' + err.message, 'error');
+              }
+            }
         showToast('Please select a car', 'error');
         return;
       }

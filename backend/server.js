@@ -1,3 +1,22 @@
+// ============================================================
+// ✅ ADMIN: Get all bookings (for CSV export)
+// ============================================================
+app.get('/api/bookings/all', verifyAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT p.id as payment_id, b.id as booking_id, c.id as customer_id, c.name as customer_name, c.email as customer_email, b.car_id, cars.brand, cars.model, b.start_date, b.end_date, b.amount, b.paid, b.verified, b.qr_token, b.created_at, b.status
+      FROM bookings b
+      LEFT JOIN customers c ON b.customer_id = c.id
+      LEFT JOIN cars ON b.car_id = cars.id
+      LEFT JOIN payments p ON p.booking_id = b.id
+      ORDER BY b.id DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('All bookings export error:', err);
+    res.status(500).json({ message: 'Failed to fetch all bookings.' });
+  }
+});
 const OpenAI = require("openai");
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const crypto = require("crypto");
