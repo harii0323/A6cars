@@ -374,8 +374,73 @@ class VoiceAssistant {
   }
 }
 
-// Initialize global voice assistant
-window.voiceAssistant = null;
+/**
+ * Handle voice input using backend AI intent extraction
+ */
+async function handleVoiceIntent(text) {
+  const res = await fetch("https://a6cars-backend-ylx7.onrender.com/api/ai-intent", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + (localStorage.getItem("token") || "")
+    },
+    body: JSON.stringify({ command: text })
+  });
+  const intent = await res.json();
+  processAIIntent(intent);
+}
+
+/**
+ * Process extracted AI intent and perform booking actions
+ */
+function processAIIntent(i) {
+  if (i.intent === "book") {
+    autoFillBooking(i);
+  } else if (i.intent === "history") {
+    window.location.href = "history.html";
+  } else if (i.intent === "cancel") {
+    speak("Mee booking cancel chesthunnanu", "te");
+  }
+}
+
+/**
+ * Auto-fill booking form based on AI intent
+ */
+function autoFillBooking(data) {
+  if (!location.pathname.includes("book.html")) {
+    window.location.href = "book.html";
+    sessionStorage.setItem("voiceBooking", JSON.stringify(data));
+    return;
+  }
+  if (data.car) document.querySelector("#car").value = data.car;
+  if (data.start_date) document.querySelector("#start_date").value = data.start_date;
+  if (data.end_date) document.querySelector("#end_date").value = data.end_date;
+  speak("Mee booking details fill chesanu. Confirm cheyyandi", "te");
+}
+
+/**
+ * On book.html load, auto-fill booking if voiceBooking is present
+ */
+if (location.pathname.includes("book.html")) {
+  const vb = sessionStorage.getItem("voiceBooking");
+  if (vb) {
+    autoFillBooking(JSON.parse(vb));
+    sessionStorage.removeItem("voiceBooking");
+  }
+}
+
+/**
+ * Speak a message in the specified language
+ */
+function speak(msg, lang) {
+  const u = new SpeechSynthesisUtterance(msg);
+  u.lang =
+    lang === "te" ? "te-IN" :
+    lang === "hi" ? "hi-IN" :
+    lang === "ta" ? "ta-IN" :
+    lang === "kn" ? "kn-IN" : "en-IN";
+  speechSynthesis.speak(u);
+}
 
 /**
  * Initialize Voice Assistant on page

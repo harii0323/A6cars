@@ -1,3 +1,43 @@
+const OpenAI = require("openai");
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// ============================================================
+// ✅ AI Intent Extraction Endpoint (ChatGPT intent)
+// ============================================================
+app.post("/api/ai-intent", async (req, res) => {
+  const { command } = req.body;
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `
+You are an intent extraction engine for a car rental system.
+Extract structured JSON ONLY.
+Supported languages: English, Telugu, Hindi, Tamil, Kannada.
+
+Return format:
+{
+  "intent": "book | cancel | history | help",
+  "car": "string or null",
+  "start_date": "YYYY-MM-DD or null",
+  "end_date": "YYYY-MM-DD or null",
+  "days": number or null,
+  "location": "string or null"
+}`
+        },
+        { role: "user", content: command }
+      ],
+      temperature: 0
+    });
+    const data = JSON.parse(completion.choices[0].message.content);
+    res.json(data);
+  } catch (err) {
+    console.error("AI intent error:", err);
+    res.status(500).json({ message: "AI intent failed" });
+  }
+});
 //============================================================
 // ✅ A6 Cars Backend - Razorpay Integration Version (Dec 29, 2025)
 // ============================================================
