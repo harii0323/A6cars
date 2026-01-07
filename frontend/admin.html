@@ -1229,9 +1229,15 @@
         let html = '<h4 class="font-semibold mb-4">Car Schedule</h4>';
 
         if (data.bookings && data.bookings.length > 0) {
-          html += '<div class="table-responsive"><table class="table"><thead><tr><th>Booking ID</th><th>From</th><th>To</th><th>Status</th></tr></thead><tbody>';
+          html += '<div class="table-responsive"><table class="table"><thead><tr><th>Booking ID</th><th>From</th><th>To</th><th>Status</th><th>Action</th></tr></thead><tbody>';
           data.bookings.forEach(b => {
-            html += `<tr><td>${b.id}</td><td>${new Date(b.start_date).toLocaleDateString()}</td><td>${new Date(b.end_date).toLocaleDateString()}</td><td><span class="badge badge-${b.status === 'confirmed' ? 'success' : 'warning'}">${b.status}</span></td></tr>`;
+            html += `<tr>
+              <td>${b.id}</td>
+              <td>${new Date(b.start_date).toLocaleDateString()}</td>
+              <td>${new Date(b.end_date).toLocaleDateString()}</td>
+              <td><span class="badge badge-${b.status === 'confirmed' ? 'success' : 'warning'}">${b.status}</span></td>
+              <td>${b.status !== 'cancelled' ? `<button class='btn btn-danger btn-xs' onclick='cancelBookingFromSchedule(${b.id})'>Cancel</button>` : ''}</td>
+            </tr>`;
           });
           html += '</tbody></table></div>';
         } else {
@@ -1253,6 +1259,30 @@
     });
 
     // Load schedule options on page load
+        // Cancel booking from schedule
+        window.cancelBookingFromSchedule = async function(bookingId) {
+          const reason = prompt('Enter reason for cancellation:');
+          if (!reason) return;
+          try {
+            const res = await fetch(api('/api/admin/cancel-booking'), {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + getAdminToken()
+              },
+              body: JSON.stringify({ booking_id: bookingId, reason })
+            });
+            const data = await res.json();
+            if (res.ok) {
+              showToast('✅ Booking cancelled!', 'success');
+              document.getElementById('viewScheduleBtn').click(); // Refresh schedule
+            } else {
+              showToast('❌ ' + (data.message || 'Failed to cancel'), 'error');
+            }
+          } catch (err) {
+            showToast('❌ ' + err.message, 'error');
+          }
+        }
     async function loadScheduleOptions() {
       try {
         const res = await fetch(api('/api/cars'));
