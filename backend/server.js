@@ -12,46 +12,8 @@ app.post("/api/ai-intent", async (req, res) => {
       messages: [
         {
           role: "system",
-          content: `
-You are an intent extraction engine for a car rental system.
-Extract structured JSON ONLY.
-Supported languages: English, Telugu, Hindi, Tamil, Kannada.
-
-Return format:
-{
-  "intent": "book | cancel | history | help",
-  "car": "string or null",
-  "start_date": "YYYY-MM-DD or null",
-  "end_date": "YYYY-MM-DD or null",
-  "days": number or null,
-  "location": "string or null"
-}`
-        },
-        { role: "user", content: command }
-      ],
-      temperature: 0
-    });
-    const data = JSON.parse(completion.choices[0].message.content);
-    res.json(data);
-  } catch (err) {
-    console.error("AI intent error:", err);
-    res.status(500).json({ message: "AI intent failed" });
-  }
-});
-//============================================================
-// ✅ A6 Cars Backend - Razorpay Integration Version (Dec 29, 2025)
-// ============================================================
-require("dotenv").config();
-const express = require("express");
-const cors = require("cors");
-const jwt = require("jsonwebtoken");
-const bcrypt = require("bcryptjs");
-const { Pool } = require("pg");
-const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
-const QRCode = require("qrcode");
-const Razorpay = require("razorpay");
+          const OpenAI = require("openai");
+          const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const crypto = require("crypto");
 const { sendBookingConfirmationEmail, sendPaymentConfirmedEmail, sendCancellationEmail } = require("./emailService");
 
@@ -91,6 +53,44 @@ app.get("/", (req, res) => {
 });
 
 // Lightweight health endpoint used by container healthchecks
+
+          // ============================================================
+          // ✅ AI Intent Extraction Endpoint (ChatGPT intent)
+          // ============================================================
+          app.post("/api/ai-intent", async (req, res) => {
+            const { command } = req.body;
+            try {
+              const completion = await openai.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [
+                  {
+                    role: "system",
+                    content: `
+          You are an intent extraction engine for a car rental system.
+          Extract structured JSON ONLY.
+          Supported languages: English, Telugu, Hindi, Tamil, Kannada.
+
+          Return format:
+          {
+            "intent": "book | cancel | history | help",
+            "car": "string or null",
+            "start_date": "YYYY-MM-DD or null",
+            "end_date": "YYYY-MM-DD or null",
+            "days": number or null,
+            "location": "string or null"
+          }`
+                  },
+                  { role: "user", content: command }
+                ],
+                temperature: 0
+              });
+              const data = JSON.parse(completion.choices[0].message.content);
+              res.json(data);
+            } catch (err) {
+              console.error("AI intent error:", err);
+              res.status(500).json({ message: "AI intent failed" });
+            }
+          });
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
