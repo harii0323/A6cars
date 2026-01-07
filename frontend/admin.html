@@ -786,15 +786,31 @@
 
     // Section Navigation
     function showSection(sectionId) {
-      const sections = ['dashboardSection', 'addCarSection', 'manageCarsSection', 'scheduleSection', 'verifyPaymentSection', 'cancellationsSection', 'businessSection'];
-      sections.forEach(sec => document.getElementById(sec).classList.add('hidden'));
+      // Map sidebar data-section values to section IDs
+      const sectionMap = {
+        'dashboard': 'dashboardSection',
+        'add-car': 'addCarSection',
+        'manage-cars': 'manageCarsSection',
+        'schedule': 'scheduleSection',
+        'verify-payment': 'verifyPaymentSection',
+        'cancellations': 'cancellationsSection',
+        'business': 'businessSection',
+        'login': 'loginSection'
+      };
+      const allSections = Object.values(sectionMap);
+      allSections.forEach(sec => {
+        const el = document.getElementById(sec);
+        if (el) el.classList.add('hidden');
+      });
 
       if (sectionId === 'login') {
         document.getElementById('loginSection').classList.remove('hidden');
         document.getElementById('topLogoutBtn').classList.add('hidden');
       } else if (getAdminToken()) {
         document.getElementById('loginSection').classList.add('hidden');
-        document.getElementById(sectionId + 'Section').classList.remove('hidden');
+        const showId = sectionMap[sectionId] || 'dashboardSection';
+        const showEl = document.getElementById(showId);
+        if (showEl) showEl.classList.remove('hidden');
         document.getElementById('topLogoutBtn').classList.remove('hidden');
 
         document.querySelectorAll('.sidebar-menu-item').forEach(el => el.classList.remove('active'));
