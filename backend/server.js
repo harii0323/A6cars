@@ -9,10 +9,7 @@ const app = express();
 const Razorpay = require("razorpay");
 const path = require("path");
 const { Pool } = require("pg");
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚗 A6 Cars Backend is running on port ${PORT}`);
-});
+
 
 // Middleware to verify admin access via simple token
 function verifyAdmin(req, res, next) {
