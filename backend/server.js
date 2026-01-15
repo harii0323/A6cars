@@ -8,7 +8,23 @@ const { sendBookingConfirmationEmail, sendPaymentConfirmedEmail, sendCancellatio
 const app = express();
 const Razorpay = require("razorpay");
 const path = require("path");
+const { Pool } = require("pg");
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚗 A6 Cars Backend is running on port ${PORT}`);
+});
 
+// Middleware to verify admin access via simple token
+function verifyAdmin(req, res, next) {
+  const adminToken = req.headers['x-admin-token'];
+  const expectedToken = process.env.ADMIN_TOKEN || 'supersecretadmintoken';
+  if (adminToken === expectedToken) {
+    req.admin = { email: 'karikeharikrishna@gmail.com' };
+    next();
+  } else {
+    res.status(403).json({ message: 'Unauthorized access.' });
+  }
+}   
 
 
 // ============================================================
