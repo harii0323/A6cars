@@ -1,10 +1,13 @@
+require("dotenv").config();
 const express = require("express");
 const OpenAI = require("openai");
+const cors = require("cors");
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const crypto = require("crypto");
 const { sendBookingConfirmationEmail, sendPaymentConfirmedEmail, sendCancellationEmail } = require("./emailService");
 const app = express();
 const Razorpay = require("razorpay");
+
 
 // ============================================================
 // ✅ Razorpay Initialization
