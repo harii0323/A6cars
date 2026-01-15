@@ -9,6 +9,46 @@ const app = express();
 const Razorpay = require("razorpay");
 const path = require("path");
 const { Pool } = require("pg");
+const multer = require("multer");   // ✅ REQUIRED
+
+
+// ============================================================
+// ✅ PostgreSQL Connection
+// ============================================================
+const connectionString = process.env.DATABASE_URL || 
+  `postgresql://${process.env.DB_USER || 'root'}:${process.env.DB_PASS || 'password'}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'a6cars_db'}`;
+
+console.log('📡 Connecting to database...');
+
+const pool = new Pool({
+  connectionString,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
+
+// Handle pool errors
+pool.on('error', (err) => {
+  console.error('❌ Pool error:', err.message);
+});
+
+pool.on('connect', () => {
+  console.log('✅ New connection established');
+});
+
+// Test connection on startup with promise
+pool.query('SELECT NOW()', (err, result) => {
+  if (err) {
+    console.error('❌ Database connection error:', err.message);
+    console.error('   Connection string:', connectionString.replace(/:[^:]*@/, ':****@'));
+  } else {
+    console.log('✅ Database connected successfully at', result.rows[0].now);
+    // Run auto-migration on successful connection
+    runDatabaseMigrations();
+  }
+});
+
 
 
 // Middleware to verify admin access via simple token
@@ -27,8 +67,14 @@ function verifyAdmin(req, res, next) {
 // ============================================================
 // ✅ Razorpay Initialization
 // ============================================================
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || "rzp_test_1DP5MMOk9HrQ9j";
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || "3QnOd46i7YBOeSgUeC71jFIK";
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
+
+if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
+  console.error("❌ Razorpay keys are missing in environment variables");
+  process.exit(1);
+}
+
 
 console.log("🔐 Razorpay Configuration:");
 console.log(`   - Key ID: ${RAZORPAY_KEY_ID.substring(0, 20)}...`);
@@ -136,39 +182,7 @@ app.get('/debug/routes', (req, res) => {
 // ============================================================
 // ✅ PostgreSQL Connection
 // ============================================================
-const connectionString = process.env.DATABASE_URL || 
-  `postgresql://${process.env.DB_USER || 'root'}:${process.env.DB_PASS || 'password'}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'a6cars_db'}`;
 
-console.log('📡 Connecting to database...');
-
-const pool = new Pool({
-  connectionString,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-});
-
-// Handle pool errors
-pool.on('error', (err) => {
-  console.error('❌ Pool error:', err.message);
-});
-
-pool.on('connect', () => {
-  console.log('✅ New connection established');
-});
-
-// Test connection on startup with promise
-pool.query('SELECT NOW()', (err, result) => {
-  if (err) {
-    console.error('❌ Database connection error:', err.message);
-    console.error('   Connection string:', connectionString.replace(/:[^:]*@/, ':****@'));
-  } else {
-    console.log('✅ Database connected successfully at', result.rows[0].now);
-    // Run auto-migration on successful connection
-    runDatabaseMigrations();
-  }
-});
 
 // ============================================================
 // ✅ Auto-Migration: Ensure Razorpay columns exist
