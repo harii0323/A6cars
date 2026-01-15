@@ -9,7 +9,10 @@ const app = express();
 const Razorpay = require("razorpay");
 const path = require("path");
 const { Pool } = require("pg");
-const multer = require("multer");   // ✅ REQUIRED
+const multer = require("multer");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+
 
 
 // ============================================================
