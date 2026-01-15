@@ -1,3 +1,26 @@
+
+const OpenAI = require("openai");
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const crypto = require("crypto");
+const { sendBookingConfirmationEmail, sendPaymentConfirmedEmail, sendCancellationEmail } = require("./emailService");
+const app = express();
+
+// ============================================================
+// ✅ Razorpay Initialization
+// ============================================================
+const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || "rzp_test_1DP5MMOk9HrQ9j";
+const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || "3QnOd46i7YBOeSgUeC71jFIK";
+
+console.log("🔐 Razorpay Configuration:");
+console.log(`   - Key ID: ${RAZORPAY_KEY_ID.substring(0, 20)}...`);
+console.log(`   - Key Secret: ${RAZORPAY_KEY_SECRET ? "SET" : "NOT SET"}`);
+console.log(`   - From environment: RAZORPAY_KEY_ID=${!!process.env.RAZORPAY_KEY_ID}, RAZORPAY_KEY_SECRET=${!!process.env.RAZORPAY_KEY_SECRET}`);
+
+const razorpay = new Razorpay({
+  key_id: RAZORPAY_KEY_ID,
+  key_secret: RAZORPAY_KEY_SECRET
+});
+
 // ============================================================
 // ✅ ADMIN: Get all bookings (for CSV export)
 // ============================================================
@@ -17,28 +40,7 @@ app.get('/api/bookings/all', verifyAdmin, async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch all bookings.' });
   }
 });
-const OpenAI = require("openai");
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const crypto = require("crypto");
-const { sendBookingConfirmationEmail, sendPaymentConfirmedEmail, sendCancellationEmail } = require("./emailService");
 
-// ============================================================
-// ✅ Razorpay Initialization
-// ============================================================
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID || "rzp_test_1DP5MMOk9HrQ9j";
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || "3QnOd46i7YBOeSgUeC71jFIK";
-
-console.log("🔐 Razorpay Configuration:");
-console.log(`   - Key ID: ${RAZORPAY_KEY_ID.substring(0, 20)}...`);
-console.log(`   - Key Secret: ${RAZORPAY_KEY_SECRET ? "SET" : "NOT SET"}`);
-console.log(`   - From environment: RAZORPAY_KEY_ID=${!!process.env.RAZORPAY_KEY_ID}, RAZORPAY_KEY_SECRET=${!!process.env.RAZORPAY_KEY_SECRET}`);
-
-const razorpay = new Razorpay({
-  key_id: RAZORPAY_KEY_ID,
-  key_secret: RAZORPAY_KEY_SECRET
-});
-
-const app = express();
 app.use(cors({
   origin: [
     "https://a6cars-frontend-zv4g.onrender.com",
