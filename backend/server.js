@@ -83,6 +83,16 @@ const razorpay = new Razorpay({
 });
 
 // ============================================================
+// ✅ API: Get Razorpay Key for Frontend (no secret)
+// ============================================================
+app.get('/api/razorpay/key', (req, res) => {
+  if (!RAZORPAY_KEY_ID) {
+    return res.status(500).json({ message: 'Razorpay Key not configured' });
+  }
+  res.json({ key: RAZORPAY_KEY_ID });
+});
+
+// ============================================================
 // ✅ ADMIN: Get all bookings (for CSV export)
 // ============================================================
 app.get('/api/bookings/all', verifyAdmin, async (req, res) => {

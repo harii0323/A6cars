@@ -133,7 +133,25 @@
         : "https://a6cars-backend-ylx7.onrender.com";
 
     // ✅ Get Razorpay Key (This should be set in environment or returned by backend)
-    const RAZORPAY_KEY_ID = "rzp_test_1DP5MMOk9HrQ9j"; // Replace with your actual key
+    let RAZORPAY_KEY_ID = null;
+    // Fetch Razorpay key from backend
+    async function fetchRazorpayKey() {
+      try {
+        const res = await fetch(`${BACKEND_URL}/api/razorpay/key`);
+        const data = await res.json();
+        if (data.key) {
+          RAZORPAY_KEY_ID = data.key;
+        } else {
+          throw new Error("Razorpay key not found");
+        }
+      } catch (err) {
+        alert("❌ Failed to load payment key. Please try again later.");
+        throw err;
+      }
+    }
+
+    // Fetch key on page load
+    fetchRazorpayKey();
 
     // ✅ Load available cars with booked dates
     async function loadCars() {
@@ -273,6 +291,10 @@
     // ✅ Initiate Razorpay Payment
     async function initiateRazorpayPayment(booking_id, amount, payment_qr, start_date, end_date) {
       try {
+        // Ensure Razorpay key is loaded
+        if (!RAZORPAY_KEY_ID) {
+          await fetchRazorpayKey();
+        }
         // 1. Create order on backend
         const orderRes = await fetch(`${BACKEND_URL}/api/razorpay/create-order`, {
           method: "POST",
