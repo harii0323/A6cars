@@ -12,6 +12,8 @@ const { Pool } = require("pg");
 const multer = require("multer");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const QRCode = require("qrcode");
+
 
 
 
