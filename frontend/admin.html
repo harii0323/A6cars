@@ -17,6 +17,7 @@
       --warning: #e6b765;
       --light: #f3f4f6;
       --border: #e5e7eb;
+    }
 
     * {
       transition: all 0.3s ease;
@@ -1118,6 +1119,41 @@
     }
 
     // QR Scanner Functions
+        // Process QR code for manual payment verification
+        async function processQRCode(data) {
+          let parsed;
+          try {
+            parsed = typeof data === 'string' ? JSON.parse(data) : data;
+          } catch (e) {
+            document.getElementById('qrResult').innerHTML = `<div class="text-red-600 font-semibold">Invalid QR code data</div>`;
+            return;
+          }
+
+          // Expecting QR to contain booking_id and payment_reference_id
+          const booking_id = parsed.booking_id || parsed.id;
+          const payment_reference_id = parsed.payment_reference_id || parsed.reference || parsed.ref;
+          if (!booking_id || !payment_reference_id) {
+            document.getElementById('qrResult').innerHTML = `<div class="text-red-600 font-semibold">QR code missing booking ID or payment reference</div>`;
+            return;
+          }
+
+          document.getElementById('qrResult').innerHTML = `<div class="text-blue-700">Verifying payment for Booking ID: <b>${booking_id}</b>...</div>`;
+          try {
+            const res = await fetch(api('/api/verify-payment'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAdminToken() },
+              body: JSON.stringify({ booking_id, payment_reference_id })
+            });
+            const result = await res.json();
+            if (res.ok) {
+              document.getElementById('qrResult').innerHTML = `<div class="text-green-700 font-semibold">✅ Payment verified and booking marked as paid!</div>`;
+            } else {
+              document.getElementById('qrResult').innerHTML = `<div class="text-red-600 font-semibold">❌ ${result.message || 'Verification failed'}</div>`;
+            }
+          } catch (err) {
+            document.getElementById('qrResult').innerHTML = `<div class="text-red-600 font-semibold">❌ Error: ${err.message}</div>`;
+          }
+        }
     let scanning = false;
     let scannerInterval;
 
@@ -1132,6 +1168,11 @@
     async function startScanner() {
       try {
         const video = document.getElementById('video');
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          showToast('❌ Camera API not supported in this browser.', 'error');
+          document.getElementById('scanStatus').textContent = '❌ Camera API not supported.';
+          return;
+        }
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         video.srcObject = stream;
         scanning = true;
@@ -1160,8 +1201,20 @@
           }
         }, 100);
       } catch (err) {
-        showToast('❌ Camera access denied: ' + err.message, 'error');
-        document.getElementById('scanStatus').textContent = '❌ Camera not available';
+        let errorMsg = '❌ Camera not available';
+        if (err.name === 'NotAllowedError') {
+          errorMsg = '❌ Camera access denied. Please allow camera permissions.';
+        } else if (err.name === 'NotFoundError') {
+          errorMsg = '❌ No camera device found.';
+        } else if (err.name === 'NotReadableError') {
+          errorMsg = '❌ Camera is already in use by another application.';
+        } else if (err.name === 'OverconstrainedError') {
+          errorMsg = '❌ No camera matches the required constraints.';
+        } else if (err.message) {
+          errorMsg = '❌ ' + err.message;
+        }
+        showToast(errorMsg, 'error');
+        document.getElementById('scanStatus').textContent = errorMsg;
       }
     }
 
