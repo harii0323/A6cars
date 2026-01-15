@@ -1771,7 +1771,6 @@ app.post("/api/razorpay/create-order", async (req, res) => {
       currency: "INR",
       receipt: `booking_${booking_id}_${Date.now()}`,
       description: `A6 Cars Booking #${booking_id} - ${bookingData.brand} ${bookingData.model}`,
-      customer_notify: 1,
       notes: {
         booking_id: booking_id,
         customer_id: customer_id,
