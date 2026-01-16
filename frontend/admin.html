@@ -1168,36 +1168,46 @@
     async function startScanner() {
       try {
         const video = document.getElementById('video');
+        document.getElementById('scanStatus').textContent = '⏳ Initializing camera...';
+        console.log('[QR SCAN] Initializing camera...');
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           showToast('❌ Camera API not supported in this browser.', 'error');
           document.getElementById('scanStatus').textContent = '❌ Camera API not supported.';
+          console.log('[QR SCAN] Camera API not supported.');
           return;
         }
         const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
         video.srcObject = stream;
         scanning = true;
         document.getElementById('scanStatus').textContent = '🎥 Camera active - scanning...';
+        console.log('[QR SCAN] Camera stream started.');
 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
 
         scannerInterval = setInterval(() => {
           if (video.readyState === video.HAVE_ENOUGH_DATA) {
+            document.getElementById('scanStatus').textContent = '📷 Capturing frame...';
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
             try {
               const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
               const code = jsQR(imageData.data, imageData.width, imageData.height);
-
               if (code) {
+                document.getElementById('scanStatus').textContent = '✅ QR code detected!';
+                console.log('[QR SCAN] QR code detected:', code.data);
                 stopScanner();
                 processQRCode(code.data);
+              } else {
+                document.getElementById('scanStatus').textContent = '🔍 Scanning for QR code...';
               }
             } catch (err) {
-              console.log('QR scan error:', err);
+              console.log('[QR SCAN] QR scan error:', err);
+              document.getElementById('scanStatus').textContent = '⚠️ QR scan error (see console)';
             }
+          } else {
+            document.getElementById('scanStatus').textContent = '⏳ Waiting for camera data...';
           }
         }, 100);
       } catch (err) {
@@ -1215,6 +1225,7 @@
         }
         showToast(errorMsg, 'error');
         document.getElementById('scanStatus').textContent = errorMsg;
+        console.log('[QR SCAN] Error:', err);
       }
     }
 
