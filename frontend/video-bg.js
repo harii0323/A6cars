@@ -1,7 +1,7 @@
 // Inject a full-page background video and enable transparent body backgrounds
 (function() {
   try {
-    const VIDEO_SRC = '/uploads/background.mp4'; // Place your video file here
+    const VIDEO_SRC = '/frontend/assets/background.mp4'; // Place your video file here
     console.log('🎬 [VIDEO-BG] Initializing background video from:', VIDEO_SRC);
 
     // Avoid duplicate injection

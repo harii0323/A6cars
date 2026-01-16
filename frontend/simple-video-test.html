@@ -58,7 +58,7 @@
   <!-- Simple video background -->
   <div class="video-bg">
     <video autoplay muted loop playsinline>
-      <source src="/uploads/background.mp4" type="video/mp4">
+      <source src="/frontend/assets/background.mp4" type="video/mp4">
       Your browser does not support HTML5 video.
     </video>
     <div class="overlay"></div>
@@ -83,7 +83,7 @@
     
     <h2>Direct Video Player (for testing):</h2>
     <video width="100%" controls style="margin-top: 20px; border: 2px solid #007bff;">
-      <source src="/uploads/background.mp4" type="video/mp4">
+      <source src="/frontend/assets/background.mp4" type="video/mp4">
       Your browser does not support HTML5 video.
     </video>
   </div>
@@ -122,7 +122,7 @@
     }
 
     // Check if file exists
-    fetch('/uploads/background.mp4', { method: 'HEAD' })
+    fetch('/frontend/assets/background.mp4', { method: 'HEAD' })
       .then(res => {
         debug(`🌐 HEAD request: ${res.status} ${res.statusText}`);
         if (res.headers.get('content-type')) {
