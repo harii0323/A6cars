@@ -1,1128 +1,677 @@
 require("dotenv").config();
+
 const express = require("express");
-const OpenAI = require("openai");
 const cors = require("cors");
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const crypto = require("crypto");
-const { sendBookingConfirmationEmail, sendPaymentConfirmedEmail, sendCancellationEmail } = require("./emailService");
-const app = express();
-const Razorpay = require("razorpay");
+const fs = require("fs");
 const path = require("path");
-const { Pool } = require("pg");
 const multer = require("multer");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const QRCode = require("qrcode");
+const OpenAI = require("openai");
 
+const { connectMongo, closeMongo, getDb } = require("./mongo");
+const {
+  sendBookingConfirmationEmail,
+  sendPaymentConfirmedEmail,
+  sendCancellationEmail,
+} = require("./emailService");
 
+const app = express();
 
-
-// ============================================================
-// ✅ PostgreSQL Connection
-// ============================================================
-const connectionString = process.env.DATABASE_URL || 
-  `postgresql://${process.env.DB_USER || 'root'}:${process.env.DB_PASS || 'password'}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'a6cars_db'}`;
-
-console.log('📡 Connecting to database...');
-
-const pool = new Pool({
-  connectionString,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false,
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-});
-
-// Handle pool errors
-pool.on('error', (err) => {
-  console.error('❌ Pool error:', err.message);
-});
-
-pool.on('connect', () => {
-  console.log('✅ New connection established');
-});
-
-// Test connection on startup with promise
-pool.query('SELECT NOW()', (err, result) => {
-  if (err) {
-    console.error('❌ Database connection error:', err.message);
-    console.error('   Connection string:', connectionString.replace(/:[^:]*@/, ':****@'));
-  } else {
-    console.log('✅ Database connected successfully at', result.rows[0].now);
-    // Run auto-migration on successful connection
-    runDatabaseMigrations();
-  }
-});
-
-
-
-// Middleware to verify admin access via simple token
-
-
-
-// ============================================================
-// ✅ Razorpay Initialization
-// ============================================================
-const RAZORPAY_KEY_ID = process.env.RAZORPAY_KEY_ID;
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
-
-if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
-  console.error("❌ Razorpay keys are missing in environment variables");
-  process.exit(1);
-}
-
-
-console.log("🔐 Razorpay Configuration:");
-console.log(`   - Key ID: ${RAZORPAY_KEY_ID.substring(0, 20)}...`);
-console.log(`   - Key Secret: ${RAZORPAY_KEY_SECRET ? "SET" : "NOT SET"}`);
-console.log(`   - From environment: RAZORPAY_KEY_ID=${!!process.env.RAZORPAY_KEY_ID}, RAZORPAY_KEY_SECRET=${!!process.env.RAZORPAY_KEY_SECRET}`);
-
-const razorpay = new Razorpay({
-  key_id: RAZORPAY_KEY_ID,
-  key_secret: RAZORPAY_KEY_SECRET
-});
-
-// ============================================================
-// ✅ API: Get Razorpay Key for Frontend (no secret)
-// ============================================================
-app.get('/api/razorpay/key', (req, res) => {
-  if (!RAZORPAY_KEY_ID) {
-    return res.status(500).json({ message: 'Razorpay Key not configured' });
-  }
-  res.json({ key: RAZORPAY_KEY_ID });
-});
-
-// ============================================================
-// ✅ ADMIN: Get all bookings (for CSV export)
-// ============================================================
-app.get('/api/bookings/all', verifyAdmin, async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT p.id as payment_id, b.id as booking_id, c.id as customer_id, c.name as customer_name, c.email as customer_email, b.car_id, cars.brand, cars.model, b.start_date, b.end_date, b.amount, b.paid, b.verified, b.qr_token, b.created_at, b.status
-      FROM bookings b
-      LEFT JOIN customers c ON b.customer_id = c.id
-      LEFT JOIN cars ON b.car_id = cars.id
-      LEFT JOIN payments p ON p.booking_id = b.id
-      ORDER BY b.id DESC
-    `);
-    res.json(result.rows);
-  } catch (err) {
-    console.error('All bookings export error:', err);
-    res.status(500).json({ message: 'Failed to fetch all bookings.' });
-  }
-});
-
-app.use(cors({
-  origin: [
-    "https://a6cars-frontend-zv4g.onrender.com",
-    "https://a6cars-backend-ylx7.onrender.com",
-    "http://localhost:5173"
-  ],
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true
-}));
-
-app.use(express.json());
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-app.get("/", (req, res) => {
-  res.send("🚗 A6 Cars Backend is running successfully!");
-});
-
-// Lightweight health endpoint used by container healthchecks
-
-          // ============================================================
-          // ✅ AI Intent Extraction Endpoint (ChatGPT intent)
-          // ============================================================
-          app.post("/api/ai-intent", async (req, res) => {
-            const { command } = req.body;
-            try {
-              const completion = await openai.chat.completions.create({
-                model: "gpt-4o-mini",
-                messages: [
-                  {
-                    role: "system",
-                    content: `
-          You are an intent extraction engine for a car rental system.
-          Extract structured JSON ONLY.
-          Supported languages: English, Telugu, Hindi, Tamil, Kannada.
-
-          Return format:
-          {
-            "intent": "book | cancel | history | help",
-            "car": "string or null",
-            "start_date": "YYYY-MM-DD or null",
-            "end_date": "YYYY-MM-DD or null",
-            "days": number or null,
-            "location": "string or null"
-          }`
-                  },
-                  { role: "user", content: command }
-                ],
-                temperature: 0
-              });
-              const data = JSON.parse(completion.choices[0].message.content);
-              res.json(data);
-            } catch (err) {
-              console.error("AI intent error:", err);
-              res.status(500).json({ message: "AI intent failed" });
-            }
-          });
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
-// Debug endpoint - list available routes
-app.get('/debug/routes', (req, res) => {
-  const routes = app._router.stack
-    .filter(r => r.route)
-    .map(r => ({
-      path: r.route.path,
-      methods: Object.keys(r.route.methods)
-    }));
-  res.json({ total: routes.length, routes });
-});
-
-
-// ============================================================
-// ✅ PostgreSQL Connection
-// ============================================================
-
-
-// ============================================================
-// ✅ Auto-Migration: Ensure Razorpay columns exist
-// ============================================================
-async function runDatabaseMigrations() {
-  try {
-    console.log('📋 Checking database schema...');
-    
-    // Helper function to add columns if they don't exist
-    const ensureColumn = async (tableName, colName, colDef) => {
-      const checkColumn = await pool.query(
-        `SELECT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = $1 AND column_name = $2
-        )`,
-        [tableName, colName]
-      );
-      
-      if (!checkColumn.rows[0].exists) {
-        await pool.query(`ALTER TABLE ${tableName} ADD COLUMN ${colDef}`);
-        console.log(`✅ Added ${colName} column to ${tableName}`);
-      }
-    };
-
-    // Add Razorpay columns
-    await ensureColumn('payments', 'razorpay_order_id', `razorpay_order_id VARCHAR(255) UNIQUE`);
-    await ensureColumn('payments', 'razorpay_payment_id', `razorpay_payment_id VARCHAR(255) UNIQUE`);
-    await ensureColumn('payments', 'razorpay_signature', `razorpay_signature VARCHAR(255)`);
-    await ensureColumn('payments', 'payment_method', `payment_method VARCHAR(50) DEFAULT 'razorpay'`);
-    await ensureColumn('payments', 'processed_at', `processed_at TIMESTAMP`);
-
-    // Keep old columns for backward compatibility
-    await ensureColumn('payments', 'payment_reference_id', `payment_reference_id VARCHAR(255)`);
-    await ensureColumn('payments', 'updated_at', `updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
-      
-    // Create indexes
-    await pool.query(
-      `CREATE INDEX IF NOT EXISTS idx_razorpay_order_id ON payments(razorpay_order_id)`
-    );
-    await pool.query(
-      `CREATE INDEX IF NOT EXISTS idx_razorpay_payment_id ON payments(razorpay_payment_id)`
-    );
-    await pool.query(
-      `CREATE INDEX IF NOT EXISTS idx_payment_reference_id ON payments(payment_reference_id)`
-    );
-    await pool.query(
-      `CREATE INDEX IF NOT EXISTS idx_payment_booking_status ON payments(booking_id, status)`
-    );
-    console.log('✅ Created indexes for Razorpay columns');
-    
-    // Check if payment_reference_id column exists to determine if migrations have run
-    const checkPaymentRef = await pool.query(
-      `SELECT EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'payments' AND column_name = 'payment_reference_id'
-      )`
-    );
-
-    if (checkPaymentRef.rows[0].exists === false) {
-      
-      // Ensure refund-related columns exist so we can track refunds
-      const checkRefundAmount = await pool.query(
-        `SELECT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'payments' AND column_name = 'refund_amount'
-        )`
-      );
-      if (!checkRefundAmount.rows[0].exists) {
-        await pool.query(`ALTER TABLE payments ADD COLUMN refund_amount NUMERIC(10,2)`);
-        console.log('✅ Added refund_amount column to payments');
-      }
-
-      const checkRefundStatus = await pool.query(
-        `SELECT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'payments' AND column_name = 'refund_status'
-        )`
-      );
-      if (!checkRefundStatus.rows[0].exists) {
-        await pool.query(`ALTER TABLE payments ADD COLUMN refund_status VARCHAR(50) DEFAULT 'none'`);
-        console.log('✅ Added refund_status column to payments');
-      }
-
-      const checkRefundRequested = await pool.query(
-        `SELECT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'payments' AND column_name = 'refund_requested_at'
-        )`
-      );
-      if (!checkRefundRequested.rows[0].exists) {
-        await pool.query(`ALTER TABLE payments ADD COLUMN refund_requested_at TIMESTAMP`);
-        console.log('✅ Added refund_requested_at column to payments');
-      }
-
-      const checkRefundProcessed = await pool.query(
-        `SELECT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'payments' AND column_name = 'refund_processed_at'
-        )`
-      );
-      if (!checkRefundProcessed.rows[0].exists) {
-        await pool.query(`ALTER TABLE payments ADD COLUMN refund_processed_at TIMESTAMP`);
-        console.log('✅ Added refund_processed_at column to payments');
-      }
-
-      const checkRefundDue = await pool.query(
-        `SELECT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'payments' AND column_name = 'refund_due_by'
-        )`
-      );
-      if (!checkRefundDue.rows[0].exists) {
-        await pool.query(`ALTER TABLE payments ADD COLUMN refund_due_by TIMESTAMP`);
-        console.log('✅ Added refund_due_by column to payments');
-      }
-
-      // Create refunds table to track refund operations
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS refunds (
-          id SERIAL PRIMARY KEY,
-          payment_id INTEGER REFERENCES payments(id) ON DELETE SET NULL,
-          booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
-          customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
-          amount NUMERIC(10,2) NOT NULL,
-          status VARCHAR(50) DEFAULT 'pending',
-          reason TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          processed_at TIMESTAMP
-        )`);
-      console.log('✅ Ensured refunds table exists');
-
-      // Booking cancellations table
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS booking_cancellations (
-          id SERIAL PRIMARY KEY,
-          booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
-          admin_email VARCHAR(255),
-          reason TEXT,
-          cancelled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`);
-      console.log('✅ Ensured booking_cancellations table exists');
-
-      // If a legacy column name exists (e.g. cancelled_by, cancelled_on), migrate into new columns
-      try {
-        const colsRes = await pool.query(
-          `SELECT column_name FROM information_schema.columns WHERE table_name='booking_cancellations'`
-        );
-        const cols = colsRes.rows.map(r => r.column_name);
-
-        // If admin_email missing but cancelled_by exists, add admin_email and copy data
-        if (!cols.includes('admin_email')) {
-          await pool.query(`ALTER TABLE booking_cancellations ADD COLUMN admin_email VARCHAR(255)`);
-          console.log('✅ Added admin_email column to booking_cancellations');
-          if (cols.includes('cancelled_by')) {
-            await pool.query(`UPDATE booking_cancellations SET admin_email = cancelled_by WHERE admin_email IS NULL`);
-            console.log('✅ Migrated cancelled_by -> admin_email');
-          }
-        }
-
-        // If cancelled_at missing but cancelled_on exists, add cancelled_at and copy data
-        if (!cols.includes('cancelled_at')) {
-          await pool.query(`ALTER TABLE booking_cancellations ADD COLUMN cancelled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
-          console.log('✅ Added cancelled_at column to booking_cancellations');
-          if (cols.includes('cancelled_on')) {
-            await pool.query(`UPDATE booking_cancellations SET cancelled_at = cancelled_on WHERE cancelled_at IS NULL`);
-            console.log('✅ Migrated cancelled_on -> cancelled_at');
-          }
-        }
-        // Ensure new audit/refund columns exist
-        if (!cols.includes('refund_percent')) {
-          await pool.query(`ALTER TABLE booking_cancellations ADD COLUMN refund_percent NUMERIC(5,2)`);
-          console.log('✅ Added refund_percent column to booking_cancellations');
-        }
-        if (!cols.includes('refund_amount')) {
-          await pool.query(`ALTER TABLE booking_cancellations ADD COLUMN refund_amount NUMERIC(10,2)`);
-          console.log('✅ Added refund_amount column to booking_cancellations');
-        }
-        if (!cols.includes('canceled_by')) {
-          await pool.query(`ALTER TABLE booking_cancellations ADD COLUMN canceled_by VARCHAR(255)`);
-          console.log('✅ Added canceled_by column to booking_cancellations');
-          // If admin_email exists, copy it
-          if (cols.includes('admin_email')) {
-            await pool.query(`UPDATE booking_cancellations SET canceled_by = admin_email WHERE canceled_by IS NULL`);
-            console.log('✅ Migrated admin_email -> canceled_by');
-          }
-        }
-      } catch (mErr) {
-        console.warn('⚠️ Could not migrate legacy booking_cancellations columns:', mErr.message);
-      }
-
-      // Discounts table for future bookings
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS discounts (
-          id SERIAL PRIMARY KEY,
-          customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
-          car_id INTEGER REFERENCES cars(id) ON DELETE CASCADE,
-          percent NUMERIC(5,2) NOT NULL,
-          start_date DATE,
-          end_date DATE,
-          code VARCHAR(100),
-          used BOOLEAN DEFAULT false,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`);
-      console.log('✅ Ensured discounts table exists');
-
-      // Notifications table (simple in-app notifications)
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS notifications (
-          id SERIAL PRIMARY KEY,
-          customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
-          title VARCHAR(255),
-          message TEXT,
-          read BOOLEAN DEFAULT false,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`);
-      console.log('✅ Ensured notifications table exists');
-      
-      console.log('✅ Database migration completed successfully!');
-    } else {
-      console.log('✅ Database schema is up to date (payment_reference_id column exists)');
-    }
-
-    // Always ensure refund-related tables and payment refund columns exist
-    try {
-      console.log('🔎 Ensuring refund/discount/notification tables and refund columns exist');
-
-      // Ensure refund-related columns exist on payments (safeguard if migration ran partially)
-      const ensureColumn = async (colName, colDef) => {
-        const exists = await pool.query(
-          `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='payments' AND column_name=$1)`,
-          [colName]
-        );
-        if (!exists.rows[0].exists) {
-          await pool.query(`ALTER TABLE payments ADD COLUMN ${colDef}`);
-          console.log(`✅ Added ${colName} column to payments`);
-        }
-      };
-
-      await ensureColumn('refund_amount', `refund_amount NUMERIC(10,2)`);
-      await ensureColumn('refund_status', `refund_status VARCHAR(50) DEFAULT 'none'`);
-      await ensureColumn('refund_requested_at', `refund_requested_at TIMESTAMP`);
-      await ensureColumn('refund_processed_at', `refund_processed_at TIMESTAMP`);
-      await ensureColumn('refund_due_by', `refund_due_by TIMESTAMP`);
-
-      // Create tables if they do not exist
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS refunds (
-          id SERIAL PRIMARY KEY,
-          payment_id INTEGER REFERENCES payments(id) ON DELETE SET NULL,
-          booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
-          customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
-          amount NUMERIC(10,2) NOT NULL,
-          status VARCHAR(50) DEFAULT 'pending',
-          reason TEXT,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          processed_at TIMESTAMP
-        )`
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS booking_cancellations (
-          id SERIAL PRIMARY KEY,
-          booking_id INTEGER REFERENCES bookings(id) ON DELETE CASCADE,
-          admin_email VARCHAR(255),
-          reason TEXT,
-          cancelled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS discounts (
-          id SERIAL PRIMARY KEY,
-          customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
-          car_id INTEGER REFERENCES cars(id) ON DELETE CASCADE,
-          percent NUMERIC(5,2) NOT NULL,
-          start_date DATE,
-          end_date DATE,
-          code VARCHAR(100),
-          used BOOLEAN DEFAULT false,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`
-      );
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS notifications (
-          id SERIAL PRIMARY KEY,
-          customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
-          title VARCHAR(255),
-          message TEXT,
-          read BOOLEAN DEFAULT false,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )`
-      );
-
-      console.log('✅ Ensured refund/discount/notification tables and payments refund columns exist');
-    } catch (errInner) {
-      console.error('❌ Failed to ensure refund-related tables/columns:', errInner.message);
-    }
-  } catch (err) {
-    console.error('❌ Migration error:', err.message);
-    console.error('   Please run migration manually: migration_add_payment_reference.sql');
-  }
-}
-
-// ============================================================
-// ✅ ADMIN: Cancel booking (admin-initiated)
-// - Admin cancels booking => full refund regardless of timing
-// - Admin must provide a reason
-// - Creates booking_cancellations, refund entry, notification, and a 50% discount for same dates
-// ============================================================
-app.post('/api/admin/cancel-booking', verifyAdmin, async (req, res) => {
-  const { booking_id, reason } = req.body;
-  if (!booking_id || !reason) return res.status(400).json({ message: 'Missing booking_id or reason' });
-
-  const adminEmail = req.admin?.email || 'admin';
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const q = await client.query(
-      `SELECT b.id, b.status, b.customer_id, b.car_id, b.start_date, b.end_date, b.amount, b.paid,
-              p.id AS payment_id, p.amount AS paid_amount
-       FROM bookings b
-       LEFT JOIN payments p ON p.booking_id = b.id
-       WHERE b.id = $1`,
-      [booking_id]
-    );
-
-    if (!q.rows.length) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ message: 'Booking not found.' });
-    }
-
-    const booking = q.rows[0];
-
-    if (booking.status === 'cancelled') {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ message: 'Booking already cancelled.' });
-    }
-
-    // Mark booking cancelled
-    await client.query(`UPDATE bookings SET status='cancelled' WHERE id=$1`, [booking_id]);
-
-    // Admin cancellation -> prepare full refund values
-    const refundPercent = 100; // admin cancels => full refund
-    let refundAmount = 0;
-    if (booking.paid) {
-      refundAmount = parseFloat(booking.paid_amount || booking.amount || 0);
-    }
-
-    // Record cancellation with refund details (refundAmount may be 0 if unpaid)
-    await client.query(
-      `INSERT INTO booking_cancellations 
-       (booking_id, customer_id, reason, refund_percent, refund_amount, canceled_by, admin_email, status, cancelled_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
-      [
-        booking_id,
-        booking.customer_id,         // ✔ ALWAYS available
-        reason,
-        refundPercent,
-        refundAmount,
-        'admin',
-        adminEmail
-      , 'pending'
-      ]
-    );
-
-    // If paid, schedule full refund
-    if (booking.paid) {
-      // create refund record
-      await client.query(
-        `INSERT INTO refunds (payment_id, booking_id, customer_id, amount, status, reason)
-         VALUES ($1,$2,$3,$4,'pending',$5)`,
-        [booking.payment_id || null, booking_id, booking.customer_id, refundAmount, 'Admin cancellation: ' + reason]
-      );
-
-      // update payments table refund columns
-      await client.query(
-        `UPDATE payments SET refund_amount=$1, refund_status='pending', refund_requested_at=NOW(), refund_due_by=NOW()+INTERVAL '72 hours' WHERE booking_id=$2`,
-        [refundAmount, booking_id]
-      );
-    }
-
-    // Insert a notification for the customer
-    const title = 'Booking Cancelled by Admin';
-    const message = `Your booking #${booking_id} was cancelled by admin. Reason: ${reason}. Refund: ₹${refundAmount}.`;
-    await client.query(
-      `INSERT INTO notifications (customer_id, title, message) VALUES ($1,$2,$3)`,
-      [booking.customer_id, title, message]
-    );
-
-    // Create a 50% discount for the same dates (usable for future booking across any car)
-    const discountPercent = 50;
-    const dcode = `ADM50_${booking_id}_${Date.now()}`;
-    await client.query(
-      `INSERT INTO discounts (customer_id, car_id, percent, start_date, end_date, code)
-       VALUES ($1,NULL,$2,$3,$4,$5)`,
-      [booking.customer_id, discountPercent, booking.start_date, booking.end_date, dcode]
-    );
-
-    // Notify customer about discount issuance
-    try {
-      const discountMsg = `You've been granted a ${discountPercent}% discount (code: ${dcode}) valid ${booking.start_date} to ${booking.end_date}.`;
-      await client.query(`INSERT INTO notifications (customer_id, title, message) VALUES ($1,$2,$3)`, [booking.customer_id, 'Discount Issued', discountMsg]);
-    } catch (nErr) {
-      console.warn('⚠️ Failed to insert discount notification:', nErr.message);
-    }
-
-    await client.query('COMMIT');
-
-    // Send admin cancellation email
-    try {
-      const customer = await pool.query(
-        `SELECT id, name, email FROM customers WHERE id = $1`,
-        [booking.customer_id]
-      );
-      const car = await pool.query(
-        `SELECT id, brand, model, location FROM cars WHERE id = $1`,
-        [booking.car_id]
-      );
-      
-      if (customer.rows.length && car.rows.length) {
-        const bookingInfo = {
-          id: booking_id,
-          start_date: booking.start_date,
-          end_date: booking.end_date,
-          amount: booking.amount
-        };
-        await sendCancellationEmail(customer.rows[0], bookingInfo, car.rows[0], reason, refundAmount);
-      }
-    } catch (emailErr) {
-      console.warn('⚠️ Cancellation email failed (non-blocking):', emailErr.message);
-    }
-
-    res.json({ message: 'Booking cancelled by admin. Full refund scheduled, customer notified, discount issued.' });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Admin cancel booking error:', err);
-    res.status(500).json({ message: 'Failed to cancel booking (admin).' });
-  } finally {
-    client.release();
-  }
-});
-
-// ============================================================
-// ✅ ADMIN: List canceled bookings
-// ============================================================
-app.get('/api/admin/canceled-bookings', verifyAdmin, async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT bc.*, b.start_date, b.end_date, b.amount, b.car_id, c.brand, c.model, b.customer_id, cu.name AS customer_name, cu.email
-       FROM booking_cancellations bc
-       JOIN bookings b ON bc.booking_id = b.id
-       JOIN cars c ON b.car_id = c.id
-       JOIN customers cu ON b.customer_id = cu.id
-       ORDER BY bc.id DESC`
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Fetch canceled bookings error:', err);
-    res.status(500).json({ message: 'Failed to fetch canceled bookings.' });
-  }
-});
-
-// ============================================================
-// ✅ ADMIN: List refunds
-// ============================================================
-app.get('/api/admin/refunds', verifyAdmin, async (req, res) => {
-  try {
-    const q = await pool.query(
-      `SELECT r.*, p.payment_id AS payment_row_id, p.refund_status AS payment_refund_status, cu.name AS customer_name, cu.email
-       FROM refunds r
-       LEFT JOIN payments p ON p.id = r.payment_id
-       LEFT JOIN customers cu ON cu.id = r.customer_id
-       ORDER BY r.created_at DESC`);
-    res.json(q.rows);
-  } catch (err) {
-    console.error('Fetch refunds error:', err);
-    res.status(500).json({ message: 'Failed to fetch refunds.' });
-  }
-});
-
-// ============================================================
-// ✅ ADMIN: Transactions (bookings + payments) - paginated
-// Returns { data: [...], total: n }
-// ============================================================
-app.get('/api/admin/transactions', verifyAdmin, async (req, res) => {
-  try {
-    const page = parseInt(req.query.page, 10) || 1;
-    const pageSize = parseInt(req.query.pageSize, 10) || 50;
-    const offset = (page - 1) * pageSize;
-
-    const q = await pool.query(
-      `SELECT p.id AS payment_id, p.booking_id, p.amount AS payment_amount, p.status AS payment_status,
-              b.id AS booking_id_row, b.start_date, b.end_date, b.amount AS booking_amount, b.paid, b.verified,
-              c.brand, c.model, cu.name AS customer_name, cu.email
-       FROM payments p
-       JOIN bookings b ON b.id = p.booking_id
-       JOIN cars c ON b.car_id = c.id
-       JOIN customers cu ON b.customer_id = cu.id
-       ORDER BY b.start_date DESC
-       LIMIT $1 OFFSET $2`,
-      [pageSize, offset]
-    );
-
-    const cnt = await pool.query(`SELECT COUNT(*)::int AS total FROM payments`);
-
-    res.json({ data: q.rows, total: cnt.rows[0].total });
-  } catch (err) {
-    console.error('Admin transactions error:', err);
-    res.status(500).json({ message: 'Failed to fetch transactions.' });
-  }
-});
-
-// ============================================================
-// ✅ ADMIN: Process refunds (simulate/process)
-// - If `refund_id` provided in body, process that refund, else process all pending refunds (limit 50)
-// - Marks `refunds.status='processed'`, `refunds.processed_at=NOW()` and updates `payments` refund columns
-// - Inserts notification for customer about processed refund
-// ============================================================
-app.post('/api/admin/process-refunds', verifyAdmin, async (req, res) => {
-  const { refund_id } = req.body || {};
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    const params = [];
-    let qstr = `SELECT r.* FROM refunds r WHERE r.status='pending'`;
-    if (refund_id) {
-      qstr += ` AND r.id=$1`;
-      params.push(refund_id);
-    } else {
-      qstr += ` ORDER BY r.created_at ASC LIMIT 50`;
-    }
-
-    const refundsRes = await client.query(qstr, params);
-    if (!refundsRes.rows.length) {
-      await client.query('COMMIT');
-      return res.json({ message: 'No pending refunds found.' });
-    }
-
-    const processed = [];
-    for (const r of refundsRes.rows) {
-      // In a real system we'd call the payment gateway here. We'll simulate success.
-      await client.query(`UPDATE refunds SET status='processed', processed_at=NOW() WHERE id=$1`, [r.id]);
-
-      // update payments row
-      await client.query(`UPDATE payments SET refund_status='processed', refund_processed_at=NOW() WHERE booking_id=$1`, [r.booking_id]);
-
-      // insert notification
-      await client.query(
-        `INSERT INTO notifications (customer_id, title, message) VALUES ($1,$2,$3)`,
-        [r.customer_id, 'Refund Processed', `Your refund of ₹${r.amount} for booking #${r.booking_id} has been processed.`]
-      );
-
-      processed.push({ refund_id: r.id, booking_id: r.booking_id, amount: r.amount });
-    }
-
-    await client.query('COMMIT');
-    res.json({ message: 'Processed refunds', processed });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Process refunds error:', err);
-    res.status(500).json({ message: 'Failed to process refunds.' });
-  } finally {
-    client.release();
-  }
-});
-
-// ============================================================
-// ✅ ADMIN: Get car schedule and vacancy ranges (next 180 days)
-// ============================================================
-app.get('/api/admin/car-schedule/:car_id', verifyAdmin, async (req, res) => {
-  const { car_id } = req.params;
-  try {
-    const bookingsRes = await pool.query(
-      `SELECT id, start_date, end_date, status FROM bookings WHERE car_id=$1 AND status!='cancelled' ORDER BY start_date ASC`,
-      [car_id]
-    );
-
-    const bookings = bookingsRes.rows.map(r => ({ start: new Date(r.start_date), end: new Date(r.end_date), id: r.id }));
-
-    // Compute vacancy ranges between today and +180 days
-    const today = new Date();
-    const endWindow = new Date(today.getTime() + 180 * 24 * 60 * 60 * 1000);
-
-    // Create sorted non-overlapping booked ranges
-    const ranges = bookings.map(b => ({ start: b.start, end: b.end })).sort((a,b) => a.start - b.start);
-    const merged = [];
-    for (const r of ranges) {
-      if (!merged.length) merged.push(r);
-      else {
-        const last = merged[merged.length-1];
-        if (r.start <= new Date(last.end.getTime() + 24*60*60*1000)) {
-          // overlap or contiguous
-          last.end = new Date(Math.max(last.end, r.end));
-        } else merged.push(r);
-      }
-    }
-
-    const vacancies = [];
-    let cursor = new Date(today);
-    for (const m of merged) {
-      if (m.end < today) continue;
-      if (m.start > cursor) {
-        vacancies.push({ start: cursor.toISOString().split('T')[0], end: new Date(m.start.getTime() - 24*60*60*1000).toISOString().split('T')[0] });
-      }
-      cursor = new Date(m.end.getTime() + 24*60*60*1000);
-      if (cursor > endWindow) break;
-    }
-    if (cursor <= endWindow) vacancies.push({ start: cursor.toISOString().split('T')[0], end: endWindow.toISOString().split('T')[0] });
-
-    res.json({ bookings: bookingsRes.rows, vacancies });
-  } catch (err) {
-    console.error('Car schedule error:', err);
-    res.status(500).json({ message: 'Failed to fetch car schedule.' });
-  }
-});
-
-// ============================================================
-// ✅ CANCEL BOOKING (admin or user)
-// - Admin cancellations: full refund (100%)
-// - User cancellations: full refund if >=48 hours before start, else 50%
-// - Refunds are scheduled and marked pending; admin can process them
-// ============================================================
-app.post('/api/cancel-booking', async (req, res) => {
-  console.log('🔍 Cancel Booking API called:', req.body);
-
-  const {
-    booking_id,
-    cancelled_by,       // 'admin' or 'user'
-    reason,
-    admin_email,        // optional, when admin cancels
-    customer_id         // optional, fallback to booking.customer_id
-  } = req.body;
-
-  if (!booking_id || !cancelled_by) {
-    return res.status(400).json({ message: 'Missing booking_id or cancelled_by' });
-  }
-
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    // If admin cancellation, verify admin token
-    let verifiedAdminEmail = null;
-    if (cancelled_by === 'admin') {
-      const header = req.headers['authorization'];
-      if (!header) {
-        await client.query('ROLLBACK');
-        return res.status(401).json({ message: 'Admin authorization required for admin cancellations' });
-      }
-      const token = header.split(' ')[1];
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        verifiedAdminEmail = decoded.email || admin_email || 'admin';
-      } catch (e) {
-        await client.query('ROLLBACK');
-        return res.status(401).json({ message: 'Invalid admin token' });
-      }
-    }
-
-    // Fetch booking and payment info
-    const bookingRes = await client.query(
-      `SELECT b.*, p.id AS payment_id, p.amount AS paid_amount, p.status AS payment_status
-       FROM bookings b
-       LEFT JOIN payments p ON p.booking_id = b.id
-       WHERE b.id = $1`,
-      [booking_id]
-    );
-
-    if (bookingRes.rowCount === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ message: 'Booking not found' });
-    }
-
-    const booking = bookingRes.rows[0];
-    if (booking.status === 'cancelled') {
-      await client.query('ROLLBACK');
-      return res.status(409).json({ message: 'Booking already cancelled.' });
-    }
-
-    const paidAmount = parseFloat(booking.paid_amount || booking.amount || 0);
-    let refundAmount = 0;
-    let refundPercent = 0;
-
-    if (cancelled_by === 'admin') {
-      refundPercent = 100;
-      refundAmount = paidAmount;
-      console.log('🟢 Admin cancellation → Full refund:', refundAmount);
-    } else {
-      // user cancellation
-      if (!booking.paid) {
-        // Not paid — just cancel
-        await client.query(`INSERT INTO booking_cancellations (booking_id, customer_id, reason, canceled_by, refund_percent, refund_amount, status, cancelled_at)
-                            VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())`,
-          [booking_id, customer_id || booking.customer_id, reason || null, 'user', 0, 0, 'pending']
-        );
-        await client.query(`UPDATE bookings SET status='cancelled' WHERE id=$1`, [booking_id]);
-        await client.query('COMMIT');
-        client.release();
-        return res.json({ message: 'Booking cancelled. No payment was recorded, so no refund necessary.' });
-      }
-
-      const now = new Date();
-      const startTime = new Date(booking.start_date);
-      const diffHours = (startTime - now) / (1000 * 60 * 60);
-
-      if (diffHours >= 48) {
-        refundPercent = 100;
-        refundAmount = paidAmount;
-      } else {
-        refundPercent = 50;
-        refundAmount = parseFloat((paidAmount * 0.5).toFixed(2));
-      }
-
-      console.log('🔵 User cancellation refund:', refundAmount, 'percent:', refundPercent);
-    }
-
-    // Insert cancellation record
-    await client.query(
-      `INSERT INTO booking_cancellations (booking_id, customer_id, reason, canceled_by, admin_email, refund_percent, refund_amount, status, cancelled_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())`,
-      [booking_id, customer_id || booking.customer_id, reason || null, cancelled_by, verifiedAdminEmail || admin_email || null, refundPercent, refundAmount, 'pending']
-    );
-
-    // Mark booking cancelled
-    await client.query(`UPDATE bookings SET status='cancelled' WHERE id=$1`, [booking_id]);
-
-    // If paid and refund applicable, create refund record and update payments
-    if (booking.paid && refundAmount > 0) {
-      await client.query(
-        `INSERT INTO refunds (payment_id, booking_id, customer_id, amount, status, reason)
-         VALUES ($1,$2,$3,$4,'pending',$5)`,
-        [booking.payment_id || null, booking_id, booking.customer_id, refundAmount, (cancelled_by === 'admin' ? 'Admin cancellation' : 'User cancellation') + (reason ? ': ' + reason : '')]
-      );
-
-      await client.query(
-        `UPDATE payments SET refund_amount=$1, refund_status='pending', refund_requested_at=NOW(), refund_due_by=NOW()+INTERVAL '72 hours' WHERE booking_id=$2`,
-        [refundAmount, booking_id]
-      );
-    }
-
-    // Issue discount on cancellation
-    // User cancellation: NO discount issued (user initiated the cancellation)
-    // Admin cancellation: 50% specific + 15% general (handled below)
-    // ✅ Updated: User cancellations do not receive any discount
-
-    // Insert notification
-    const notifyMsg = cancelled_by === 'admin'
-      ? `Your booking #${booking_id} was cancelled by admin. Reason: ${reason || 'No reason provided'}. Refund: ₹${refundAmount}`
-      : `Your booking #${booking_id} has been cancelled. Refund Amount: ₹${refundAmount}`;
-
-    await client.query(`INSERT INTO notifications (customer_id, title, message) VALUES ($1,$2,$3)`, [booking.customer_id, 'Booking Cancelled', notifyMsg]);
-
-    // If admin cancelled, grant discounts:
-    // - 50% discount for the any car + same dates (specific discount)
-    // - 15% general discount code for any future booking (fallback)
-    if (cancelled_by === 'admin') {
-      try {
-        const specificPercent = 50;
-        // Issue 50% discount tied to the same dates but not restricted to the same car
-        const specificCode = `ADM50_${booking_id}_${Date.now()}`;
-        await client.query(
-          `INSERT INTO discounts (customer_id, car_id, percent, start_date, end_date, code)
-           VALUES ($1,NULL,$2,$3,$4,$5)`,
-          [booking.customer_id, specificPercent, booking.start_date, booking.end_date, specificCode]
-        );
-        console.log('✅ Issued 50% specific discount to customer after admin cancellation', specificCode);
-
-        try {
-          const msg = `You've been granted a ${specificPercent}% discount (code: ${specificCode}) valid ${booking.start_date} to ${booking.end_date}.`;
-          await client.query(`INSERT INTO notifications (customer_id, title, message) VALUES ($1,$2,$3)`, [booking.customer_id, 'Discount Issued', msg]);
-        } catch (nErr) {
-          console.warn('⚠️ Failed to insert specific discount notification:', nErr.message);
-        }
-
-        const generalPercent = 15;
-        const code = `ADM15_${booking_id}_${Date.now()}`;
-        await client.query(
-          `INSERT INTO discounts (customer_id, car_id, percent, start_date, end_date, code)
-           VALUES ($1,NULL,$2,NULL,NULL,$3)`,
-          [booking.customer_id, generalPercent, code]
-        );
-        console.log('✅ Issued 15% general discount code to customer after admin cancellation:', code);
-      } catch (dErr) {
-        console.warn('⚠️ Failed to insert discounts after admin cancellation:', dErr.message);
-      }
-    }
-
-    await client.query('COMMIT');
-
-    // Send cancellation email
-    try {
-      const customer = await pool.query(
-        `SELECT id, name, email FROM customers WHERE id = $1`,
-        [booking.customer_id]
-      );
-      const car = await pool.query(
-        `SELECT id, brand, model, location FROM cars WHERE id = $1`,
-        [booking.car_id]
-      );
-      
-      if (customer.rows.length && car.rows.length) {
-        const bookingInfo = {
-          id: booking_id,
-          start_date: booking.start_date,
-          end_date: booking.end_date,
-          amount: booking.amount
-        };
-        
-        // Fetch discount info if created
-        let discountInfo = null;
-        try {
-          const discountRes = await pool.query(
-            `SELECT percent, code FROM discounts WHERE customer_id = $1 ORDER BY created_at DESC LIMIT 1`,
-            [booking.customer_id]
-          );
-          if (discountRes.rows.length > 0) {
-            discountInfo = {
-              percent: discountRes.rows[0].percent,
-              code: discountRes.rows[0].code,
-              validUntil: null
-            };
-          }
-        } catch (dErr) {
-          console.warn('⚠️ Failed to fetch discount info:', dErr.message);
-        }
-        
-        await sendCancellationEmail(customer.rows[0], bookingInfo, car.rows[0], reason, refundAmount, discountInfo);
-      }
-    } catch (emailErr) {
-      console.warn('⚠️ Cancellation email failed (non-blocking):', emailErr.message);
-    }
-
-    res.json({ message: 'Booking cancelled successfully', refundAmount, refundPercent, cancelled_by, booking_id });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('❌ Cancel booking error:', err);
-    res.status(500).json({ message: 'Cancel booking failed', error: err.message });
-  } finally {
-    client.release();
-  }
-});
-
-
-// ============================================================
-// ✅ Multer Configuration (Car Image Uploads)
-// ============================================================
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const dir = path.join(__dirname, "uploads");
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir);
-    cb(null, dir);
-  },
-  filename: function (req, file, cb) {
-    cb(
-      null,
-      Date.now() +
-        "-" +
-        Math.round(Math.random() * 1e9) +
-        path.extname(file.originalname)
-    );
-  },
-});
-const upload = multer({ storage });
-
-// ============================================================
-// ✅ JWT Secrets and Admin Credentials
-// ============================================================
 const JWT_SECRET = process.env.JWT_SECRET || "secretkey123";
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "karikeharikrishna@gmail.com";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "Anu";
+const ADMIN_PASSWORD =
+  process.env.ADMIN_PASSWORD || process.env.ADMIN_PASS || "Anu";
+const PORT = process.env.PORT || 10000;
 
-// ============================================================
-// ✅ Middleware for Admin Verification
-// ============================================================
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+
+const uploadDir = path.join(__dirname, "uploads");
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination(req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename(req, file, cb) {
+    cb(
+      null,
+      `${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(
+        file.originalname
+      )}`
+    );
+  },
+});
+
+const upload = multer({ storage });
+
+app.use(
+  cors({
+    origin: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
+  })
+);
+app.use(express.json({ limit: "5mb" }));
+app.use("/uploads", express.static(uploadDir));
+
+function db() {
+  return getDb();
+}
+
+function collection(name) {
+  return db().collection(name);
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function toNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toDateOnly(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString().split("T")[0];
+}
+
+function todayDateOnly() {
+  const now = new Date();
+  const month = `${now.getMonth() + 1}`.padStart(2, "0");
+  const day = `${now.getDate()}`.padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function parseDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function overlaps(startA, endA, startB, endB) {
+  return startA <= endB && endA >= startB;
+}
+
 function verifyAdmin(req, res, next) {
-  const header = req.headers["authorization"];
-  if (!header)
-    return res.status(401).json({ message: "Missing authorization header" });
-  const token = header.split(" ")[1];
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+
+  if (!token) {
+    return res.status(401).json({ message: "Admin authorization required" });
+  }
+
   jwt.verify(token, JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(401).json({ message: "Invalid or expired token" });
+    if (err) {
+      return res.status(401).json({ message: "Invalid or expired token" });
+    }
     req.admin = decoded;
     next();
   });
 }
 
-// ============================================================
-// ✅ USER ROUTES
-// ============================================================
+async function nextSequence(name) {
+  const result = await collection("counters").findOneAndUpdate(
+    { _id: name },
+    { $inc: { seq: 1 } },
+    { upsert: true, returnDocument: "after" }
+  );
 
-// Register a new user
-app.post("/api/register", async (req, res) => {
-  const { name, email, phone, password } = req.body;
-  if (!name || !email || !phone || !password)
-    return res.status(400).json({ message: "All fields are required." });
+  if (typeof result?.seq === "number") return result.seq;
+  if (typeof result?.value?.seq === "number") return result.value.seq;
+
+  const counter = await collection("counters").findOne({ _id: name });
+  return counter?.seq || 1;
+}
+
+async function ensureIndexes() {
+  await Promise.all([
+    collection("customers").createIndex({ id: 1 }, { unique: true }),
+    collection("customers").createIndex({ email: 1 }, { unique: true }),
+    collection("cars").createIndex({ id: 1 }, { unique: true }),
+    collection("bookings").createIndex({ id: 1 }, { unique: true }),
+    collection("bookings").createIndex({ car_id: 1, start_date: 1, end_date: 1 }),
+    collection("payments").createIndex({ id: 1 }, { unique: true }),
+    collection("payments").createIndex({ booking_id: 1 }, { unique: true }),
+    collection("refunds").createIndex({ id: 1 }, { unique: true }),
+    collection("booking_cancellations").createIndex(
+      { id: 1 },
+      { unique: true }
+    ),
+    collection("discounts").createIndex({ id: 1 }, { unique: true }),
+    collection("notifications").createIndex({ id: 1 }, { unique: true }),
+  ]);
+}
+
+async function getCustomerById(id) {
+  return collection("customers").findOne({ id: toNumber(id) });
+}
+
+async function getCustomerByEmail(email) {
+  return collection("customers").findOne({
+    email: String(email || "").trim().toLowerCase(),
+  });
+}
+
+async function getCarById(id) {
+  return collection("cars").findOne({ id: toNumber(id) });
+}
+
+async function getBookingById(id) {
+  return collection("bookings").findOne({ id: toNumber(id) });
+}
+
+async function getPaymentByBookingId(bookingId) {
+  return collection("payments").findOne({ booking_id: toNumber(bookingId) });
+}
+
+async function getCancellationByBookingId(bookingId) {
+  return collection("booking_cancellations")
+    .find({ booking_id: toNumber(bookingId) })
+    .sort({ cancelled_at: -1, id: -1 })
+    .limit(1)
+    .next();
+}
+
+async function createNotification(customerId, title, message) {
+  await collection("notifications").insertOne({
+    id: await nextSequence("notifications"),
+    customer_id: toNumber(customerId),
+    title,
+    message,
+    read: false,
+    created_at: nowIso(),
+  });
+}
+
+async function createDiscount({
+  customer_id,
+  car_id = null,
+  percent,
+  start_date = null,
+  end_date = null,
+  code,
+}) {
+  const discount = {
+    id: await nextSequence("discounts"),
+    customer_id: toNumber(customer_id),
+    car_id: car_id == null ? null : toNumber(car_id),
+    percent: toNumber(percent),
+    start_date: start_date || null,
+    end_date: end_date || null,
+    code,
+    used: false,
+    created_at: nowIso(),
+  };
+
+  await collection("discounts").insertOne(discount);
+  return discount;
+}
+
+async function createRefundRecord({
+  payment_id = null,
+  booking_id,
+  customer_id,
+  amount,
+  reason,
+}) {
+  const refund = {
+    id: await nextSequence("refunds"),
+    payment_id: payment_id == null ? null : toNumber(payment_id),
+    booking_id: toNumber(booking_id),
+    customer_id: toNumber(customer_id),
+    amount: toNumber(amount),
+    status: "pending",
+    reason,
+    created_at: nowIso(),
+    processed_at: null,
+  };
+
+  await collection("refunds").insertOne(refund);
+  return refund;
+}
+
+async function generateCollectionAndReturnQr(
+  booking,
+  customer,
+  car,
+  paymentExtra = {}
+) {
+  const collectionPayload = {
+    qr_type: "collection",
+    booking_id: booking.id,
+    customer_id: customer.id,
+    customer_name: customer.name,
+    customer_phone: customer.phone,
+    car_id: car.id,
+    car: `${car.brand} ${car.model}`,
+    location: car.location,
+    start_date: booking.start_date,
+    amount: booking.amount,
+    ...paymentExtra,
+  };
+
+  const returnPayload = {
+    qr_type: "return",
+    booking_id: booking.id,
+    customer_id: customer.id,
+    customer_name: customer.name,
+    customer_phone: customer.phone,
+    car_id: car.id,
+    car: `${car.brand} ${car.model}`,
+    location: car.location,
+    end_date: booking.end_date,
+    amount: booking.amount,
+    ...paymentExtra,
+  };
+
+  return {
+    collection_qr: await QRCode.toDataURL(JSON.stringify(collectionPayload)),
+    return_qr: await QRCode.toDataURL(JSON.stringify(returnPayload)),
+  };
+}
+
+async function markBookingPaid({
+  bookingId,
+  paymentPatch = {},
+  bookingStatus = "confirmed",
+  emailCustomer = true,
+}) {
+  const booking = await getBookingById(bookingId);
+  const customer = booking ? await getCustomerById(booking.customer_id) : null;
+  const car = booking ? await getCarById(booking.car_id) : null;
+  const payment = booking ? await getPaymentByBookingId(booking.id) : null;
+
+  if (!booking || !customer || !car || !payment) {
+    throw new Error("Booking payment context is incomplete");
+  }
+
+  const qrCodes = await generateCollectionAndReturnQr(booking, customer, car);
+
+  await collection("bookings").updateOne(
+    { id: booking.id },
+    {
+      $set: {
+        paid: true,
+        status: bookingStatus,
+        updated_at: nowIso(),
+      },
+    }
+  );
+
+  await collection("payments").updateOne(
+    { booking_id: booking.id },
+    {
+      $set: {
+        status: "paid",
+        processed_at: nowIso(),
+        payment_method: paymentPatch.payment_method || payment.payment_method || "manual",
+        collection_qr: qrCodes.collection_qr,
+        return_qr: qrCodes.return_qr,
+        ...paymentPatch,
+      },
+    }
+  );
+
+  if (emailCustomer) {
+    try {
+      await sendPaymentConfirmedEmail(
+        { name: customer.name, email: customer.email },
+        {
+          id: booking.id,
+          start_date: booking.start_date,
+          end_date: booking.end_date,
+          amount: booking.amount,
+        },
+        { brand: car.brand, model: car.model, location: car.location }
+      );
+    } catch (error) {
+      console.warn("⚠️ Payment confirmation email failed:", error.message);
+    }
+  }
+
+  return {
+    booking: { ...booking, paid: true, status: bookingStatus },
+    customer,
+    car,
+    payment: {
+      ...payment,
+      ...paymentPatch,
+      status: "paid",
+      collection_qr: qrCodes.collection_qr,
+      return_qr: qrCodes.return_qr,
+    },
+  };
+}
+
+function computeVacancies(bookings, startDate, endDate) {
+  const ranges = bookings
+    .map((booking) => ({
+      start: parseDate(booking.start_date),
+      end: parseDate(booking.end_date),
+    }))
+    .filter((range) => range.start && range.end && range.end >= startDate)
+    .sort((a, b) => a.start - b.start);
+
+  const merged = [];
+  for (const range of ranges) {
+    if (!merged.length) {
+      merged.push(range);
+      continue;
+    }
+
+    const previous = merged[merged.length - 1];
+    const previousEndPlusOne = new Date(previous.end.getTime() + 24 * 60 * 60 * 1000);
+    if (range.start <= previousEndPlusOne) {
+      previous.end = new Date(Math.max(previous.end.getTime(), range.end.getTime()));
+    } else {
+      merged.push(range);
+    }
+  }
+
+  const vacancies = [];
+  let cursor = new Date(startDate);
+
+  for (const range of merged) {
+    if (range.start > cursor) {
+      const vacancyEnd = new Date(range.start.getTime() - 24 * 60 * 60 * 1000);
+      if (cursor <= vacancyEnd) {
+        vacancies.push({
+          start: cursor.toISOString().split("T")[0],
+          end: vacancyEnd.toISOString().split("T")[0],
+        });
+      }
+    }
+
+    cursor = new Date(range.end.getTime() + 24 * 60 * 60 * 1000);
+    if (cursor > endDate) break;
+  }
+
+  if (cursor <= endDate) {
+    vacancies.push({
+      start: cursor.toISOString().split("T")[0],
+      end: endDate.toISOString().split("T")[0],
+    });
+  }
+
+  return vacancies;
+}
+
+async function buildBookingView(booking) {
+  const [car, payment, cancellation] = await Promise.all([
+    getCarById(booking.car_id),
+    getPaymentByBookingId(booking.id),
+    getCancellationByBookingId(booking.id),
+  ]);
+
+  return {
+    ...booking,
+    booking_id: booking.id,
+    brand: car?.brand || null,
+    model: car?.model || null,
+    location: car?.location || null,
+    images: Array.isArray(car?.images) ? car.images : [],
+    payment_status: payment?.status || null,
+    refund_amount: payment?.refund_amount || null,
+    refund_status: payment?.refund_status || null,
+    collection_qr: payment?.collection_qr || null,
+    return_qr: payment?.return_qr || null,
+    cancelled_reason: cancellation?.reason || null,
+    cancelled_at: cancellation?.cancelled_at || null,
+    canceled_by: cancellation?.canceled_by || null,
+    cancel_admin_email: cancellation?.admin_email || null,
+    cancel_customer_id: cancellation?.customer_id || null,
+    cancel_refund_amount: cancellation?.refund_amount || null,
+    cancel_refund_percent: cancellation?.refund_percent || null,
+  };
+}
+
+async function handleBookingCancellation({
+  booking,
+  cancelledBy,
+  reason = null,
+  adminEmail = null,
+}) {
+  const payment = await getPaymentByBookingId(booking.id);
+  const customer = await getCustomerById(booking.customer_id);
+  const car = await getCarById(booking.car_id);
+
+  let refundPercent = 0;
+  let refundAmount = 0;
+
+  if (cancelledBy === "admin") {
+    refundPercent = 100;
+    refundAmount = booking.paid ? toNumber(payment?.amount || booking.amount) : 0;
+  } else if (booking.paid) {
+    const start = parseDate(booking.start_date);
+    const hoursUntilStart =
+      start instanceof Date
+        ? (start.getTime() - Date.now()) / (1000 * 60 * 60)
+        : -1;
+    refundPercent = hoursUntilStart >= 48 ? 100 : 50;
+    refundAmount = Number(
+      ((toNumber(payment?.amount || booking.amount) * refundPercent) / 100).toFixed(2)
+    );
+  }
+
+  await collection("bookings").updateOne(
+    { id: booking.id },
+    { $set: { status: "cancelled", updated_at: nowIso() } }
+  );
+
+  const cancellation = {
+    id: await nextSequence("booking_cancellations"),
+    booking_id: booking.id,
+    customer_id: booking.customer_id,
+    reason,
+    canceled_by: cancelledBy,
+    admin_email: adminEmail,
+    refund_percent: refundPercent,
+    refund_amount: refundAmount,
+    status: "pending",
+    cancelled_at: nowIso(),
+  };
+  await collection("booking_cancellations").insertOne(cancellation);
+
+  if (booking.paid && refundAmount > 0 && payment) {
+    await createRefundRecord({
+      payment_id: payment.id,
+      booking_id: booking.id,
+      customer_id: booking.customer_id,
+      amount: refundAmount,
+      reason:
+        cancelledBy === "admin"
+          ? `Admin cancellation${reason ? `: ${reason}` : ""}`
+          : `User cancellation${reason ? `: ${reason}` : ""}`,
+    });
+
+    await collection("payments").updateOne(
+      { booking_id: booking.id },
+      {
+        $set: {
+          refund_amount: refundAmount,
+          refund_status: "pending",
+          refund_requested_at: nowIso(),
+          refund_due_by: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
+        },
+      }
+    );
+  }
+
+  await createNotification(
+    booking.customer_id,
+    "Booking Cancelled",
+    cancelledBy === "admin"
+      ? `Your booking #${booking.id} was cancelled by admin. Reason: ${
+          reason || "No reason provided"
+        }. Refund: ₹${refundAmount}.`
+      : `Your booking #${booking.id} has been cancelled. Refund Amount: ₹${refundAmount}.`
+  );
+
+  let emailDiscount = null;
+  if (cancelledBy === "admin") {
+    const specificCode = `ADM50_${booking.id}_${Date.now()}`;
+    const generalCode = `ADM15_${booking.id}_${Date.now()}`;
+    emailDiscount = await createDiscount({
+      customer_id: booking.customer_id,
+      percent: 50,
+      start_date: booking.start_date,
+      end_date: booking.end_date,
+      code: specificCode,
+    });
+    await createDiscount({
+      customer_id: booking.customer_id,
+      percent: 15,
+      code: generalCode,
+    });
+    await createNotification(
+      booking.customer_id,
+      "Discount Issued",
+      `You've been granted a 50% discount (code: ${specificCode}) valid ${booking.start_date} to ${booking.end_date}.`
+    );
+  }
+
+  if (customer && car) {
+    try {
+      await sendCancellationEmail(
+        { id: customer.id, name: customer.name, email: customer.email },
+        {
+          id: booking.id,
+          start_date: booking.start_date,
+          end_date: booking.end_date,
+          amount: booking.amount,
+        },
+        { brand: car.brand, model: car.model, location: car.location },
+        reason,
+        refundAmount,
+        emailDiscount
+          ? {
+              percent: emailDiscount.percent,
+              code: emailDiscount.code,
+              validUntil: emailDiscount.end_date,
+            }
+          : null
+      );
+    } catch (error) {
+      console.warn("⚠️ Cancellation email failed:", error.message);
+    }
+  }
+
+  return { refundAmount, refundPercent, cancellation };
+}
+
+// ROUTE_HELPERS_MARKER
+
+app.get("/", (req, res) => {
+  res.send("🚗 A6 Cars Backend is running successfully!");
+});
+
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", database: "mongodb" });
+});
+
+app.get("/debug/routes", (req, res) => {
+  const routes = app._router.stack
+    .filter((layer) => layer.route)
+    .map((layer) => ({
+      path: layer.route.path,
+      methods: Object.keys(layer.route.methods),
+    }));
+  res.json({ total: routes.length, routes });
+});
+
+app.post("/api/ai-intent", async (req, res) => {
+  const { command } = req.body || {};
+  if (!openai) {
+    return res.status(500).json({ message: "OpenAI API key is not configured." });
+  }
 
   try {
-    const existing = await pool.query("SELECT * FROM customers WHERE email=$1", [
-      email,
-    ]);
-    if (existing.rows.length)
-      return res.status(400).json({ message: "Email already registered." });
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `
+You are an intent extraction engine for a car rental system.
+Extract structured JSON ONLY.
+Supported languages: English, Telugu, Hindi, Tamil, Kannada.
 
-    const hashed = await bcrypt.hash(password, 10);
-    await pool.query(
-      "INSERT INTO customers (name, email, phone, password) VALUES ($1,$2,$3,$4)",
-      [name, email, phone, hashed]
-    );
+Return format:
+{
+  "intent": "book | cancel | history | help",
+  "car": "string or null",
+  "start_date": "YYYY-MM-DD or null",
+  "end_date": "YYYY-MM-DD or null",
+  "days": number or null,
+  "location": "string or null"
+}`,
+        },
+        { role: "user", content: command || "" },
+      ],
+      temperature: 0,
+    });
+
+    res.json(JSON.parse(completion.choices[0].message.content));
+  } catch (error) {
+    console.error("AI intent error:", error);
+    res.status(500).json({ message: "AI intent failed" });
+  }
+});
+
+app.post("/api/register", async (req, res) => {
+  const { name, email, phone, password } = req.body || {};
+  if (!name || !email || !phone || !password) {
+    return res.status(400).json({ message: "All fields are required." });
+  }
+
+  try {
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const existing = await getCustomerByEmail(normalizedEmail);
+    if (existing) {
+      return res.status(400).json({ message: "Email already registered." });
+    }
+
+    await collection("customers").insertOne({
+      id: await nextSequence("customers"),
+      name: String(name).trim(),
+      email: normalizedEmail,
+      phone: String(phone).trim(),
+      password: await bcrypt.hash(password, 10),
+      created_at: nowIso(),
+    });
+
     res.json({ message: "Registration successful!" });
-  } catch (err) {
-    console.error("Register error:", err);
+  } catch (error) {
+    console.error("Register error:", error);
     res.status(500).json({ message: "Server error during registration." });
   }
 });
 
-// User login
 app.post("/api/login", async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password } = req.body || {};
   try {
-    const result = await pool.query("SELECT * FROM customers WHERE email=$1", [
-      email,
-    ]);
-    if (!result.rows.length)
+    const user = await getCustomerByEmail(email);
+    if (!user) {
       return res.status(400).json({ message: "Invalid email or password." });
+    }
 
-    const user = result.rows[0];
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(400).json({ message: "Invalid password." });
+    const match = await bcrypt.compare(password || "", user.password);
+    if (!match) {
+      return res.status(400).json({ message: "Invalid password." });
+    }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email },
-      JWT_SECRET,
-      { expiresIn: "2h" }
-    );
+    const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, {
+      expiresIn: "2h",
+    });
+
     res.json({
       message: "Login successful",
       token,
@@ -1130,306 +679,233 @@ app.post("/api/login", async (req, res) => {
       name: user.name,
       email: user.email,
     });
-  } catch (err) {
-    console.error("Login error:", err);
+  } catch (error) {
+    console.error("Login error:", error);
     res.status(500).json({ message: "Login failed." });
   }
 });
 
-// ============================================================
-// ✅ ADMIN ROUTES
-// ============================================================
-
-// Admin login
 app.post("/api/admin/login", (req, res) => {
-  const { email, password } = req.body;
-  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD)
+  const { email, password } = req.body || {};
+  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
     return res.status(401).json({ message: "Invalid admin credentials" });
+  }
 
   const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "2h" });
   res.json({ message: "Admin login successful", token });
 });
 
-// Add a new car
-app.post("/api/admin/addcar", verifyAdmin, upload.array("images", 10), async (req, res) => {
-  const { brand, model, year, daily_rate, location } = req.body;
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    const result = await client.query(
-      "INSERT INTO cars (brand, model, year, daily_rate, location) VALUES ($1,$2,$3,$4,$5) RETURNING id",
-      [brand, model, year, daily_rate, location]
-    );
-    const carId = result.rows[0].id;
+app.post(
+  "/api/admin/addcar",
+  verifyAdmin,
+  upload.array("images", 10),
+  async (req, res) => {
+    const { brand, model, year, daily_rate, location } = req.body || {};
+    try {
+      await collection("cars").insertOne({
+        id: await nextSequence("cars"),
+        brand: String(brand || "").trim(),
+        model: String(model || "").trim(),
+        year: toNumber(year),
+        daily_rate: toNumber(daily_rate),
+        location: String(location || "").trim(),
+        images: (req.files || []).map((file) => `/uploads/${file.filename}`),
+        created_at: nowIso(),
+      });
 
-    for (const file of req.files) {
-      await client.query("INSERT INTO car_images (car_id, image_url) VALUES ($1,$2)", [
-        carId,
-        "/uploads/" + file.filename,
-      ]);
+      res.json({ message: "Car added successfully!" });
+    } catch (error) {
+      console.error("Add car error:", error);
+      res.status(500).json({ message: "Failed to add car." });
     }
-
-    await client.query("COMMIT");
-    res.json({ message: "Car added successfully!" });
-  } catch (err) {
-    await client.query("ROLLBACK");
-    console.error("Add car error:", err);
-    res.status(500).json({ message: "Failed to add car." });
-  } finally {
-    client.release();
   }
-});
+);
 
-// ============================================================
-// ✅ CARS & BOOKINGS ROUTES
-// ============================================================
-
-// Fetch all cars
 app.get("/api/cars", async (req, res) => {
   try {
-    const cars = await pool.query("SELECT * FROM cars ORDER BY id DESC");
-    for (let car of cars.rows) {
-      const imgs = await pool.query("SELECT image_url FROM car_images WHERE car_id=$1", [
-        car.id,
-      ]);
-      car.images = imgs.rows.map((r) => r.image_url);
-    }
-    res.json(cars.rows);
-  } catch (err) {
-    console.error("Fetch cars error:", err);
+    const cars = await collection("cars").find({}).sort({ id: -1 }).toArray();
+    res.json(cars.map((car) => ({ ...car, images: car.images || [] })));
+  } catch (error) {
+    console.error("Fetch cars error:", error);
     res.status(500).json({ message: "Error fetching cars." });
   }
 });
 
-// ============================================================
-// ✅ DELETE CAR (admin only - deletes car and all bookings)
-// ============================================================
 app.post("/api/deletecar", verifyAdmin, async (req, res) => {
-  const { car_id } = req.body;
-  const client = await pool.connect();
-  
+  const { car_id } = req.body || {};
   try {
-    await client.query("BEGIN");
-    
-    // Get car info for response
-    const carInfo = await client.query("SELECT * FROM cars WHERE id=$1", [car_id]);
-    if (carInfo.rows.length === 0) {
-      await client.query("ROLLBACK");
+    const car = await getCarById(car_id);
+    if (!car) {
       return res.status(404).json({ message: "Car not found." });
     }
-    
-    // Delete car images
-    await client.query("DELETE FROM car_images WHERE car_id=$1", [car_id]);
-    
-    // Get all bookings for this car WITH customer details
-    const bookingsWithCustomers = await client.query(
-      `SELECT b.id, b.customer_id, b.start_date, b.end_date, b.amount,
-              c.email, c.name 
-       FROM bookings b 
-       JOIN customers c ON b.customer_id = c.id 
-       WHERE b.car_id=$1`,
-      [car_id]
-    );
-    
-    // Send cancellation emails to all customers BEFORE deleting bookings
-    const emailResults = [];
-    for (const booking of bookingsWithCustomers.rows) {
-      try {
-        const customer = { id: booking.customer_id, email: booking.email, name: booking.name };
-        const bookingData = { 
-          id: booking.id, 
-          start_date: booking.start_date, 
-          end_date: booking.end_date,
-          total_price: booking.amount,
-          amount: booking.amount
-        };
-        const car = { brand: carInfo.rows[0].brand, model: carInfo.rows[0].model };
-        
-        // Generate discount code for customer compensation
-        const discountCode = `CAR-DELETE-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-        const discountPercent = 25; // 25% discount as compensation
-        const validUntilDate = new Date();
-        validUntilDate.setDate(validUntilDate.getDate() + 90); // Valid for 90 days
-        const validUntil = validUntilDate.toLocaleDateString('en-IN');
-        
-        const discount = {
-          code: discountCode,
-          percent: discountPercent,
-          validUntil: validUntil
-        };
-        
-        const emailSent = await sendCancellationEmail(
-          customer, 
-          bookingData, 
-          car, 
-          "Car has been removed from our fleet",
-          booking.amount,  // Full refund
-          discount  // 25% discount on next booking
-        );
-        
-        if (emailSent) {
-          // Store the discount code in the database for future use
-          try {
-            await client.query(
-              `INSERT INTO discounts (customer_id, percent, code, start_date, end_date)
-               VALUES ($1, $2, $3, NOW(), $4)`,
-              [booking.customer_id, discountPercent, discountCode, validUntilDate]
-            );
-            emailResults.push({ booking_id: booking.id, emailSent: true, discountCode });
-          } catch (discountErr) {
-            console.error(`Failed to save discount for booking ${booking.id}:`, discountErr.message);
-            emailResults.push({ booking_id: booking.id, emailSent: true, discountCode, discountSaved: false });
-          }
-        } else {
-          emailResults.push({ booking_id: booking.id, emailSent: false });
-        }
-      } catch (emailErr) {
-        console.error(`Failed to send email for booking ${booking.id}:`, emailErr.message);
-        emailResults.push({ booking_id: booking.id, emailSent: false, error: emailErr.message });
-      }
-    }
-    
-    // Delete refunds for all bookings of this car
-    for (const booking of bookingsWithCustomers.rows) {
-      await client.query("DELETE FROM refunds WHERE booking_id=$1", [booking.id]);
-      await client.query("DELETE FROM payments WHERE booking_id=$1", [booking.id]);
-    }
-    
-    // Delete all bookings for this car
-    await client.query("DELETE FROM bookings WHERE car_id=$1", [car_id]);
-    
-    // Delete the car itself
-    await client.query("DELETE FROM cars WHERE id=$1", [car_id]);
-    
-    await client.query("COMMIT");
-    
-    const successfulEmails = emailResults.filter(e => e.emailSent).length;
-    res.json({ 
-      message: `Car "${carInfo.rows[0].brand} ${carInfo.rows[0].model}" and its ${bookingsWithCustomers.rows.length} booking(s) deleted successfully!`,
-      bookingsDeleted: bookingsWithCustomers.rows.length,
-      emailsNotified: successfulEmails,
-      emailDetails: emailResults
+
+    const bookings = await collection("bookings").find({ car_id: car.id }).toArray();
+    const bookingIds = bookings.map((booking) => booking.id);
+
+    await collection("refunds").deleteMany({ booking_id: { $in: bookingIds } });
+    await collection("payments").deleteMany({ booking_id: { $in: bookingIds } });
+    await collection("booking_cancellations").deleteMany({
+      booking_id: { $in: bookingIds },
     });
-  } catch (err) {
-    await client.query("ROLLBACK");
-    console.error("Delete car error:", err);
-    res.status(500).json({ message: "Failed to delete car.", error: err.message });
-  } finally {
-    client.release();
+    await collection("bookings").deleteMany({ car_id: car.id });
+    await collection("cars").deleteOne({ id: car.id });
+
+    res.json({
+      message: `Car "${car.brand} ${car.model}" and its ${bookings.length} booking(s) deleted successfully!`,
+      bookingsDeleted: bookings.length,
+      emailsNotified: 0,
+      emailDetails: [],
+    });
+  } catch (error) {
+    console.error("Delete car error:", error);
+    res.status(500).json({ message: "Failed to delete car.", error: error.message });
   }
 });
 
-// Book a car
 app.post("/api/book", async (req, res) => {
-  const { car_id, customer_id, start_date, end_date } = req.body;
-  if (!car_id || !customer_id || !start_date || !end_date)
+  const { car_id, customer_id, start_date, end_date } = req.body || {};
+  if (!car_id || !customer_id || !start_date || !end_date) {
     return res.status(400).json({ message: "Missing booking info." });
+  }
 
-  const client = await pool.connect();
   try {
-    const carRes = await client.query("SELECT daily_rate FROM cars WHERE id=$1", [
-      car_id,
+    const [car, customer] = await Promise.all([
+      getCarById(car_id),
+      getCustomerById(customer_id),
     ]);
-    if (!carRes.rows.length)
+
+    if (!car) {
       return res.status(404).json({ message: "Car not found." });
+    }
+    if (!customer) {
+      return res.status(404).json({ message: "Customer not found." });
+    }
 
-    // Check for booking conflicts
-    const conflictRes = await client.query(
-      `SELECT * FROM bookings 
-       WHERE car_id=$1 
-       AND (
-         (start_date <= $2 AND end_date >= $2) OR
-         (start_date <= $3 AND end_date >= $3) OR
-         (start_date >= $2 AND end_date <= $3)
-       )
-       AND status IN ('pending', 'confirmed')`,
-      [car_id, start_date, end_date]
-    );
+    const requestedStart = parseDate(start_date);
+    const requestedEnd = parseDate(end_date);
+    if (!requestedStart || !requestedEnd || requestedEnd < requestedStart) {
+      return res.status(400).json({ message: "Invalid booking dates." });
+    }
 
-    if (conflictRes.rows.length > 0) {
+    if (toDateOnly(start_date) < todayDateOnly()) {
+      return res.status(400).json({ message: "Start date must be today or later." });
+    }
+
+    const existingBookings = await collection("bookings")
+      .find({
+        car_id: car.id,
+        status: { $ne: "cancelled" },
+      })
+      .toArray();
+
+    if (
+      existingBookings.some((booking) =>
+        overlaps(
+          parseDate(booking.start_date),
+          parseDate(booking.end_date),
+          requestedStart,
+          requestedEnd
+        )
+      )
+    ) {
       return res.status(409).json({ message: "Car already booked for these dates." });
     }
 
-    const rate = parseFloat(carRes.rows[0].daily_rate);
     const days = Math.max(
       1,
-      Math.ceil(
-        (new Date(end_date) - new Date(start_date)) / (1000 * 60 * 60 * 24)
-      )
+      Math.ceil((requestedEnd.getTime() - requestedStart.getTime()) / (1000 * 60 * 60 * 24))
     );
-    let total = rate * days;
+    let total = Number((toNumber(car.daily_rate) * days).toFixed(2));
 
-    // Check for available discount for this customer/car/date range
-    try {
-      const discRes = await client.query(
-        `SELECT * FROM discounts WHERE customer_id=$1 AND used=false
-         AND (car_id IS NULL OR car_id=$2)
-         AND (
-           (start_date IS NULL AND end_date IS NULL)
-           OR (start_date <= $3 AND end_date >= $4)
-         )
-         ORDER BY created_at DESC LIMIT 1`,
-        [customer_id, car_id, start_date, end_date]
+    const discounts = await collection("discounts")
+      .find({
+        customer_id: customer.id,
+        used: false,
+        $or: [{ car_id: null }, { car_id: car.id }],
+      })
+      .sort({ created_at: -1, id: -1 })
+      .toArray();
+
+    const applicableDiscount = discounts.find((discount) => {
+      if (!discount.start_date && !discount.end_date) return true;
+      const discountStart = parseDate(discount.start_date);
+      const discountEnd = parseDate(discount.end_date);
+      return (
+        discountStart &&
+        discountEnd &&
+        discountStart <= requestedStart &&
+        discountEnd >= requestedEnd
       );
-      if (discRes.rows.length) {
-        const disc = discRes.rows[0];
-        const percent = parseFloat(disc.percent) || 0;
-        const discountAmount = parseFloat(((total * percent) / 100).toFixed(2));
-        total = parseFloat((total - discountAmount).toFixed(2));
+    });
 
-        // mark discount used
-        await client.query(`UPDATE discounts SET used=true WHERE id=$1`, [disc.id]);
-      }
-    } catch (dErr) {
-      console.warn('Discount check failed:', dErr.message);
+    if (applicableDiscount) {
+      const discountAmount = Number(
+        ((total * toNumber(applicableDiscount.percent)) / 100).toFixed(2)
+      );
+      total = Number((total - discountAmount).toFixed(2));
+      await collection("discounts").updateOne(
+        { id: applicableDiscount.id },
+        { $set: { used: true, used_at: nowIso() } }
+      );
     }
 
-    await client.query("BEGIN");
-    const booking = await client.query(
-      `INSERT INTO bookings (car_id, customer_id, start_date, end_date, amount, status, paid, verified)
-       VALUES ($1,$2,$3,$4,$5,'pending',false,false) RETURNING id`,
-      [car_id, customer_id, start_date, end_date, total]
+    const bookingId = await nextSequence("bookings");
+    const paymentQR = await QRCode.toDataURL(
+      `upi://pay?pa=8179134484@pthdfc&pn=A6Cars&am=${total}&tn=Booking%20${bookingId}`
     );
 
-    const bookingId = booking.rows[0].id;
-    const upiString = `upi://pay?pa=8179134484@pthdfc&pn=A6Cars&am=${total}&tn=Booking%20${bookingId}`;
-    const paymentQR = await QRCode.toDataURL(upiString);
-    
-    // QR expires in 180 seconds (3 minutes)
-    const qrExpiryTime = new Date(Date.now() + 180 * 1000);
+    await collection("bookings").insertOne({
+      id: bookingId,
+      car_id: car.id,
+      customer_id: customer.id,
+      start_date: toDateOnly(start_date),
+      end_date: toDateOnly(end_date),
+      amount: total,
+      status: "pending",
+      paid: false,
+      verified: false,
+      collection_verified: false,
+      return_verified: false,
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    });
 
-    await client.query(
-      `INSERT INTO payments (booking_id, amount, upi_id, qr_code, status, created_at, expires_at)
-       VALUES ($1,$2,$3,$4,'pending', NOW(), $5)`,
-      [bookingId, total, "8179134484@pthdfc", paymentQR, qrExpiryTime]
-    );
+    await collection("payments").insertOne({
+      id: await nextSequence("payments"),
+      booking_id: bookingId,
+      amount: total,
+      upi_id: "8179134484@pthdfc",
+      qr_code: paymentQR,
+      status: "pending",
+      created_at: nowIso(),
+      expires_at: new Date(Date.now() + 180 * 1000).toISOString(),
+      payment_reference_id: null,
+      refund_amount: null,
+      refund_status: "none",
+      refund_requested_at: null,
+      refund_processed_at: null,
+      refund_due_by: null,
+      payment_method: "manual",
+      processed_at: null,
+      collection_qr: null,
+      return_qr: null,
+    });
 
-    await client.query("COMMIT");
-    
-    // Send booking confirmation email
     try {
-      const customer = await pool.query(
-        `SELECT id, name, email FROM customers WHERE id = $1`,
-        [customer_id]
-      );
-      const car = await pool.query(
-        `SELECT id, brand, model, location FROM cars WHERE id = $1`,
-        [car_id]
-      );
-      
-      if (customer.rows.length && car.rows.length) {
-        const bookingInfo = {
+      await sendBookingConfirmationEmail(
+        { id: customer.id, name: customer.name, email: customer.email },
+        {
           id: bookingId,
-          start_date: start_date,
-          end_date: end_date,
-          amount: total
-        };
-        await sendBookingConfirmationEmail(customer.rows[0], bookingInfo, car.rows[0]);
-      }
-    } catch (emailErr) {
-      console.warn('⚠️ Email sending failed (non-blocking):', emailErr.message);
+          start_date: toDateOnly(start_date),
+          end_date: toDateOnly(end_date),
+          amount: total,
+        },
+        { brand: car.brand, model: car.model, location: car.location }
+      );
+    } catch (error) {
+      console.warn("⚠️ Booking confirmation email failed:", error.message);
     }
-    
+
     res.json({
       message: "Booking created successfully",
       booking_id: bookingId,
@@ -1437,904 +913,717 @@ app.post("/api/book", async (req, res) => {
       payment_qr: paymentQR,
       qr_expires_in: 180,
     });
-  } catch (err) {
-    await client.query("ROLLBACK");
-    console.error("Booking error:", err);
+  } catch (error) {
+    console.error("Booking error:", error);
     res.status(500).json({ message: "Booking failed." });
-  } finally {
-    client.release();
   }
 });
 
-// Get all bookings of a user
 app.get("/api/mybookings/:customer_id", async (req, res) => {
-  const { customer_id } = req.params;
   try {
-    const result = await pool.query(
-      `SELECT b.*, c.brand, c.model, c.location
-       FROM bookings b
-       JOIN cars c ON b.car_id=c.id
-       WHERE b.customer_id=$1
-       ORDER BY b.start_date DESC`,
-      [customer_id]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Fetch bookings error:", err);
+    const bookings = await collection("bookings")
+      .find({ customer_id: toNumber(req.params.customer_id) })
+      .sort({ start_date: -1, id: -1 })
+      .toArray();
+
+    res.json(await Promise.all(bookings.map(buildBookingView)));
+  } catch (error) {
+    console.error("Fetch bookings error:", error);
     res.status(500).json({ message: "Failed to fetch bookings." });
   }
 });
 
-// Get bookings for specific car
-app.get("/api/bookings/:car_id", async (req, res) => {
-  const { car_id } = req.params;
+app.get("/api/bookings/:car_id(\\d+)", async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT b.id, b.start_date, b.end_date, b.amount, b.status, b.paid, b.verified,
-              c.name AS customer_name, c.email AS customer_email
-       FROM bookings b
-       LEFT JOIN customers c ON b.customer_id = c.id
-       WHERE b.car_id=$1 AND b.status IN ('pending', 'confirmed')
-       ORDER BY b.start_date ASC`,
-      [car_id]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Fetch car bookings error:", err);
+    const bookings = await collection("bookings")
+      .find({
+        car_id: toNumber(req.params.car_id),
+        status: { $ne: "cancelled" },
+      })
+      .sort({ start_date: 1, id: 1 })
+      .toArray();
+
+    const rows = bookings.map((booking) => ({
+      id: booking.id,
+      start_date: booking.start_date,
+      end_date: booking.end_date,
+      amount: booking.amount,
+      status: booking.status,
+      paid: booking.paid,
+      verified: booking.verified,
+    }));
+
+    res.json(rows);
+  } catch (error) {
+    console.error("Fetch car bookings error:", error);
     res.status(500).json({ message: "Failed to fetch bookings." });
   }
 });
 
-// Batch get bookings for multiple cars
 app.post("/api/bookings/batch", async (req, res) => {
-  const { car_ids } = req.body;
-  if (!Array.isArray(car_ids) || car_ids.length === 0) {
+  const { car_ids } = req.body || {};
+  if (!Array.isArray(car_ids) || !car_ids.length) {
     return res.status(400).json({ message: "car_ids must be a non-empty array" });
   }
+
   try {
-    const result = await pool.query(
-      "SELECT car_id, id, start_date, end_date FROM bookings WHERE car_id = ANY($1) AND status='pending' ORDER BY start_date DESC",
-      [car_ids]
-    );
+    const bookings = await collection("bookings")
+      .find({
+        car_id: { $in: car_ids.map((id) => toNumber(id)) },
+        status: "pending",
+      })
+      .sort({ start_date: -1, id: -1 })
+      .toArray();
+
     const grouped = {};
-    for (const row of result.rows) {
-      if (!grouped[row.car_id]) grouped[row.car_id] = [];
-      grouped[row.car_id].push(row);
+    for (const booking of bookings) {
+      if (!grouped[booking.car_id]) grouped[booking.car_id] = [];
+      grouped[booking.car_id].push({
+        car_id: booking.car_id,
+        id: booking.id,
+        start_date: booking.start_date,
+        end_date: booking.end_date,
+      });
     }
+
     res.json(grouped);
-  } catch (err) {
-    console.error("Batch bookings error:", err);
+  } catch (error) {
+    console.error("Batch bookings error:", error);
     res.status(500).json({ message: "Failed to fetch bookings." });
   }
 });
 
-// ============================================================
-// ✅ USER: Active & Past Bookings (Home Dashboard)
-// Returns two arrays: `active` (ongoing or upcoming, not cancelled) and `past` (ended or cancelled)
-// ============================================================
 app.get("/api/bookings/status/:customer_id", async (req, res) => {
-  const { customer_id } = req.params;
-
   try {
-    const now = new Date();
+    const bookings = await collection("bookings")
+      .find({ customer_id: toNumber(req.params.customer_id) })
+      .sort({ start_date: -1, id: -1 })
+      .toArray();
 
-    const result = await pool.query(
-      `SELECT b.*, c.brand, c.model, c.location,
-              p.status AS payment_status, p.refund_amount, p.refund_status,
-              bc.reason AS cancelled_reason, bc.cancelled_at, bc.canceled_by AS canceled_by, bc.admin_email AS cancel_admin_email, bc.customer_id AS cancel_customer_id, bc.refund_amount AS cancel_refund_amount, bc.refund_percent AS cancel_refund_percent
-       FROM bookings b
-       JOIN cars c ON b.car_id = c.id
-       LEFT JOIN payments p ON p.booking_id = b.id
-       LEFT JOIN booking_cancellations bc ON bc.booking_id = b.id
-       WHERE b.customer_id = $1
-       ORDER BY b.start_date DESC`,
-      [customer_id]
-    );
-
+    const views = await Promise.all(bookings.map(buildBookingView));
+    const today = new Date();
     const active = [];
     const past = [];
 
-    result.rows.forEach(b => {
-      const endDate = b.end_date ? new Date(b.end_date) : null;
-
-      if (endDate && endDate >= now && b.status !== "cancelled") {
-        active.push(b);
+    for (const booking of views) {
+      const endDate = parseDate(booking.end_date);
+      if (endDate && endDate >= today && booking.status !== "cancelled") {
+        active.push(booking);
       } else {
-        past.push(b);
+        past.push(booking);
       }
-    });
+    }
 
     res.json({ active, past });
-
-  } catch (err) {
-    console.error("Status fetch error:", err);
+  } catch (error) {
+    console.error("Status fetch error:", error);
     res.status(500).json({ message: "Failed to load booking status." });
   }
 });
 
-// ============================================================
-// ✅ PUBLIC: Get active/un-used discounts for a customer
-// ============================================================
-app.get('/api/discounts/:customer_id', async (req, res) => {
-  const { customer_id } = req.params;
+app.get("/api/discounts/:customer_id", async (req, res) => {
   try {
-    const q = await pool.query(
-      `SELECT id, car_id, percent, start_date, end_date, code, used, created_at
-       FROM discounts WHERE customer_id=$1 AND used=false ORDER BY created_at DESC`,
-      [customer_id]
-    );
-    res.json(q.rows);
-  } catch (err) {
-    console.error('Fetch discounts error:', err);
-    res.status(500).json({ message: 'Failed to fetch discounts.' });
+    const discounts = await collection("discounts")
+      .find({ customer_id: toNumber(req.params.customer_id), used: false })
+      .sort({ created_at: -1, id: -1 })
+      .toArray();
+    res.json(discounts);
+  } catch (error) {
+    console.error("Fetch discounts error:", error);
+    res.status(500).json({ message: "Failed to fetch discounts." });
   }
 });
 
-// ============================================================
-// ✅ PUBLIC: Get notifications for a customer (recent)
-// ============================================================
-app.get('/api/notifications/:customer_id', async (req, res) => {
-  const { customer_id } = req.params;
+app.get("/api/notifications/:customer_id", async (req, res) => {
   try {
-    const q = await pool.query(
-      `SELECT id, title, message, read, created_at FROM notifications WHERE customer_id=$1 ORDER BY created_at DESC LIMIT 50`,
-      [customer_id]
-    );
-    res.json(q.rows);
-  } catch (err) {
-    console.error('Fetch notifications error:', err);
-    res.status(500).json({ message: 'Failed to fetch notifications.' });
+    const notifications = await collection("notifications")
+      .find({ customer_id: toNumber(req.params.customer_id) })
+      .sort({ created_at: -1, id: -1 })
+      .limit(50)
+      .toArray();
+    res.json(notifications);
+  } catch (error) {
+    console.error("Fetch notifications error:", error);
+    res.status(500).json({ message: "Failed to fetch notifications." });
   }
 });
 
-// ============================================================
-// ✅ USER: Full Booking History (active + past + cancelled)
-// Includes payment status and cancellation metadata when available
-// ONLY RETURNS UNUSED DISCOUNTS - used discounts are filtered out
-// ============================================================
 app.get("/api/history/:customer_id", async (req, res) => {
-  const { customer_id } = req.params;
-
   try {
-    const result = await pool.query(
-      `SELECT b.*, 
-              c.brand, c.model, c.location,
-              p.status AS payment_status, p.refund_amount, p.refund_status,
-              bc.reason AS cancelled_reason, bc.cancelled_at, bc.canceled_by AS canceled_by, bc.admin_email AS cancel_admin_email, bc.customer_id AS cancel_customer_id, bc.refund_amount AS cancel_refund_amount, bc.refund_percent AS cancel_refund_percent
-       FROM bookings b
-       JOIN cars c ON b.car_id = c.id
-       LEFT JOIN payments p ON p.booking_id = b.id
-       LEFT JOIN booking_cancellations bc ON bc.booking_id = b.id
-       WHERE b.customer_id = $1
-       ORDER BY b.start_date DESC`,
-      [customer_id]
-    );
+    const bookings = await collection("bookings")
+      .find({ customer_id: toNumber(req.params.customer_id) })
+      .sort({ start_date: -1, id: -1 })
+      .toArray();
 
-    // Fetch ONLY UNUSED discounts (used = FALSE) to show available offers
-    const discounts = await pool.query(
-      `SELECT id, percent, code, used, created_at FROM discounts 
-       WHERE customer_id = $1 AND used = FALSE 
-       ORDER BY created_at DESC`,
-      [customer_id]
-    );
+    const discounts = await collection("discounts")
+      .find({ customer_id: toNumber(req.params.customer_id), used: false })
+      .sort({ created_at: -1, id: -1 })
+      .toArray();
 
     res.json({
-      bookings: result.rows,
-      discounts: discounts.rows || []
+      bookings: await Promise.all(bookings.map(buildBookingView)),
+      discounts,
     });
-  } catch (err) {
-    console.error("History fetch error:", err);
+  } catch (error) {
+    console.error("History fetch error:", error);
     res.status(500).json({ message: "Failed to load booking history." });
   }
 });
 
-// ✅ Check payment status
 app.get("/api/payment/status/:booking_id", async (req, res) => {
-  const { booking_id } = req.params;
   try {
-    const result = await pool.query(
-      "SELECT paid, status FROM bookings WHERE id=$1",
-      [booking_id]
-    );
-    
-    if (!result.rows.length) {
+    const booking = await getBookingById(req.params.booking_id);
+    if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
     }
 
-    res.json({
-      paid: result.rows[0].paid,
-      status: result.rows[0].status
-    });
-  } catch (err) {
-    console.error("Payment status error:", err);
+    res.json({ paid: booking.paid, status: booking.status });
+  } catch (error) {
+    console.error("Payment status error:", error);
     res.status(500).json({ message: "Error checking payment status." });
   }
 });
 
-// Confirm payment and generate QR for admin
 app.post("/api/payment/confirm", async (req, res) => {
-  const { booking_id } = req.body;
-  const client = await pool.connect();
+  const { booking_id } = req.body || {};
   try {
-    const booking = await client.query(
-      `SELECT b.id AS booking_id, b.start_date, b.end_date, b.amount, b.customer_id,
-              c.name AS customer_name, c.email AS customer_email, c.phone AS customer_phone,
-              ca.id AS car_id, ca.brand, ca.model, ca.location
-       FROM bookings b
-       JOIN customers c ON b.customer_id = c.id
-       JOIN cars ca ON b.car_id = ca.id
-       WHERE b.id = $1`,
-      [booking_id]
-    );
-
-    if (!booking.rows.length)
-      return res.status(404).json({ message: "Booking not found." });
-
-    const data = booking.rows[0];
-    
-    // Collection QR (pickup)
-    const collectionQRData = {
-      qr_type: "collection",
-      booking_id: data.booking_id,
-      customer_id: data.customer_id,
-      customer_name: data.customer_name,
-      customer_phone: data.customer_phone,
-      car_id: data.car_id,
-      car: `${data.brand} ${data.model}`,
-      location: data.location,
-      start_date: data.start_date,
-      amount: data.amount,
-    };
-    const collectionQR = await QRCode.toDataURL(JSON.stringify(collectionQRData));
-
-    // Return QR (dropoff)
-    const returnQRData = {
-      qr_type: "return",
-      booking_id: data.booking_id,
-      customer_id: data.customer_id,
-      customer_name: data.customer_name,
-      customer_phone: data.customer_phone,
-      car_id: data.car_id,
-      car: `${data.brand} ${data.model}`,
-      location: data.location,
-      end_date: data.end_date,
-      amount: data.amount,
-    };
-    const returnQR = await QRCode.toDataURL(JSON.stringify(returnQRData));
-
-    await client.query("UPDATE bookings SET paid=true, status='booked' WHERE id=$1", [booking_id]);
-    await client.query("UPDATE payments SET status='paid' WHERE booking_id=$1", [booking_id]);
-
-    res.json({ 
-      message: "Payment confirmed ✅", 
-      collection_qr: collectionQR,
-      return_qr: returnQR,
-      booking_details: {
-        booking_id: data.booking_id,
-        customer_name: data.customer_name,
-        car: data.brand + " " + data.model,
-        amount: data.amount
-      }
+    const result = await markBookingPaid({
+      bookingId: booking_id,
+      paymentPatch: { payment_method: "manual" },
+      bookingStatus: "booked",
     });
-  } catch (err) {
-    console.error("Payment confirm error:", err);
-    res.status(500).json({ message: "Error confirming payment." });
-  } finally {
-    client.release();
-  }
-});
-
-// Retrieve payment QR for a booking (used by frontend Pay Now)
-app.post('/api/payments/qr', async (req, res) => {
-  const { booking_id, customer_id } = req.body || {};
-  if (!booking_id) return res.status(400).json({ message: 'Missing booking_id' });
-  try {
-    const q = await pool.query(`SELECT qr_code, amount, expires_at FROM payments WHERE booking_id=$1 ORDER BY id DESC LIMIT 1`, [booking_id]);
-    if (!q.rows.length) return res.status(404).json({ message: 'Payment QR not found for this booking' });
-    const row = q.rows[0];
-    res.json({ qr: row.qr_code, amount: row.amount, expires_at: row.expires_at });
-  } catch (err) {
-    console.error('Fetch payment QR error:', err);
-    res.status(500).json({ message: 'Failed to fetch payment QR' });
-  }
-});
-
-// ============================================================
-// ✅ RAZORPAY: Create Order for Payment
-// ============================================================
-app.post("/api/razorpay/create-order", async (req, res) => {
-  console.log("🔍 create-order endpoint called with body:", req.body);
-  const { booking_id, customer_id, amount } = req.body;
-  
-  if (!booking_id || !customer_id || !amount) {
-    return res.status(400).json({ message: "Missing required fields: booking_id, customer_id, amount" });
-  }
-
-  const client = await pool.connect();
-  try {
-    // 1. Verify booking exists and belongs to customer
-    const booking = await client.query(
-      `SELECT b.id, b.customer_id, b.car_id, b.amount, b.start_date, b.end_date, b.paid,
-              c.name AS customer_name, c.email AS customer_email, c.phone AS customer_phone,
-              ca.brand, ca.model, ca.location
-       FROM bookings b
-       JOIN customers c ON b.customer_id = c.id
-       JOIN cars ca ON b.car_id = ca.id
-       WHERE b.id = $1 AND b.customer_id = $2`,
-      [booking_id, customer_id]
-    );
-    
-    if (!booking.rows.length) {
-      return res.status(404).json({ message: "Booking not found or does not belong to this customer." });
-    }
-
-    const bookingData = booking.rows[0];
-    
-    // 2. Check if payment already made
-    if (bookingData.paid) {
-      return res.status(409).json({ message: "Payment already made for this booking." });
-    }
-
-    // 3. Create Razorpay Order
-    const orderOptions = {
-      amount: Math.round(amount * 100), // Convert to paise (Razorpay expects amount in paise)
-      currency: "INR",
-      receipt: `booking_${booking_id}_${Date.now()}`,
-      description: `A6 Cars Booking #${booking_id} - ${bookingData.brand} ${bookingData.model}`,
-      notes: {
-        booking_id: booking_id,
-        customer_id: customer_id,
-        customer_name: bookingData.customer_name,
-        customer_email: bookingData.customer_email,
-        customer_phone: bookingData.customer_phone,
-        car_name: `${bookingData.brand} ${bookingData.model}`,
-        start_date: bookingData.start_date,
-        end_date: bookingData.end_date
-      }
-    };
-
-    console.log("📦 Creating Razorpay order with options:", JSON.stringify(orderOptions, null, 2));
-    console.log("🔑 Razorpay instance:", razorpay ? "initialized" : "NOT initialized");
-    
-    const order = await razorpay.orders.create(orderOptions);
-    console.log("✅ Razorpay order created:", order.id);
-
-    // 4. Store order in payments table
-    await client.query(
-      `UPDATE payments 
-       SET razorpay_order_id = $1, status = 'pending'
-       WHERE booking_id = $2`,
-      [order.id, booking_id]
-    );
 
     res.json({
-      message: "Order created successfully",
-      order_id: order.id,
-      amount: order.amount / 100, // Convert back to rupees for frontend
-      currency: order.currency,
-      booking_id: booking_id,
-      customer_email: bookingData.customer_email,
-      customer_name: bookingData.customer_name
+      message: "Payment confirmed ✅",
+      collection_qr: result.payment.collection_qr,
+      return_qr: result.payment.return_qr,
+      booking_details: {
+        booking_id: result.booking.id,
+        customer_name: result.customer.name,
+        car: `${result.car.brand} ${result.car.model}`,
+        amount: result.booking.amount,
+      },
     });
-  } catch (err) {
-    const errorMessage = err?.message || err?.toString() || JSON.stringify(err) || "Unknown error";
-    console.error("❌ Order creation error:", errorMessage);
-    console.error("❌ Full error object:", err);
-    res.status(500).json({ message: "Failed to create payment order: " + errorMessage });
-  } finally {
-    client.release();
+  } catch (error) {
+    console.error("Payment confirm error:", error);
+    res.status(500).json({ message: "Error confirming payment." });
   }
 });
 
-// ============================================================
-// ✅ RAZORPAY: Verify Payment & Auto-Update Status
-// ============================================================
-app.post("/api/razorpay/verify-payment", async (req, res) => {
-  console.log("🔍 verify-payment endpoint called with body:", req.body);
-  
-  const { 
-    razorpay_payment_id, 
-    razorpay_order_id, 
-    razorpay_signature,
-    booking_id,
-    customer_id 
-  } = req.body;
-  
-  if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
-    return res.status(400).json({ message: "Missing payment verification data" });
+app.post("/api/payments/qr", async (req, res) => {
+  const { booking_id } = req.body || {};
+  if (!booking_id) {
+    return res.status(400).json({ message: "Missing booking_id" });
   }
 
-  const client = await pool.connect();
   try {
-    // 1. Verify Razorpay signature to ensure payment authenticity
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSignature = crypto
-      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET || "3QnOd46i7YBOeSgUeC71jFIK")
-      .update(body)
-      .digest("hex");
-
-    if (expectedSignature !== razorpay_signature) {
-      return res.status(400).json({ message: "❌ Payment signature verification failed. Payment may be fraudulent." });
+    const payment = await getPaymentByBookingId(booking_id);
+    if (!payment) {
+      return res.status(404).json({ message: "Payment QR not found for this booking" });
     }
 
-    console.log("✅ Razorpay signature verified");
+    res.json({
+      qr: payment.qr_code,
+      amount: payment.amount,
+      expires_at: payment.expires_at,
+    });
+  } catch (error) {
+    console.error("Fetch payment QR error:", error);
+    res.status(500).json({ message: "Failed to fetch payment QR" });
+  }
+});
 
-    // 2. Fetch booking details
-    const booking = await client.query(
-      `SELECT b.id, b.customer_id, b.car_id, b.amount, b.start_date, b.end_date, b.paid,
-              c.name AS customer_name, c.email AS customer_email, c.phone AS customer_phone,
-              ca.brand, ca.model, ca.location
-       FROM bookings b
-       JOIN customers c ON b.customer_id = c.id
-       JOIN cars ca ON b.car_id = ca.id
-       WHERE b.id = $1 AND b.customer_id = $2`,
-      [booking_id, customer_id]
-    );
-    
-    if (!booking.rows.length) {
-      return res.status(404).json({ message: "Booking not found" });
+app.post("/api/verify-payment", async (req, res) => {
+  const { booking_id, payment_reference_id, customer_id } = req.body || {};
+  if (!booking_id || !payment_reference_id) {
+    return res.status(400).json({ message: "Missing booking_id or payment_reference_id" });
+  }
+
+  try {
+    const booking = await getBookingById(booking_id);
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found." });
     }
-
-    const bookingData = booking.rows[0];
-
-    // 3. Check if already paid
-    if (bookingData.paid) {
+    if (customer_id && booking.customer_id !== toNumber(customer_id)) {
+      return res.status(403).json({ message: "Booking does not belong to this customer." });
+    }
+    if (booking.paid) {
       return res.status(409).json({ message: "Payment already completed for this booking" });
     }
 
-    // 4. Verify payment status with Razorpay
-    const paymentDetails = await razorpay.payments.fetch(razorpay_payment_id);
-    console.log("Payment details:", paymentDetails.status);
-
-    if (paymentDetails.status !== "captured") {
-      return res.status(400).json({ message: "Payment not captured by Razorpay. Status: " + paymentDetails.status });
-    }
-
-    // 5. Update payments table with Razorpay payment details
-    await client.query(
-      `UPDATE payments 
-       SET razorpay_payment_id = $1, 
-           razorpay_order_id = $2, 
-           razorpay_signature = $3,
-           status = 'paid',
-           payment_method = $4,
-           processed_at = NOW()
-       WHERE booking_id = $5`,
-      [razorpay_payment_id, razorpay_order_id, razorpay_signature, paymentDetails.method || 'card', booking_id]
-    );
-
-    // 6. Mark booking as paid
-    await client.query(
-      `UPDATE bookings 
-       SET paid = true, status = 'confirmed', updated_at = NOW()
-       WHERE id = $1`,
-      [booking_id]
-    );
-
-    console.log("✅ Booking marked as paid");
-
-    // 7. Generate Collection QR
-    const collectionQRData = {
-      qr_type: "collection",
-      booking_id: bookingData.id,
-      customer_id: bookingData.customer_id,
-      customer_name: bookingData.customer_name,
-      customer_phone: bookingData.customer_phone,
-      car_id: bookingData.car_id,
-      car: `${bookingData.brand} ${bookingData.model}`,
-      location: bookingData.location,
-      start_date: bookingData.start_date,
-      amount: bookingData.amount,
-      razorpay_payment_id: razorpay_payment_id
-    };
-    const collectionQR = await QRCode.toDataURL(JSON.stringify(collectionQRData));
-
-    // 8. Generate Return QR
-    const returnQRData = {
-      qr_type: "return",
-      booking_id: bookingData.id,
-      customer_id: bookingData.customer_id,
-      customer_name: bookingData.customer_name,
-      customer_phone: bookingData.customer_phone,
-      car_id: bookingData.car_id,
-      car: `${bookingData.brand} ${bookingData.model}`,
-      location: bookingData.location,
-      end_date: bookingData.end_date,
-      amount: bookingData.amount,
-      razorpay_payment_id: razorpay_payment_id
-    };
-    const returnQR = await QRCode.toDataURL(JSON.stringify(returnQRData));
-
-    // 9. Send payment confirmation email
-    try {
-      const carInfo = {
-        brand: bookingData.brand,
-        model: bookingData.model,
-        location: bookingData.location
-      };
-      const bookingInfo = {
-        id: bookingData.id,
-        start_date: bookingData.start_date,
-        end_date: bookingData.end_date,
-        amount: bookingData.amount
-      };
-      const customerInfo = {
-        name: bookingData.customer_name,
-        email: bookingData.customer_email
-      };
-      
-      await sendPaymentConfirmedEmail(customerInfo, bookingInfo, carInfo);
-    } catch (emailErr) {
-      console.warn('⚠️ Payment confirmation email failed (non-blocking):', emailErr.message);
-    }
+    const result = await markBookingPaid({
+      bookingId: booking.id,
+      paymentPatch: {
+        payment_reference_id: String(payment_reference_id).trim(),
+        payment_method: "manual",
+      },
+      bookingStatus: "confirmed",
+    });
 
     res.json({
       message: "✅ Payment verified and booking confirmed!",
-      razorpay_payment_id: razorpay_payment_id,
-      collection_qr: collectionQR,
-      return_qr: returnQR,
+      collection_qr: result.payment.collection_qr,
+      return_qr: result.payment.return_qr,
       booking_details: {
-        booking_id: bookingData.id,
-        customer_name: bookingData.customer_name,
-        car: `${bookingData.brand} ${bookingData.model}`,
-        amount: bookingData.amount,
-        start_date: bookingData.start_date,
-        end_date: bookingData.end_date
-      }
+        booking_id: result.booking.id,
+        customer_name: result.customer.name,
+        car: `${result.car.brand} ${result.car.model}`,
+        amount: result.booking.amount,
+      },
     });
-  } catch (err) {
-    console.error("❌ Payment verification error:", err.message);
-    res.status(500).json({ message: "Payment verification failed: " + err.message });
-  } finally {
-    client.release();
+  } catch (error) {
+    console.error("Manual payment verification error:", error);
+    res.status(500).json({ message: `Payment verification failed: ${error.message}` });
   }
 });
 
-// ============================================================
-// ✅ RAZORPAY: Webhook Handler for Automated Payment Verification
-// Razorpay will call this endpoint when payment status changes
-// ============================================================
-app.post("/api/razorpay/webhook", async (req, res) => {
-  const secret = process.env.RAZORPAY_WEBHOOK_SECRET || "webhook_secret_key";
-  const signature = req.headers["x-razorpay-signature"];
-  const body = JSON.stringify(req.body);
-
-  // Verify webhook signature
-  const expectedSignature = crypto
-    .createHmac("sha256", secret)
-    .update(body)
-    .digest("hex");
-
-  if (signature !== expectedSignature) {
-    console.warn("⚠️ Invalid webhook signature");
-    return res.status(400).json({ message: "Invalid signature" });
-  }
-
-  const client = await pool.connect();
-  try {
-    const event = req.body.event;
-    const payload = req.body.payload;
-
-    console.log("🔔 Razorpay webhook received:", event);
-
-    if (event === "payment.captured") {
-      const paymentId = payload.payment.entity.id;
-      const orderId = payload.payment.entity.order_id;
-      const amount = payload.payment.entity.amount / 100; // Convert from paise
-
-      // Find booking by order_id
-      const booking = await client.query(
-        `SELECT b.id, b.booking_id FROM payments p
-         JOIN bookings b ON p.booking_id = b.id
-         WHERE p.razorpay_order_id = $1`,
-        [orderId]
-      );
-
-      if (booking.rows.length > 0) {
-        const bookingId = booking.rows[0].id;
-
-        // Update payment status
-        await client.query(
-          `UPDATE payments 
-           SET razorpay_payment_id = $1, status = 'paid', processed_at = NOW()
-           WHERE razorpay_order_id = $2`,
-          [paymentId, orderId]
-        );
-
-        // Mark booking as paid
-        await client.query(
-          `UPDATE bookings SET paid = true, status = 'confirmed' WHERE id = $1`,
-          [bookingId]
-        );
-
-        console.log("✅ Booking auto-verified via webhook:", bookingId);
-      }
-    } else if (event === "payment.failed") {
-      const paymentId = payload.payment.entity.id;
-      const orderId = payload.payment.entity.order_id;
-
-      // Update payment status to failed
-      await client.query(
-        `UPDATE payments 
-         SET razorpay_payment_id = $1, status = 'failed'
-         WHERE razorpay_order_id = $2`,
-        [paymentId, orderId]
-      );
-
-      console.log("❌ Payment failed:", paymentId);
-    }
-
-    res.json({ status: "ok" });
-  } catch (err) {
-    console.error("❌ Webhook processing error:", err.message);
-    res.status(500).json({ message: "Webhook processing failed" });
-  } finally {
-    client.release();
-  }
-});
-
-// ============================================================
-// ✅ RAZORPAY: Check Payment Status
-// ============================================================
-app.get("/api/razorpay/payment-status/:booking_id", async (req, res) => {
-  const { booking_id } = req.params;
-  try {
-    const result = await pool.query(
-      `SELECT p.status, p.razorpay_payment_id, b.paid 
-       FROM payments p
-       JOIN bookings b ON p.booking_id = b.id
-       WHERE b.id = $1
-       ORDER BY p.created_at DESC LIMIT 1`,
-      [booking_id]
-    );
-    
-    if (!result.rows.length) {
-      return res.status(404).json({ message: "Payment not found" });
-    }
-
-    const payment = result.rows[0];
-    res.json({
-      status: payment.status,
-      paid: payment.paid,
-      razorpay_payment_id: payment.razorpay_payment_id
-    });
-  } catch (err) {
-    console.error("Payment status error:", err);
-    res.status(500).json({ message: "Error checking payment status." });
-  }
-});
-
-// Retrieve payment QR for a booking (used by frontend Pay Now)
-app.post('/api/payments/qr', async (req, res) => {
-  const { booking_id, customer_id } = req.body || {};
-  if (!booking_id) return res.status(400).json({ message: 'Missing booking_id' });
-  try {
-    const q = await pool.query(`SELECT qr_code, amount, expires_at FROM payments WHERE booking_id=$1 ORDER BY id DESC LIMIT 1`, [booking_id]);
-    if (!q.rows.length) return res.status(404).json({ message: 'Payment QR not found for this booking' });
-    const row = q.rows[0];
-    res.json({ qr: row.qr_code, amount: row.amount, expires_at: row.expires_at });
-  } catch (err) {
-    console.error('Fetch payment QR error:', err);
-    res.status(500).json({ message: 'Failed to fetch payment QR' });
-  }
-});
-
-// ============================================================
-// ✅ LEGACY: Verify payment by reference ID (deprecated - for backward compatibility)
-// ============================================================
-app.post("/api/verify-payment", async (req, res) => {
-  console.log("⚠️ DEPRECATED: verify-payment endpoint called - use Razorpay flow instead");
-  return res.status(410).json({ 
-    message: "Manual payment verification has been deprecated. Please use Razorpay payment gateway.",
-    use_razorpay_instead: true
-  });
-});
-
-// ============================================================
-// ✅ ADMIN: Verify QR from mobile app / scanner
-// ============================================================
 app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {
-  const { qr_data } = req.body;
+  const { qr_data } = req.body || {};
   try {
-    const booking_id = qr_data.booking_id;
-    const qr_type = qr_data.qr_type; // "collection" or "return"
-    
-    // Fetch full booking and car details
-    const booking = await pool.query(
-      `SELECT b.id, b.customer_id, b.start_date, b.end_date, b.amount, b.status,
-              c.name AS customer_name, c.phone AS customer_phone, c.email AS customer_email,
-              ca.id AS car_id, ca.brand, ca.model, ca.location
-       FROM bookings b
-       JOIN customers c ON b.customer_id = c.id
-       JOIN cars ca ON b.car_id = ca.id
-       WHERE b.id = $1`,
-      [booking_id]
-    );
+    const booking = await getBookingById(qr_data?.booking_id);
+    const customer = booking ? await getCustomerById(booking.customer_id) : null;
+    const car = booking ? await getCarById(booking.car_id) : null;
 
-    if (!booking.rows.length) {
+    if (!booking || !customer || !car) {
       return res.status(404).json({ message: "Booking not found." });
     }
 
-    const bookingData = booking.rows[0];
-    
-    // Update verification status
-    if (qr_type === "collection") {
-      await pool.query(
-        "UPDATE bookings SET collection_verified=true WHERE id=$1",
-        [booking_id]
-      );
-      // Also mark the booking as verified so frontend dashboards reflect verification
-      await pool.query(
-        "UPDATE bookings SET verified=true WHERE id=$1",
-        [booking_id]
-      );
-      // Set user-friendly status indicating car collected
-      const collector = bookingData.customer_name || bookingData.customer_email || 'customer';
-      await pool.query(
-        "UPDATE bookings SET status=$1 WHERE id=$2",
-        [`car is collected by ${collector}`, booking_id]
-      );
-      bookingData.status = `car is collected by ${collector}`;
-    } else if (qr_type === "return") {
-      await pool.query(
-        "UPDATE bookings SET return_verified=true WHERE id=$1",
-        [booking_id]
-      );
-      // Set user-friendly status indicating car returned
-      const returner = bookingData.customer_name || bookingData.customer_email || 'customer';
-      await pool.query(
-        "UPDATE bookings SET status=$1 WHERE id=$2",
-        [`car is returned by ${returner}`, booking_id]
-      );
-      bookingData.status = `car is returned by ${returner}`;
-    }
-
-    // If return scan happens before booking end_date, compute vacancies from now -> booking.end_date for this car
-    let vacancies = [];
-    try {
-      if (qr_type === 'return') {
-        const now = new Date();
-        const endWindow = bookingData.end_date ? new Date(bookingData.end_date) : null;
-        if (endWindow && endWindow > now) {
-          // fetch other bookings for this car (exclude current booking)
-          const otherRes = await pool.query(
-            `SELECT id, start_date, end_date FROM bookings WHERE car_id=$1 AND id<>$2 AND status!='cancelled' ORDER BY start_date ASC`,
-            [bookingData.car_id, booking_id]
-          );
-
-          const ranges = otherRes.rows
-            .map(r => ({ start: new Date(r.start_date), end: new Date(r.end_date) }))
-            .filter(r => r.end >= now && r.start <= endWindow)
-            .sort((a,b) => a.start - b.start);
-
-          // merge overlapping ranges
-          const merged = [];
-          for (const r of ranges) {
-            if (!merged.length) merged.push(r);
-            else {
-              const last = merged[merged.length-1];
-              if (r.start <= new Date(last.end.getTime() + 24*60*60*1000)) {
-                last.end = new Date(Math.max(last.end, r.end));
-              } else merged.push(r);
-            }
-          }
-
-          // compute vacancies between now and endWindow (exclusive of merged booked ranges)
-          let cursor = new Date(now);
-          for (const m of merged) {
-            if (m.end < now) continue;
-            if (m.start > cursor) {
-              const vacStart = cursor;
-              const vacEnd = new Date(m.start.getTime() - 24*60*60*1000);
-              if (vacStart <= vacEnd) vacancies.push({ start: vacStart.toISOString().split('T')[0], end: vacEnd.toISOString().split('T')[0] });
-            }
-            cursor = new Date(m.end.getTime() + 24*60*60*1000);
-            if (cursor > endWindow) break;
-          }
-          if (cursor <= endWindow) vacancies.push({ start: cursor.toISOString().split('T')[0], end: endWindow.toISOString().split('T')[0] });
+    let status = booking.status;
+    if (qr_data?.qr_type === "collection") {
+      status = `car is collected by ${customer.name || customer.email || "customer"}`;
+      await collection("bookings").updateOne(
+        { id: booking.id },
+        {
+          $set: {
+            collection_verified: true,
+            verified: true,
+            status,
+            updated_at: nowIso(),
+          },
         }
-      }
-    } catch (vacErr) {
-      console.warn('Failed to compute vacancies for return scan:', vacErr.message);
+      );
+    } else if (qr_data?.qr_type === "return") {
+      status = `car is returned by ${customer.name || customer.email || "customer"}`;
+      await collection("bookings").updateOne(
+        { id: booking.id },
+        {
+          $set: {
+            return_verified: true,
+            status,
+            updated_at: nowIso(),
+          },
+        }
+      );
     }
 
-    res.json({ 
-      message: `${qr_type.toUpperCase()} QR verified successfully ✅`,
+    let vacancies = [];
+    if (qr_data?.qr_type === "return") {
+      const endWindow = parseDate(booking.end_date);
+      if (endWindow && endWindow > new Date()) {
+        const otherBookings = await collection("bookings")
+          .find({
+            car_id: booking.car_id,
+            id: { $ne: booking.id },
+            status: { $ne: "cancelled" },
+          })
+          .toArray();
+        vacancies = computeVacancies(otherBookings, new Date(), endWindow);
+      }
+    }
+
+    res.json({
+      message: `${String(qr_data?.qr_type || "").toUpperCase()} QR verified successfully ✅`,
       qr_verification: {
-        qr_type: qr_type,
-        booking_id: bookingData.id,
+        qr_type: qr_data?.qr_type,
+        booking_id: booking.id,
         customer: {
-          id: bookingData.customer_id,
-          name: bookingData.customer_name,
-          phone: bookingData.customer_phone,
-          email: bookingData.customer_email
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          email: customer.email,
         },
         booking: {
-          start_date: bookingData.start_date,
-          end_date: bookingData.end_date,
-          amount: bookingData.amount,
-          status: bookingData.status
+          start_date: booking.start_date,
+          end_date: booking.end_date,
+          amount: booking.amount,
+          status,
         },
         car: {
-          id: bookingData.car_id,
-          model: `${bookingData.brand} ${bookingData.model}`,
-          location: bookingData.location
+          id: car.id,
+          model: `${car.brand} ${car.model}`,
+          location: car.location,
         },
-        vacancies
-      }
+        vacancies,
+      },
     });
-  } catch (err) {
-    console.error("QR verification error:", err);
+  } catch (error) {
+    console.error("QR verification error:", error);
     res.status(500).json({ message: "Error verifying booking." });
   }
 });
 
-// ============================================================
-// ✅ Start Server
-// ============================================================
-const PORT = process.env.PORT || 10000;
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ A6 Cars backend running on http://0.0.0.0:${PORT}`);
-  console.log(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
+app.post("/api/admin/cancel-booking", verifyAdmin, async (req, res) => {
+  const { booking_id, reason } = req.body || {};
+  if (!booking_id || !reason) {
+    return res.status(400).json({ message: "Missing booking_id or reason" });
+  }
+
+  try {
+    const booking = await getBookingById(booking_id);
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found." });
+    }
+    if (booking.status === "cancelled") {
+      return res.status(409).json({ message: "Booking already cancelled." });
+    }
+
+    await handleBookingCancellation({
+      booking,
+      cancelledBy: "admin",
+      reason,
+      adminEmail: req.admin?.email || "admin",
+    });
+
+    res.json({
+      message: "Booking cancelled by admin. Full refund scheduled, customer notified, discount issued.",
+    });
+  } catch (error) {
+    console.error("Admin cancel booking error:", error);
+    res.status(500).json({ message: "Failed to cancel booking (admin)." });
+  }
 });
 
-// Set timeout for graceful shutdown
-server.setTimeout(120000); // 120 seconds
+app.get("/api/admin/canceled-bookings", verifyAdmin, async (req, res) => {
+  try {
+    const cancellations = await collection("booking_cancellations")
+      .find({})
+      .sort({ id: -1 })
+      .toArray();
 
-// Handle uncaught exceptions
-process.on('uncaughtException', (err) => {
-  console.error('❌ Uncaught Exception:', err);
+    const rows = await Promise.all(
+      cancellations.map(async (cancellation) => {
+        const booking = await getBookingById(cancellation.booking_id);
+        const car = booking ? await getCarById(booking.car_id) : null;
+        const customer = booking ? await getCustomerById(booking.customer_id) : null;
+        return {
+          ...cancellation,
+          start_date: booking?.start_date || null,
+          end_date: booking?.end_date || null,
+          amount: booking?.amount || null,
+          car_id: booking?.car_id || null,
+          brand: car?.brand || null,
+          model: car?.model || null,
+          customer_name: customer?.name || null,
+          email: customer?.email || null,
+        };
+      })
+    );
+
+    res.json(rows);
+  } catch (error) {
+    console.error("Fetch canceled bookings error:", error);
+    res.status(500).json({ message: "Failed to fetch canceled bookings." });
+  }
+});
+
+app.get("/api/admin/refunds", verifyAdmin, async (req, res) => {
+  try {
+    const refunds = await collection("refunds")
+      .find({})
+      .sort({ created_at: -1, id: -1 })
+      .toArray();
+
+    const rows = await Promise.all(
+      refunds.map(async (refund) => {
+        const payment = refund.payment_id
+          ? await collection("payments").findOne({ id: refund.payment_id })
+          : null;
+        const customer = await getCustomerById(refund.customer_id);
+        return {
+          ...refund,
+          payment_row_id: payment?.id || null,
+          payment_refund_status: payment?.refund_status || null,
+          customer_name: customer?.name || null,
+          email: customer?.email || null,
+        };
+      })
+    );
+
+    res.json(rows);
+  } catch (error) {
+    console.error("Fetch refunds error:", error);
+    res.status(500).json({ message: "Failed to fetch refunds." });
+  }
+});
+
+app.get("/api/admin/transactions", verifyAdmin, async (req, res) => {
+  try {
+    const page = toNumber(req.query.page, 1);
+    const pageSize = toNumber(req.query.pageSize, 50);
+    const skip = Math.max(0, (page - 1) * pageSize);
+
+    const total = await collection("payments").countDocuments();
+    const payments = await collection("payments")
+      .find({})
+      .sort({ created_at: -1, id: -1 })
+      .skip(skip)
+      .limit(pageSize)
+      .toArray();
+
+    const data = await Promise.all(
+      payments.map(async (payment) => {
+        const booking = await getBookingById(payment.booking_id);
+        const car = booking ? await getCarById(booking.car_id) : null;
+        const customer = booking ? await getCustomerById(booking.customer_id) : null;
+        return {
+          payment_id: payment.id,
+          booking_id: payment.booking_id,
+          payment_amount: payment.amount,
+          payment_status: payment.status === "paid" ? "completed" : payment.status,
+          booking_id_row: booking?.id || null,
+          start_date: booking?.start_date || null,
+          end_date: booking?.end_date || null,
+          booking_amount: booking?.amount || null,
+          paid: booking?.paid || false,
+          verified: booking?.verified || false,
+          brand: car?.brand || null,
+          model: car?.model || null,
+          customer_name: customer?.name || null,
+          email: customer?.email || null,
+        };
+      })
+    );
+
+    res.json({ data, total });
+  } catch (error) {
+    console.error("Admin transactions error:", error);
+    res.status(500).json({ message: "Failed to fetch transactions." });
+  }
+});
+
+app.post("/api/admin/process-refunds", verifyAdmin, async (req, res) => {
+  const { refund_id } = req.body || {};
+  try {
+    const query = { status: "pending" };
+    if (refund_id) query.id = toNumber(refund_id);
+
+    const refunds = await collection("refunds")
+      .find(query)
+      .sort({ created_at: 1, id: 1 })
+      .limit(refund_id ? 1 : 50)
+      .toArray();
+
+    if (!refunds.length) {
+      return res.json({ message: "No pending refunds found." });
+    }
+
+    const processed = [];
+    for (const refund of refunds) {
+      await collection("refunds").updateOne(
+        { id: refund.id },
+        { $set: { status: "processed", processed_at: nowIso() } }
+      );
+      await collection("payments").updateOne(
+        { booking_id: refund.booking_id },
+        { $set: { refund_status: "processed", refund_processed_at: nowIso() } }
+      );
+      await createNotification(
+        refund.customer_id,
+        "Refund Processed",
+        `Your refund of ₹${refund.amount} for booking #${refund.booking_id} has been processed.`
+      );
+      processed.push({
+        refund_id: refund.id,
+        booking_id: refund.booking_id,
+        amount: refund.amount,
+      });
+    }
+
+    res.json({ message: "Processed refunds", processed });
+  } catch (error) {
+    console.error("Process refunds error:", error);
+    res.status(500).json({ message: "Failed to process refunds." });
+  }
+});
+
+app.get("/api/admin/car-schedule/:car_id", verifyAdmin, async (req, res) => {
+  try {
+    const bookings = await collection("bookings")
+      .find({
+        car_id: toNumber(req.params.car_id),
+        status: { $ne: "cancelled" },
+      })
+      .sort({ start_date: 1, id: 1 })
+      .toArray();
+
+    const today = new Date();
+    const endWindow = new Date(today.getTime() + 180 * 24 * 60 * 60 * 1000);
+    res.json({
+      bookings: bookings.map((booking) => ({
+        id: booking.id,
+        start_date: booking.start_date,
+        end_date: booking.end_date,
+        status: booking.status,
+      })),
+      vacancies: computeVacancies(bookings, today, endWindow),
+    });
+  } catch (error) {
+    console.error("Car schedule error:", error);
+    res.status(500).json({ message: "Failed to fetch car schedule." });
+  }
+});
+
+app.post("/api/cancel-booking", async (req, res) => {
+  const {
+    booking_id,
+    cancelled_by,
+    reason = null,
+    admin_email = null,
+    customer_id = null,
+  } = req.body || {};
+
+  const cancelledBy = cancelled_by || "user";
+  if (!booking_id) {
+    return res.status(400).json({ message: "Missing booking_id" });
+  }
+
+  try {
+    const booking = await getBookingById(booking_id);
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found" });
+    }
+    if (booking.status === "cancelled") {
+      return res.status(409).json({ message: "Booking already cancelled." });
+    }
+
+    let adminEmail = admin_email;
+    if (cancelledBy === "admin") {
+      const header = req.headers.authorization || "";
+      const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+      if (!token) {
+        return res.status(401).json({ message: "Admin authorization required for admin cancellations" });
+      }
+
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        adminEmail = decoded.email || adminEmail || "admin";
+      } catch (error) {
+        return res.status(401).json({ message: "Invalid admin token" });
+      }
+    } else if (customer_id && booking.customer_id !== toNumber(customer_id)) {
+      return res.status(403).json({ message: "Booking does not belong to this customer." });
+    }
+
+    const { refundAmount, refundPercent } = await handleBookingCancellation({
+      booking,
+      cancelledBy,
+      reason,
+      adminEmail,
+    });
+
+    res.json({
+      message:
+        cancelledBy === "admin"
+          ? "Booking cancelled successfully"
+          : booking.paid
+          ? "Booking cancelled successfully"
+          : "Booking cancelled. No payment was recorded, so no refund necessary.",
+      refundAmount,
+      refundPercent,
+      refund_amount: refundAmount,
+      refund_percent: refundPercent,
+      refund_status: refundAmount > 0 ? "pending" : "none",
+      cancelled_by: cancelledBy,
+      booking_id: booking.id,
+    });
+  } catch (error) {
+    console.error("Cancel booking error:", error);
+    res.status(500).json({ message: "Cancel booking failed", error: error.message });
+  }
+});
+
+app.get("/api/bookings/all", verifyAdmin, async (req, res) => {
+  try {
+    const bookings = await collection("bookings")
+      .find({})
+      .sort({ id: -1 })
+      .toArray();
+
+    const rows = await Promise.all(
+      bookings.map(async (booking) => {
+        const [customer, car, payment] = await Promise.all([
+          getCustomerById(booking.customer_id),
+          getCarById(booking.car_id),
+          getPaymentByBookingId(booking.id),
+        ]);
+
+        return {
+          payment_id: payment?.id || null,
+          booking_id: booking.id,
+          customer_id: booking.customer_id,
+          customer_name: customer?.name || null,
+          customer_email: customer?.email || null,
+          car_id: booking.car_id,
+          brand: car?.brand || null,
+          model: car?.model || null,
+          start_date: booking.start_date,
+          end_date: booking.end_date,
+          amount: booking.amount,
+          paid: booking.paid,
+          verified: booking.verified,
+          qr_token: booking.qr_token || null,
+          created_at: booking.created_at,
+          status: booking.status,
+        };
+      })
+    );
+
+    res.json(rows);
+  } catch (error) {
+    console.error("All bookings export error:", error);
+    res.status(500).json({ message: "Failed to fetch all bookings." });
+  }
+});
+
+// ROUTES_MARKER
+
+let server;
+
+async function startServer() {
+  await connectMongo();
+  await ensureIndexes();
+
+  server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`✅ A6 Cars backend running on http://0.0.0.0:${PORT}`);
+    console.log(`✅ Environment: ${process.env.NODE_ENV || "development"}`);
+  });
+
+  server.setTimeout(120000);
+}
+
+async function shutdown(signal) {
+  console.log(`⚠️ ${signal} received, shutting down gracefully...`);
+
+  if (server) {
+    await new Promise((resolve) => server.close(resolve));
+  }
+
+  await closeMongo();
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM").catch(() => process.exit(1)));
+process.on("SIGINT", () => shutdown("SIGINT").catch(() => process.exit(1)));
+process.on("uncaughtException", (error) => {
+  console.error("❌ Uncaught Exception:", error);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("❌ Unhandled Rejection:", reason);
   process.exit(1);
 });
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+startServer().catch((error) => {
+  console.error("❌ Failed to start server:", error);
   process.exit(1);
-});
-
-// Graceful shutdown - SIGTERM
-process.on('SIGTERM', () => {
-  console.log('⚠️ SIGTERM received, shutting down gracefully...');
-  
-  // Stop accepting new connections
-  server.close(() => {
-    console.log('✅ Server closed, closing database pool...');
-    
-    // Close database pool
-    pool.end(() => {
-      console.log('✅ Database pool closed');
-      console.log('✅ Process exiting gracefully');
-      process.exit(0);
-    });
-  });
-  
-  // Force exit after 30 seconds
-  setTimeout(() => {
-    console.error('❌ Forced shutdown after 30s timeout');
-    process.exit(1);
-  }, 30000);
-});
-
-// Graceful shutdown - SIGINT
-process.on('SIGINT', () => {
-  console.log('⚠️ SIGINT received, shutting down gracefully...');
-  
-  // Stop accepting new connections
-  server.close(() => {
-    console.log('✅ Server closed, closing database pool...');
-    
-    // Close database pool
-    pool.end(() => {
-      console.log('✅ Database pool closed');
-      console.log('✅ Process exiting gracefully');
-      process.exit(0);
-    });
-  });
-  
-  // Force exit after 30 seconds
-  setTimeout(() => {
-    console.error('❌ Forced shutdown after 30s timeout');
-    process.exit(1);
-  }, 30000);
 });

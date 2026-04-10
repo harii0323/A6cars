@@ -1,458 +1,105 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>My Dashboard | A6 Cars</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
-  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
-  <link rel="stylesheet" href="/video-bg.css">
-  <script src="/voice-assistant.js" defer></script>
-
-  <style>
-    .status-paid { color: #16a34a; font-weight: bold; }
-    .status-pending { color: #dc2626; font-weight: bold; }
-  </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Customer Dashboard | A6 Cars</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/user.css" />
 </head>
-<body class="min-h-screen">
-  
-  <!-- Navbar -->
-  <nav class="bg-blue-700 text-white fixed top-0 left-0 right-0 z-50 shadow-lg">
-    <div class="max-w-6xl mx-auto flex justify-between items-center px-6 py-3">
-      <a href="/index.html" class="text-2xl font-bold tracking-wide">A6 Cars</a>
+<body data-page="home">
+  <div class="site-shell">
+    <header class="site-header">
+      <a class="brand" href="/index.html">
+        <span class="brand-mark">A6</span>
+        <span>
+          <strong>A6 Cars</strong>
+          <small>Customer dashboard</small>
+        </span>
+      </a>
+      <div class="nav-cluster">
+        <nav class="nav-links" id="siteNavLinks"></nav>
+        <div class="nav-actions" id="siteNavActions"></div>
+      </div>
+    </header>
 
-      <ul id="navMenu" class="flex space-x-6 items-center">
+    <main class="page-shell">
+      <section class="hero hero-grid">
+        <div class="hero-copy">
+          <span class="hero-chip">Customer Dashboard</span>
+          <h1 id="homeGreeting">Loading your dashboard.</h1>
+          <p class="light-copy" id="homeSubtitle">We are pulling your bookings, notifications, and offer status now.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="/book.html">Book a Car</a>
+            <a class="button button-secondary" href="/history.html">Open Booking Center</a>
+          </div>
+        </div>
+        <div class="hero-aside" id="homePriorityCard"></div>
+      </section>
 
-        <li><a href="/home.html" id="nav-home" class="hover:text-gray-300 hidden">Home</a></li>
-        <li><a href="/book.html" id="nav-book" class="hover:text-gray-300 hidden">Book Car</a></li>
-        <li><a href="/history.html" id="nav-history" class="hover:text-gray-300 hidden">My Bookings</a></li>
+      <section class="stats-grid" id="homeMetrics"></section>
 
-        <li><a href="/admin-dashboard.html" id="nav-admin" class="hover:text-yellow-300 hidden font-semibold">Admin Dashboard</a></li>
+      <section class="section-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <div class="panel-title">
+              <span class="eyebrow">Offers</span>
+              <h2>Unused discounts</h2>
+              <p class="panel-copy">Any available booking discounts appear here before checkout.</p>
+            </div>
+          </div>
+          <div class="offer-grid" id="homeOffers"></div>
+        </article>
 
-        <li id="nav-user" class="hidden font-semibold"></li>
-        <li><button id="nav-logout" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-white hidden">Logout</button></li>
+        <article class="panel">
+          <div class="panel-head">
+            <div class="panel-title">
+              <span class="eyebrow">Notifications</span>
+              <h2>Recent updates</h2>
+              <p class="panel-copy">Admin decisions, cancellation notes, and payment updates come through this stream.</p>
+            </div>
+          </div>
+          <div class="notification-list" id="homeNotifications"></div>
+        </article>
+      </section>
 
-        <li id="nav-auth" class="flex space-x-2">
-          <a href="/login.html" class="bg-white text-blue-700 px-3 py-1 rounded hover:bg-gray-100">User Login</a>
-          <a href="/register.html" class="bg-blue-500 px-3 py-1 rounded hover:bg-blue-600">Register</a>
-          <a href="/admin.html" class="bg-yellow-400 text-black px-3 py-1 rounded hover:bg-yellow-500 font-semibold">Admin Login</a>
-        </li>
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="eyebrow">Active Trips</span>
+            <h2>Bookings in motion</h2>
+            <p class="panel-copy">Upcoming and active reservations stay here with their payment and QR actions.</p>
+          </div>
+        </div>
+        <div class="booking-grid" id="homeActiveList"></div>
+      </section>
 
-      </ul>
-    </div>
-  </nav>
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="eyebrow">Recent History</span>
+            <h2>Closed or older bookings</h2>
+            <p class="panel-copy">Completed and cancelled trips stay visible so nothing disappears after the trip ends.</p>
+          </div>
+        </div>
+        <div class="booking-grid" id="homePastList"></div>
+      </section>
+    </main>
 
-  <script>
-    // Setup navbar auth state
-    (function setupNavbar() {
-      try {
-        console.log("🔍 Navbar setup running on home.html...");
-        
-        const customerId = localStorage.getItem("customer_id");
-        const customerName = localStorage.getItem("customer_name");
-        const authToken = localStorage.getItem("auth_token");
-        const adminLogged = sessionStorage.getItem("adminLoggedIn") === "true";
-        const adminToken = sessionStorage.getItem("adminToken");
-
-        const userEl = document.getElementById("nav-user");
-        const logoutBtn = document.getElementById("nav-logout");
-        const authLinks = document.getElementById("nav-auth");
-        const adminLink = document.getElementById("nav-admin");
-        const navHome = document.getElementById("nav-home");
-        const navBook = document.getElementById("nav-book");
-        const navHistory = document.getElementById("nav-history");
-
-        const isUserLoggedIn = Boolean(customerId && authToken);
-        const isAdminLoggedIn = Boolean(adminLogged && adminToken);
-
-        const show = (...els) => els.forEach(el => el?.classList.remove("hidden"));
-        const hide = (...els) => els.forEach(el => el?.classList.add("hidden"));
-
-        console.log("isUserLoggedIn:", isUserLoggedIn, "isAdminLoggedIn:", isAdminLoggedIn);
-
-        if (isAdminLoggedIn) {
-          console.log("✅ Showing ADMIN navbar");
-          hide(authLinks, navHome, navBook, navHistory);
-          show(adminLink, logoutBtn, userEl);
-          userEl.textContent = "🧑‍💼 Admin";
-        } else if (isUserLoggedIn) {
-          console.log("✅ Showing USER navbar");
-          hide(authLinks, adminLink);
-          show(userEl, logoutBtn, navHome, navBook, navHistory);
-          userEl.textContent = `👋 Hello, ${customerName || "User"}`;
-        } else {
-          console.log("✅ Showing GUEST navbar");
-          show(authLinks);
-          hide(userEl, logoutBtn, adminLink, navHome, navBook, navHistory);
-        }
-
-        if (logoutBtn) {
-          logoutBtn.addEventListener("click", () => {
-            localStorage.clear();
-            sessionStorage.clear();
-            alert("You have been logged out.");
-            window.location.href = "/index.html";
-          });
-        }
-      } catch (err) {
-        console.error("❌ Navbar setup error:", err);
-      }
-    })();
-  </script>
-
-  <div class="h-20"></div>
-
-  <!-- ✅ Header -->
-  <div class="text-center mb-6">
-    <h1 class="text-3xl font-bold text-blue-700">Welcome to A6 Cars</h1>
-    <p id="userName" class="text-gray-600"></p>
+    <footer class="site-footer">
+      <p>The dashboard now shares the same customer-side system as booking and history, so session state and actions stay aligned.</p>
+      <span>© 2026 A6 Cars</span>
+    </footer>
   </div>
 
-  <!-- ✅ Booking CTA -->
-  <div class="text-center my-6">
-    <button onclick="window.location.href='/book.html'" 
-      class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
-      🚗 Book a New Car
-    </button>
-  </div>
+  <div class="toast-root" id="toastRoot"></div>
+  <div id="modalRoot"></div>
 
-  <!-- ✅ Bookings Section -->
-  <div class="max-w-6xl mx-auto px-6">
-    <h2 class="text-2xl font-semibold text-blue-600 mb-4">Active Bookings</h2>
-    <div id="activeBookings" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10"></div>
-
-    <h2 class="text-2xl font-semibold text-blue-600 mb-4">Past Bookings</h2>
-    <div id="pastBookings" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
-  </div>
-
-  <!-- ✅ Footer -->
-  <footer class="bg-blue-700 text-white text-center py-3 mt-10">
-    &copy; 2025 A6 Cars. All rights reserved.
-  </footer>
-
-  <script>
-    const BACKEND_URL =
-      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-        ? "http://localhost:3000"
-        : "https://a6cars-backend-ylx7.onrender.com";
-
-    // ✅ User session check
-    const customer_id = localStorage.getItem("customer_id");
-    const customer_name = localStorage.getItem("customer_name");
-    const token = localStorage.getItem("auth_token");
-
-    if (!customer_id || !token) {
-      alert("Please log in first.");
-      window.location.href = "/login.html";
-    }
-
-    document.getElementById("userName").innerText = `👋 Hello, ${customer_name || "User"}!`;
-    // Note: navbar visibility is handled by the per-page navbar setup scripts.
-
-    // ✅ Load user's bookings
-    async function loadBookings() {
-      const activeContainer = document.getElementById("activeBookings");
-      const pastContainer = document.getElementById("pastBookings");
-
-      activeContainer.innerHTML = `<p class="text-gray-500 text-center col-span-3">Loading your bookings...</p>`;
-      pastContainer.innerHTML = "";
-
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/mybookings/${customer_id}`, {
-          headers: { "Authorization": `Bearer ${token}` }
-        });
-        const data = await res.json();
-
-        if (!res.ok) throw new Error(data.message || "Failed to load bookings");
-
-        const active = data.filter(b => !b.verified && b.status !== 'cancelled');
-        const past = data.filter(b => b.verified || b.status === 'cancelled');
-
-        const makeCard = (bk, isPast = false) => {
-          const status = bk.paid
-            ? `<span class="status-paid">Paid</span>`
-            : `<span class="status-pending">Pending</span>`;
-          const verified = bk.verified
-            ? `<span class="status-paid">Verified</span>`
-            : `<span class="status-pending">Not Verified</span>`;
-
-          return `
-            <div class="bg-white shadow rounded-lg p-4">
-              <h3 class="text-xl font-bold text-gray-800 mb-1">${bk.brand} ${bk.model}</h3>
-              <p class="text-gray-600 mb-1">Location: ${bk.location}</p>
-              <p class="text-gray-600 mb-1">From: ${new Date(bk.start_date).toLocaleDateString()}</p>
-              <p class="text-gray-600 mb-1">To: ${new Date(bk.end_date).toLocaleDateString()}</p>
-              <p class="text-gray-600 mb-1">Amount: ₹${bk.amount}</p>
-              <p class="text-gray-600 mb-1">Payment: ${status}</p>
-              <p class="text-gray-600 mb-3">Verification: ${verified}</p>
-                  ${!isPast ? (bk.paid ? `` : `
-                    <button onclick="showPaymentQR(${bk.id}, ${bk.amount})"
-                      class="bg-green-600 text-white w-full py-2 rounded hover:bg-green-700">Pay Now</button>
-                  `) : ``}
-
-                  ${!isPast ? (bk.status !== 'cancelled' ? `
-                    <button onclick="cancelBooking(${bk.id})" class="mt-2 bg-red-500 text-white w-full py-2 rounded hover:bg-red-600">Cancel Booking</button>
-                  ` : `<p class="text-red-600 font-semibold mt-2">Cancelled</p>`) : ``}
-
-                  ${isPast && bk.status === 'cancelled' ? `
-                    <div class="mt-3 p-3 bg-yellow-50 border border-yellow-100 rounded">
-                      ${bk.canceled_by === 'user' ? `<p class="text-gray-700 font-semibold">Cancelled by ${customer_name || 'Customer'}</p>` : ''}
-                      ${bk.canceled_by === 'admin' ? `<p class="text-gray-700 font-semibold">Cancelled by Admin</p><p class="text-gray-600">Reason: ${bk.cancelled_reason || bk.cancel_admin_email || 'No reason provided'}</p>` : ''}
-                    </div>
-                  ` : ``}
-            </div>`;
-        };
-
-        activeContainer.innerHTML = active.length
-          ? active.map(b => makeCard(b, false)).join("")
-          : `<p class="text-gray-500 text-center col-span-3">No active bookings.</p>`;
-        pastContainer.innerHTML = past.length
-          ? past.map(b => makeCard(b, true)).join("")
-          : `<p class="text-gray-500 text-center col-span-3">No past bookings.</p>`;
-
-      } catch (err) {
-        activeContainer.innerHTML = `<p class="text-red-600 text-center">${err.message}</p>`;
-      }
-    }
-
-    // Cancel booking action
-    async function cancelBooking(bookingId) {
-      if (!confirm('Are you sure you want to cancel this booking?')) return;
-
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/cancel-booking`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ booking_id: bookingId, customer_id: customer_id, cancelled_by: 'user', reason: 'Cancelled by user via app' })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.message || 'Cancel failed');
-          // backend returns `refundAmount` and `refundPercent`
-          alert(`Booking cancelled. Refund: ₹${data.refundAmount ?? 0} (percent: ${data.refundPercent ?? 0}%).`);
-        loadBookings();
-      } catch (err) {
-        alert('Error cancelling booking: ' + err.message);
-      }
-    }
-
-    async function showPaymentQR(booking_id, amount) {
-      try {
-        const resp = await fetch(`${BACKEND_URL}/api/payments/qr`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ booking_id, customer_id })
-        });
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data.message || 'Failed to fetch payment QR');
-        
-        // Get booking details for the modal
-        const bookingResp = await fetch(`${BACKEND_URL}/api/bookings/${booking_id}`, {
-          headers: { 'Content-Type': 'application/json' }
-        });
-        const bookingData = bookingResp.ok ? await bookingResp.json() : { start_date: 'N/A', end_date: 'N/A' };
-        
-        showPaymentModal(booking_id, amount, data.qr, bookingData.start_date, bookingData.end_date);
-      } catch (err) {
-        alert('Could not fetch payment QR: ' + (err.message || err));
-      }
-    }
-
-    function showPaymentModal(booking_id, amount, qr, start_date, end_date) {
-      const modal = document.createElement("div");
-      modal.id = `payment-modal-${booking_id}`;
-      modal.className = "fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50";
-      modal.innerHTML = `
-        <div class="bg-white p-8 rounded-lg text-center max-w-md shadow-2xl">
-          <h2 class="text-2xl font-bold mb-2 text-blue-700">💳 Payment Required</h2>
-          <p class="text-gray-600 mb-4">Booking Details</p>
-          
-          <div class="bg-blue-50 p-4 rounded mb-4 text-left text-sm border-l-4 border-blue-600">
-            <p><strong>Booking ID:</strong> ${booking_id}</p>
-            <p><strong>From:</strong> ${start_date}</p>
-            <p><strong>To:</strong> ${end_date}</p>
-            <p><strong>Amount:</strong> ₹${amount}</p>
-          </div>
-
-          <p class="text-gray-600 mb-4 font-semibold">Scan QR or pay manually:</p>
-          <img src="${qr}" alt="Payment QR" class="mx-auto w-48 h-48 rounded border-4 border-blue-200 mb-4">
-          
-          <p class="text-sm text-gray-500 mb-4">After payment, enter your payment reference ID below</p>
-          
-          <div class="mb-4">
-            <label class="block text-sm font-semibold text-gray-700 mb-2">Payment Reference ID:</label>
-            <input type="text" id="ref-${booking_id}" placeholder="Enter payment reference ID (e.g., UPI123456)" class="border rounded p-3 w-full text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-          </div>
-          
-          <div class="flex gap-2">
-            <button class="bg-blue-600 text-white px-4 py-2 rounded flex-1 hover:bg-blue-700 font-semibold" onclick="verifyPaymentReference(${booking_id})">✓ Paid - Verify</button>
-            <button class="bg-red-600 text-white px-4 py-2 rounded flex-1 hover:bg-red-700 font-semibold" onclick="document.getElementById('payment-modal-${booking_id}').remove()">✗ Cancel</button>
-          </div>
-        </div>`;
-      document.body.appendChild(modal);
-    }
-
-    function showPopupQR(title, desc, qr) {
-      const qrPopup = document.createElement('div');
-      qrPopup.className = 'fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50';
-      qrPopup.innerHTML = `
-        <div class="bg-white p-6 rounded-lg text-center max-w-sm">
-          <h2 class="text-xl font-bold mb-2 text-blue-700">${title}</h2>
-          <p class="text-gray-600 mb-2">${desc}</p>
-          <img src="${qr}" alt="QR Code" class="mx-auto w-56 h-56 rounded border mb-3">
-          <button class="mt-4 bg-red-600 text-white px-4 py-2 rounded w-full" onclick="this.closest('.fixed').remove()">Close</button>
-        </div>`;
-      document.body.appendChild(qrPopup);
-    }
-
-    async function verifyPaymentReference(booking_id) {
-      const refInput = document.getElementById(`ref-${booking_id}`);
-      const refId = refInput.value.trim();
-
-      if (!refId) {
-        alert("Please enter a payment reference ID");
-        refInput.focus();
-        return;
-      }
-
-      refInput.disabled = true;
-
-      try {
-          let res, data;
-          const maxAttempts = 2;
-          for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-            try {
-              res = await fetch(`${BACKEND_URL}/api/verify-payment`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ booking_id, payment_reference_id: refId, customer_id }),
-                signal: controller.signal
-              });
-            } catch (fetchErr) {
-              clearTimeout(timeoutId);
-              if (attempt < maxAttempts) {
-                console.warn(`verify-payment attempt ${attempt} failed:`, fetchErr.message, "— retrying...");
-                await new Promise(r => setTimeout(r, 500));
-                continue;
-              } else {
-                throw fetchErr;
-              }
-            }
-            clearTimeout(timeoutId);
-
-            const contentType = res.headers.get("content-type") || "";
-            if (contentType.includes("application/json")) {
-              data = await res.json();
-            } else {
-              const text = await res.text();
-              console.error("/api/verify-payment returned non-JSON response:", text);
-              if (attempt < maxAttempts) {
-                console.warn(`verify-payment attempt ${attempt} returned non-JSON — retrying...`);
-                await new Promise(r => setTimeout(r, 500));
-                continue;
-              }
-              alert("❌ Server returned an unexpected response. Check backend logs or network.");
-              refInput.disabled = false;
-              return;
-            }
-
-            if (!res.ok) {
-              if (res.status >= 500 && attempt < maxAttempts) {
-                console.warn(`verify-payment attempt ${attempt} returned ${res.status} — retrying...`);
-                await new Promise(r => setTimeout(r, 500));
-                continue;
-              }
-              alert("❌ " + (data.message || "Payment verification failed"));
-              refInput.disabled = false;
-              return;
-            }
-
-            break;
-          }
-
-        alert("✅ Payment verified successfully!");
-        const modal = document.getElementById(`payment-modal-${booking_id}`);
-        if (modal) modal.remove();
-        loadBookings();
-
-      } catch (err) {
-        alert("❌ Error: " + err.message);
-        refInput.disabled = false;
-      }
-    }
-
-    loadBookings();
-
-    // Fetch any active discounts for the logged-in user and show a banner
-    (async () => {
-      try {
-        const resp = await fetch(`${BACKEND_URL}/api/discounts/${customer_id}`);
-        if (!resp.ok) return;
-        const discounts = await resp.json();
-        if (Array.isArray(discounts) && discounts.length > 0) {
-          const disc = discounts[0];
-          const percent = disc.percent || 0;
-          const code = disc.code ? ` Code: ${disc.code}` : '';
-          const start = disc.start_date ? ` from ${disc.start_date}` : '';
-          const end = disc.end_date ? ` to ${disc.end_date}` : '';
-          const msg = `You've received a ${percent}% discount${start}${end}.${code}`;
-
-          const banner = document.createElement('div');
-          banner.className = 'max-w-6xl mx-auto bg-green-100 border border-green-200 text-green-800 px-4 py-3 rounded mb-4';
-          banner.innerText = msg;
-          const ref = document.querySelector('.h-20');
-          if (ref && ref.parentNode) ref.parentNode.insertBefore(banner, ref.nextSibling);
-        }
-      } catch (e) {
-        console.warn('Could not fetch discounts:', e.message || e);
-      }
-    })();
-
-    // 🎤 Initialize Voice Assistant for Home Page
-    document.addEventListener('DOMContentLoaded', () => {
-      const voiceAssistant = initializeVoiceAssistant();
-      if (voiceAssistant) {
-        createVoiceUI('body');
-
-        // Custom commands for home page
-        voiceAssistant.addCommand('en', 'book_new', ['new booking', 'book new', 'next booking'], '🚗 Redirecting to booking page...');
-        voiceAssistant.addCommand('en', 'view_bookings', ['my bookings', 'view', 'show bookings'], '📋 Showing your bookings...');
-
-        voiceAssistant.addCommand('hi', 'book_new', ['नई बुकिंग', 'नई गाड़ी', 'अगली बुकिंग'], '🚗 बुकिंग पृष्ठ पर जा रहे हैं...');
-        voiceAssistant.addCommand('hi', 'view_bookings', ['मेरी बुकिंग', 'देखें', 'बुकिंग दिखाएं'], '📋 आपकी बुकिंग दिखा रहे हैं...');
-
-        voiceAssistant.addCommand('ta', 'book_new', ['புதிய முன்பதிவு', 'புதிய கார்', 'அடுத்த முன்பதிவு'], '🚗 முன்பதிவு பக்கத்திற்கு திருப்பிக்கொண்டுள்ளோம்...');
-        voiceAssistant.addCommand('ta', 'view_bookings', ['என் முன்பதிவுகள்', 'பார்க்க', 'முன்பதிவுகளைக் காட்டு'], '📋 உங்கள் முன்பதிவுகளைக் காட்டுகிறது...');
-
-        voiceAssistant.addCommand('te', 'book_new', ['నూ బుకింగ్', 'నూ కార్', 'నెక్స్ట్ బుకింగ్'], '🚗 బుకింగ్ పేజీకి రీడిరెక్ట్ చేస్తున్నాము...');
-        voiceAssistant.addCommand('te', 'view_bookings', ['నా బుకింగ్‌లు', 'వీక్షించు', 'బుకింగ్‌లను చూపించు'], '📋 మీ బుకింగ్‌లను చూపిస్తున్నది...');
-
-        // NOTE: Payment commands are disabled for security reasons
-        // Users must manually click payment buttons to ensure security
-
-        // Listen for voice commands
-        document.addEventListener('voiceCommand', (e) => {
-          const { commandType } = e.detail;
-          
-          if (commandType === 'book_new') {
-            window.location.href = '/book.html';
-          } else if (commandType === 'view_bookings') {
-            const scrollTarget = document.getElementById('activeBookings');
-            if (scrollTarget) scrollTarget.scrollIntoView({ behavior: 'smooth' });
-          }
-        });
-
-        console.log('🎤 Voice Assistant ready for Home Page!');
-        console.log('ℹ️ Payment actions require manual confirmation (not via voice)');
-      }
-    });
-  </script>
-  <script src="/video-bg.js"></script>
+  <script src="/api-config.js"></script>
+  <script src="/voice-assistant.js"></script>
+  <script src="/user.js"></script>
 </body>
 </html>
+

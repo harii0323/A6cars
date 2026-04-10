@@ -1,80 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Login | A6 Cars</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="/video-bg.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Customer Login | A6 Cars</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/user.css" />
 </head>
-<body class="bg-gray-100 flex justify-center items-center h-screen video-bg-active">
+<body data-page="login">
+  <section class="auth-shell">
+    <div class="auth-card">
+      <div class="auth-copy">
+        <span class="hero-chip">Customer Sign In</span>
+        <h1>Pick up where you left off.</h1>
+        <p>Use the upgraded customer workspace to check active trips, finish payments, review notifications, and pull your collection or return QR without hunting across multiple pages.</p>
+        <div class="auth-points">
+          <article class="auth-point">
+            <strong>Dashboard first</strong>
+            <span>Open straight into the customer overview with live bookings and offers.</span>
+          </article>
+          <article class="auth-point">
+            <strong>Payment follow-through</strong>
+            <span>Pending reservations stay visible until you verify payment and receive your QR passes.</span>
+          </article>
+          <article class="auth-point">
+            <strong>One booking center</strong>
+            <span>Collection, return, cancellation, and refund context now live in one route.</span>
+          </article>
+        </div>
+      </div>
 
-  <!-- Login box -->
-  <div class="bg-white p-8 rounded shadow-lg w-96">
-    <h2 class="text-2xl font-bold mb-6 text-center text-blue-600">Login to A6 Cars</h2>
+      <div class="auth-form-card">
+        <span class="eyebrow">A6 Cars Login</span>
+        <h2>Sign in to your account</h2>
+        <p class="form-copy">Enter the email and password you used when you registered.</p>
+        <form id="loginForm" class="field-grid">
+          <label class="field-block" style="grid-column: 1 / -1;">
+            <span>Email address</span>
+            <input class="input" id="email" name="email" type="email" placeholder="you@example.com" required />
+          </label>
+          <label class="field-block" style="grid-column: 1 / -1;">
+            <span>Password</span>
+            <input class="input" id="password" name="password" type="password" placeholder="Enter your password" required />
+          </label>
+          <div style="grid-column: 1 / -1;">
+            <button class="button button-primary" id="loginSubmitBtn" type="submit">Sign In</button>
+          </div>
+          <div class="feedback" id="loginFeedback" style="grid-column: 1 / -1;"></div>
+        </form>
+        <p class="form-copy" style="margin-top: 18px;">New here? <a href="/register.html"><strong>Create your account</strong></a></p>
+        <p class="form-copy" style="margin-top: 8px;">Need admin access instead? <a href="/admin.html"><strong>Open admin login</strong></a></p>
+      </div>
+    </div>
+  </section>
 
-    <form id="loginForm" class="space-y-4">
-      <input type="email" id="email" name="email" placeholder="Email" required class="w-full p-2 border rounded" />
-      <input type="password" id="password" name="password" placeholder="Password" required class="w-full p-2 border rounded" />
-      <button type="submit" class="bg-blue-600 text-white w-full p-2 rounded hover:bg-blue-700">
-        Login
-      </button>
-    </form>
-
-    <p class="mt-4 text-center text-sm">
-      Don't have an account?
-      <a href="register.html" class="text-blue-600 hover:underline">Register here</a>
-    </p>
-  </div>
+  <div class="toast-root" id="toastRoot"></div>
+  <div id="modalRoot"></div>
 
   <script src="/api-config.js"></script>
-  <script src="/video-bg.js"></script>
-  <script>
-    const BACKEND_URL = window.API_CONFIG.BACKEND_URL;
-
-    // ✅ Handle form submit
-    document.getElementById("loginForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-
-      const email = document.getElementById("email").value.trim();
-      const password = document.getElementById("password").value.trim();
-
-      if (!email || !password) {
-        alert("Please enter both email and password.");
-        return;
-      }
-
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/login`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password })
-        });
-
-        const text = await res.text();
-        const json = text ? JSON.parse(text) : {};
-
-        if (!res.ok) {
-          alert(json.message || "❌ Invalid email or password");
-          return;
-        }
-
-        // ✅ Save login data locally
-        if (json.token) localStorage.setItem("auth_token", json.token);
-        if (json.customer_id) localStorage.setItem("customer_id", json.customer_id);
-        if (json.name) localStorage.setItem("customer_name", json.name);
-        if (json.email) localStorage.setItem("customer_email", json.email);
-
-        alert("✅ Login successful!");
-
-        // Redirect to user home/booking page
-        window.location.href = "/home.html";
-
-      } catch (err) {
-        console.error("Login error:", err);
-        alert("⚠️ Network error. Please try again.");
-      }
-    });
-  </script>
-
+  <script src="/user.js"></script>
 </body>
 </html>

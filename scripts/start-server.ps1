@@ -20,8 +20,8 @@ if (-not (Test-Path "node_modules")) {
     if ($LASTEXITCODE -ne 0) { Write-Host "npm install failed." -ForegroundColor Red; exit $LASTEXITCODE }
 }
 
-# Start server in a new background process
-Write-Host "Starting server (node server.js) ..."
-$proc = Start-Process -FilePath node -ArgumentList 'server.js' -PassThru
+# Start backend server in a new background process
+Write-Host "Starting backend server (node backend/server.js) ..."
+$proc = Start-Process -FilePath node -ArgumentList 'backend/server.js' -PassThru
 Write-Host "Started process id $($proc.Id). Use `Get-Process -Id $($proc.Id)` to inspect." -ForegroundColor Green
 Write-Host "To stop: Stop-Process -Id $($proc.Id)" -ForegroundColor Yellow

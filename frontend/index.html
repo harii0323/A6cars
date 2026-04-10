@@ -1,128 +1,116 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>A6 Cars | Welcome</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="/video-bg.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A6 Cars | Customer Experience</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/user.css" />
 </head>
+<body data-page="landing">
+  <div class="site-shell">
+    <header class="site-header">
+      <a class="brand" href="/index.html">
+        <span class="brand-mark">A6</span>
+        <span>
+          <strong>A6 Cars</strong>
+          <small>Book, pay, and manage trips in one flow</small>
+        </span>
+      </a>
+      <div class="nav-cluster">
+        <nav class="nav-links" id="siteNavLinks"></nav>
+        <div class="nav-actions" id="siteNavActions"></div>
+      </div>
+    </header>
 
-<body class="bg-gray-100 min-h-screen flex flex-col video-bg-active">
-  <!-- Navbar -->
-  <nav class="bg-blue-700 text-white shadow-lg fixed top-0 left-0 right-0 z-50">
-    <div class="max-w-6xl mx-auto flex justify-between items-center px-6 py-3">
-      <a href="/index.html" class="text-2xl font-bold tracking-wide">A6 Cars</a>
-      <ul id="nav-menu" class="flex space-x-4 items-center"></ul>
-    </div>
-  </nav>
+    <main class="page-shell">
+      <section class="hero hero-grid">
+        <div class="hero-copy">
+          <span class="hero-chip">Customer Side Rebuilt</span>
+          <h1 id="landingGreeting">Modern car rental, rebuilt around the customer flow.</h1>
+          <p class="light-copy">The user side now follows the same cleanup approach as admin: one shared design system, one shared app script, and a consistent route structure across landing, auth, dashboard, booking, and history.</p>
+          <div class="landing-actions" id="landingActions"></div>
+        </div>
+        <div class="hero-aside" id="landingStatusCard"></div>
+      </section>
 
-  <div class="h-20"></div>
+      <section class="feature-grid">
+        <article class="feature-card">
+          <strong>Clear entry points</strong>
+          <p>Guests land on one focused welcome page, then move into login or signup without carrying page-specific logic everywhere.</p>
+        </article>
+        <article class="feature-card">
+          <strong>One booking center</strong>
+          <p>Payments, cancellation actions, collection QR, return QR, and refund visibility all live inside the same booking timeline.</p>
+        </article>
+        <article class="feature-card">
+          <strong>Shared customer shell</strong>
+          <p>Navbar state, feedback messages, session checks, modals, and API handling are now consistent across the user-facing experience.</p>
+        </article>
+      </section>
 
-  <!-- Hero Section -->
-  <section class="flex flex-col items-center justify-center flex-1 text-center px-6">
-    <h1 class="text-4xl font-bold text-blue-700 mb-4">Welcome to A6 Cars 🚗</h1>
-    <p class="text-gray-600 text-lg max-w-xl mb-8">
-      Rent your favorite cars easily, securely, and quickly. Login as a user to book a car,
-      or login as admin to manage vehicles and bookings.
-    </p>
+      <section class="section-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <div class="panel-title">
+              <span class="eyebrow">Customer Journey</span>
+              <h2>From first visit to pickup</h2>
+            </div>
+          </div>
+          <div class="stack-list">
+            <article class="timeline-card">
+              <strong>1. Create an account or sign in</strong>
+              <p>Auth pages now plug into the same session layer instead of each page inventing its own version.</p>
+            </article>
+            <article class="timeline-card">
+              <strong>2. Browse the fleet and lock dates</strong>
+              <p>Cars, blocked dates, and discount messaging all flow through one booking script.</p>
+            </article>
+            <article class="timeline-card">
+              <strong>3. Manage the trip after checkout</strong>
+              <p>Your dashboard and booking center keep payment verification, cancellation, and QR access in sync.</p>
+            </article>
+          </div>
+        </article>
 
-    <div id="action-buttons" class="space-x-4"></div>
-  </section>
+        <article class="panel">
+          <div class="panel-head">
+            <div class="panel-title">
+              <span class="eyebrow">Why This Upgrade Helps</span>
+              <h2>Less duplication, fewer surprises</h2>
+            </div>
+          </div>
+          <div class="stack-list">
+            <article class="timeline-card">
+              <strong>Same UI language everywhere</strong>
+              <p>Moving between landing, booking, and history no longer feels like leaving one app for another.</p>
+            </article>
+            <article class="timeline-card">
+              <strong>Stronger route cleanup</strong>
+              <p>The old split between `booking.html` and `history.html` is resolved with one real booking surface and a redirect for old links.</p>
+            </article>
+            <article class="timeline-card">
+              <strong>Easier future changes</strong>
+              <p>When we update customer session logic or payment flow again, we only need to do it in one place.</p>
+            </article>
+          </div>
+        </article>
+      </section>
+    </main>
 
-  <footer class="bg-blue-700 text-white text-center py-3">
-    &copy; 2025 A6 Cars. All rights reserved.
-  </footer>
+    <footer class="site-footer">
+      <p>Customer journeys now match the upgraded admin side: simpler structure, cleaner flows, and less duplicate code.</p>
+      <span>© 2026 A6 Cars</span>
+    </footer>
+  </div>
+
+  <div class="toast-root" id="toastRoot"></div>
+  <div id="modalRoot"></div>
 
   <script src="/api-config.js"></script>
-  <script src="/video-bg.js"></script>
-  <script>
-    const BACKEND_URL = window.API_CONFIG.BACKEND_URL;
-
-    // Clear any invalid or incomplete sessions
-    const userId = localStorage.getItem("customer_id");
-    const userName = localStorage.getItem("customer_name");
-    const authToken = localStorage.getItem("auth_token");
-    const adminLogged = sessionStorage.getItem("adminLoggedIn");
-    const adminToken = sessionStorage.getItem("adminToken");
-
-    const navMenu = document.getElementById("nav-menu");
-    const actionButtons = document.getElementById("action-buttons");
-
-    // ✅ Only consider valid login if both ID + token exist
-    const userLoggedIn = userId && authToken;
-    const adminActive = adminLogged && adminToken;
-
-    if (adminActive) {
-      // 🧑‍💼 Admin Logged In
-      navMenu.innerHTML = `
-        <li><button id="logoutBtn" class="bg-red-500 px-4 py-1 rounded hover:bg-red-600">Logout</button></li>
-      `;
-      actionButtons.innerHTML = `
-        <h2 class="text-2xl font-semibold text-blue-700 mb-4">🧑‍💼 Admin Mode</h2>
-        <a href="/admin-dashboard.html" class="bg-yellow-400 text-black px-5 py-2 rounded hover:bg-yellow-500 font-semibold">
-          Go to Admin Dashboard
-        </a>
-      `;
-    } 
-    else if (userLoggedIn) {
-      // 👤 User Logged In
-      navMenu.innerHTML = `
-        <li><a href="/home.html" class="hover:text-gray-200">Home</a></li>
-        <li><a href="/booking.html" class="hover:text-gray-200">My Bookings</a></li>
-        <li><a href="/book.html" class="hover:text-gray-200">Book</a></li>
-        <li><button id="logoutBtn" class="bg-red-500 px-4 py-1 rounded hover:bg-red-600">Logout</button></li>
-      `;
-      actionButtons.innerHTML = `
-        <h2 class="text-2xl font-semibold text-blue-700 mb-4">👋 Welcome back, ${userName || 'User'}!</h2>
-        <a href="/home.html" class="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700">Go to Dashboard</a>
-      `;
-
-      // Fetch any active discounts for the logged-in user and show a banner
-      (async () => {
-        try {
-          const resp = await fetch(`${BACKEND_URL}/api/discounts/${userId}`);
-          if (!resp.ok) return;
-          const discounts = await resp.json();
-          if (Array.isArray(discounts) && discounts.length > 0) {
-            const disc = discounts[0];
-            const percent = disc.percent || 0;
-            const start = disc.start_date ? ` from ${disc.start_date}` : '';
-            const end = disc.end_date ? ` to ${disc.end_date}` : '';
-            const msg = `You've received a ${percent}% discount${start}${end}. It will be applied on your next booking.`;
-
-            const banner = document.createElement('div');
-            banner.className = 'max-w-2xl mx-auto bg-green-100 border border-green-200 text-green-800 px-4 py-3 rounded mb-4';
-            banner.innerText = msg;
-            actionButtons.parentNode.insertBefore(banner, actionButtons);
-          }
-        } catch (e) {
-          console.warn('Could not fetch discounts:', e.message || e);
-        }
-      })();
-    } 
-    else {
-      // 🚪 Not Logged In (default landing)
-      navMenu.innerHTML = `
-        <li><a href="/login.html" class="bg-white text-blue-700 px-3 py-1 rounded hover:bg-gray-100">User Login</a></li>
-       <!-- <li><a href="/register.html" class="bg-blue-500 px-3 py-1 rounded hover:bg-blue-600">Register</a></li>-->
-        <li><a href="/admin.html" class="bg-yellow-400 text-black px-3 py-1 rounded hover:bg-yellow-500 font-semibold">Admin Login</a></li>
-      `;
-      actionButtons.innerHTML = `
-       <a href="/register.html" class="bg-blue-600 text-white px-5 py-2 rounded hover:bg-blue-700">Sign Up to Start Booking</a> 
-       <!-- <a href="/admin.html" class="bg-yellow-400 text-black px-5 py-2 rounded hover:bg-yellow-500">Admin Login</a> -->
-      `;
-    }
-
-    // ✅ Logout clears all data
-    document.addEventListener("click", (e) => {
-      if (e.target.id === "logoutBtn") {
-        localStorage.clear();
-        sessionStorage.clear();
-        alert("You have been logged out.");
-        window.location.href = "/index.html";
-      }
-    });
-  </script>
+  <script src="/user.js"></script>
 </body>
 </html>
+

@@ -1,229 +1,92 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Your Booking History | A6 Cars</title>
-
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="/video-bg.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Booking Center | A6 Cars</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/user.css" />
 </head>
+<body data-page="history">
+  <div class="site-shell">
+    <header class="site-header">
+      <a class="brand" href="/index.html">
+        <span class="brand-mark">A6</span>
+        <span>
+          <strong>A6 Cars</strong>
+          <small>Booking center</small>
+        </span>
+      </a>
+      <div class="nav-cluster">
+        <nav class="nav-links" id="siteNavLinks"></nav>
+        <div class="nav-actions" id="siteNavActions"></div>
+      </div>
+    </header>
 
-<body class="bg-gray-100 min-h-screen video-bg-active">
-  <!-- Navbar -->
-  <nav class="bg-blue-700 text-white fixed top-0 left-0 right-0 z-50 shadow-lg">
-    <div class="max-w-6xl mx-auto flex justify-between items-center px-6 py-3">
-      <a href="/index.html" class="text-2xl font-bold tracking-wide">A6 Cars</a>
+    <main class="page-shell">
+      <section class="hero hero-grid">
+        <div class="hero-copy">
+          <span class="hero-chip">Booking Center</span>
+          <h1>One timeline for payments, cancellations, and QR access.</h1>
+          <p class="light-copy">This replaces the earlier split between multiple booking pages. Every reservation now sits in one filtered view with shared actions and summary cards.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="/book.html">Book Another Car</a>
+          </div>
+        </div>
+        <div class="hero-aside" id="historySummary"></div>
+      </section>
 
-      <ul id="navMenu" class="flex space-x-6 items-center">
+      <section class="stats-grid" id="historyMetrics"></section>
 
-        <li><a href="/home.html" id="nav-home" class="hover:text-gray-300 hidden">Home</a></li>
-        <li><a href="/book.html" id="nav-book" class="hover:text-gray-300 hidden">Book Car</a></li>
-        <li><a href="/history.html" id="nav-history" class="hover:text-gray-300 hidden">My Bookings</a></li>
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="eyebrow">Discounts</span>
+            <h2>Offers still available</h2>
+            <p class="panel-copy">Unused discounts stay visible here so you can apply them before the next booking.</p>
+          </div>
+        </div>
+        <div class="offer-grid" id="discountStrip"></div>
+      </section>
 
-        <li><a href="/admin-dashboard.html" id="nav-admin" class="hover:text-yellow-300 hidden font-semibold">Admin Dashboard</a></li>
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="eyebrow">Booking Timeline</span>
+            <h2>Filter and manage every reservation</h2>
+            <p class="panel-copy">Search by car or booking number, then filter by payment state or cancellation state.</p>
+          </div>
+        </div>
+        <div class="toolbar">
+          <div class="field-cluster">
+            <input class="search-input" id="historySearchInput" type="search" placeholder="Search by booking, brand, model, or location" />
+          </div>
+        </div>
+        <div class="filter-bar" id="historyFilterBar">
+          <button class="filter-pill active" type="button" data-filter="all">All</button>
+          <button class="filter-pill" type="button" data-filter="active">Active</button>
+          <button class="filter-pill" type="button" data-filter="awaiting-payment">Awaiting payment</button>
+          <button class="filter-pill" type="button" data-filter="confirmed">Confirmed</button>
+          <button class="filter-pill" type="button" data-filter="cancelled">Cancelled</button>
+        </div>
+        <div class="booking-grid" id="historyList"></div>
+      </section>
+    </main>
 
-        <li id="nav-user" class="hidden font-semibold"></li>
-        <li><button id="nav-logout" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-white hidden">Logout</button></li>
-
-        <li id="nav-auth" class="flex space-x-2">
-          <a href="/login.html" class="bg-white text-blue-700 px-3 py-1 rounded hover:bg-gray-100">User Login</a>
-          <a href="/register.html" class="bg-blue-500 px-3 py-1 rounded hover:bg-blue-600">Register</a>
-          <a href="/admin.html" class="bg-yellow-400 text-black px-3 py-1 rounded hover:bg-yellow-500 font-semibold">Admin Login</a>
-        </li>
-
-      </ul>
-    </div>
-  </nav>
-
-  <script>
-    // Setup navbar auth state
-    (function setupNavbar() {
-      try {
-        console.log("🔍 Navbar setup running on history.html...");
-        
-        const customerId = localStorage.getItem("customer_id");
-        const customerName = localStorage.getItem("customer_name");
-        const authToken = localStorage.getItem("auth_token");
-        const adminLogged = sessionStorage.getItem("adminLoggedIn") === "true";
-        const adminToken = sessionStorage.getItem("adminToken");
-
-        const userEl = document.getElementById("nav-user");
-        const logoutBtn = document.getElementById("nav-logout");
-        const authLinks = document.getElementById("nav-auth");
-        const adminLink = document.getElementById("nav-admin");
-        const navHome = document.getElementById("nav-home");
-        const navBook = document.getElementById("nav-book");
-        const navHistory = document.getElementById("nav-history");
-
-        const isUserLoggedIn = Boolean(customerId && authToken);
-        const isAdminLoggedIn = Boolean(adminLogged && adminToken);
-
-        const show = (...els) => els.forEach(el => el?.classList.remove("hidden"));
-        const hide = (...els) => els.forEach(el => el?.classList.add("hidden"));
-
-        console.log("isUserLoggedIn:", isUserLoggedIn, "isAdminLoggedIn:", isAdminLoggedIn);
-
-        if (isAdminLoggedIn) {
-          console.log("✅ Showing ADMIN navbar");
-          hide(authLinks, navHome, navBook, navHistory);
-          show(adminLink, logoutBtn, userEl);
-          userEl.textContent = "🧑‍💼 Admin";
-        } else if (isUserLoggedIn) {
-          console.log("✅ Showing USER navbar");
-          hide(authLinks, adminLink);
-          show(userEl, logoutBtn, navHome, navBook, navHistory);
-          userEl.textContent = `👋 Hello, ${customerName || "User"}`;
-        } else {
-          console.log("✅ Showing GUEST navbar");
-          show(authLinks);
-          hide(userEl, logoutBtn, adminLink, navHome, navBook, navHistory);
-        }
-
-        if (logoutBtn) {
-          logoutBtn.addEventListener("click", () => {
-            localStorage.clear();
-            sessionStorage.clear();
-            alert("You have been logged out.");
-            window.location.href = "/index.html";
-          });
-        }
-      } catch (err) {
-        console.error("❌ Navbar setup error:", err);
-      }
-    })();
-  </script>
-
-  <script>
-    // ✅ Define backend URL
-    const BACKEND_URL =
-      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-        ? "http://localhost:3000"
-        : "https://a6cars-backend-ylx7.onrender.com";
-  </script>
-
-  <div class="h-20"></div>
-
-  <!-- Title -->
-  <div class="flex justify-center mb-6">
-    <div class="bg-white p-6 rounded shadow w-3/4 text-center">
-      <h1 class="text-3xl font-bold text-blue-700 mb-2">Your Booking History</h1>
-      <p class="text-gray-600 mb-4">View all your car rental bookings</p>
-    </div>
+    <footer class="site-footer">
+      <p>The booking center now replaces duplicate history screens with one customer-owned route and one shared action model.</p>
+      <span>© 2026 A6 Cars</span>
+    </footer>
   </div>
 
-  <!-- Bookings Container -->
-  <div id="history" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 px-6 pb-10"></div>
+  <div class="toast-root" id="toastRoot"></div>
+  <div id="modalRoot"></div>
 
-  <script>
-    const customer_id = localStorage.getItem("customer_id");
-    const token = localStorage.getItem("auth_token");
-
-    if (!customer_id) {
-      window.location.href = "/login.html";
-    }
-
-    // ✅ Load booking history (calls backend `/api/history/:customer_id`)
-    async function loadHistory() {
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/history/${customer_id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-
-        if (!res.ok) {
-          const txt = await res.text().catch(()=>null);
-          throw new Error(txt || 'Failed to load history');
-        }
-
-        const data = await res.json();
-        const container = document.getElementById("history");
-
-        // Handle both old format (array) and new format (object with bookings and discounts)
-        const bookings = Array.isArray(data) ? data : (data.bookings || []);
-        // Only show UNUSED discounts
-        const discounts = (data.discounts || []).filter(d => d.used === false || d.used === 0);
-
-        if (bookings.length === 0) {
-          container.innerHTML = `<p class="text-center text-gray-600 col-span-3">You have no bookings yet.</p>`;
-          return;
-        }
-
-        container.innerHTML = "";
-
-        // Display available (UNUSED) discounts at the top
-        if (discounts.length > 0) {
-          const discountCard = document.createElement("div");
-          discountCard.className = "bg-gradient-to-r from-green-50 to-green-100 p-6 rounded-lg shadow-lg border-2 border-green-500 col-span-1 md:col-span-2 lg:col-span-3";
-          let discountHTML = `
-            <h3 class="text-2xl font-bold text-green-700 mb-4">🎉 Available Discounts for You!</h3>
-            <p class="text-gray-600 mb-4">These discounts are not yet used. Apply them to your next booking!</p>
-            <div class="grid grid-cols-1 md:grid-cols-${Math.min(discounts.length, 3)} gap-4">
-          `;
-          discounts.forEach(d => {
-            discountHTML += `
-              <div class="bg-white p-4 rounded-lg border-2 border-green-400 text-center">
-                <p class="text-3xl font-bold text-green-600">${d.percent}% OFF</p>
-                <p class="text-gray-600 mt-2">Code: <span class="font-mono font-bold text-green-700">${d.code}</span></p>
-                <p class="text-sm text-gray-500 mt-2">✅ Ready to use!</p>
-              </div>
-            `;
-          });
-          discountHTML += `</div>`;
-          discountCard.innerHTML = discountHTML;
-          container.appendChild(discountCard);
-        }
-
-        bookings.forEach(b => {
-          const status = b.verified
-            ? '<span class="text-green-600 font-semibold">Verified ✅</span>'
-            : '<span class="text-yellow-600 font-semibold">Pending ⏳</span>';
-
-          const payment = b.paid
-            ? '<span class="text-green-600 font-semibold">Paid 💰</span>'
-            : '<span class="text-red-600 font-semibold">Not Paid ❌</span>';
-
-          const from = b.start_date ? new Date(b.start_date).toLocaleDateString() : '-';
-          const to = b.end_date ? new Date(b.end_date).toLocaleDateString() : '-';
-
-          // Check if booking was cancelled
-          const isCancelled = b.cancelled_at || b.canceled_by;
-          const cancelledStatus = isCancelled 
-            ? `<span class="text-red-600 font-bold text-lg">❌ CANCELLED</span>`
-            : '';
-          
-          // Show cancellation details if exists
-          const cancellationDetails = isCancelled
-            ? `<div class="bg-red-50 border-l-4 border-red-500 p-3 mt-3 text-left text-sm">
-                <p class="font-semibold text-red-700">Cancellation Details:</p>
-                <p class="text-gray-700">Reason: ${b.cancelled_reason || 'No reason provided'}</p>
-                <p class="text-gray-700">Cancelled by: ${b.canceled_by === 'user' ? 'You' : 'Admin'}</p>
-                ${b.cancel_refund_amount ? `<p class="text-green-700 font-semibold">Refund: ₹${b.cancel_refund_amount}</p>` : ''}
-              </div>`
-            : '';
-
-          const card = document.createElement("div");
-          card.className = `bg-white p-5 rounded-lg shadow text-center ${isCancelled ? 'border-2 border-red-400' : ''}`;
-          card.innerHTML = `
-            <h2 class="text-xl font-bold text-blue-700 mb-2">${b.brand} ${b.model}</h2>
-            ${cancelledStatus}
-            <p class="text-gray-600">From: ${from}</p>
-            <p class="text-gray-600">To: ${to}</p>
-            <p class="text-gray-600">Amount: ₹${b.amount}</p>
-            <p class="text-gray-600 mt-2">Payment: ${payment}</p>
-            <p class="text-gray-600 mt-1">Verification: ${status}</p>
-            ${cancellationDetails}
-          `;
-          container.appendChild(card);
-        });
-      } catch (err) {
-        console.error(err);
-        document.getElementById("history").innerHTML = `<p class="text-center text-red-600">Error: ${err.message}</p>`;
-      }
-    }
-
-    loadHistory();
-  </script>
-    <script src="/video-bg.js"></script>
+  <script src="/api-config.js"></script>
+  <script src="/voice-assistant.js"></script>
+  <script src="/user.js"></script>
 </body>
 </html>
+

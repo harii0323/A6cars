@@ -1,7 +1,7 @@
 {
   "name": "a6cars-backend",
   "version": "1.0.0",
-  "description": "A6 Cars - Car Rental System Backend (Express + PostgreSQL + Render Ready)",
+  "description": "A6 Cars - Car Rental System Backend",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -15,16 +15,14 @@
     "dotenv": "^16.4.5",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.2",
+    "mongodb": "^6.16.0",
     "multer": "^1.4.5-lts.1",
     "openai": "^6.15.0",
-    "pg": "^8.11.5",
-    "qrcode": "^1.5.4",
-    "razorpay": "^2.9.1"
+    "qrcode": "^1.5.4"
   },
   "engines": {
-  "node": "18.x"
-},
+    "node": "18.x"
+  },
   "author": "Karike Harikrishna",
   "license": "ISC"
 }
-

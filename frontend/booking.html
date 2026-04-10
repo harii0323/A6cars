@@ -1,274 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Bookings | A6 Cars</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
-  <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
-  <link rel="stylesheet" href="/video-bg.css">
-  <script src="/voice-assistant.js" defer></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Redirecting to Booking Center | A6 Cars</title>
+  <meta http-equiv="refresh" content="0; url=/history.html" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/user.css" />
 </head>
-
-<body class="bg-gray-100 min-h-screen video-bg-active">
-  <!-- Navbar -->
-  <nav class="bg-blue-700 text-white fixed top-0 left-0 right-0 z-50 shadow-lg">
-    <div class="max-w-6xl mx-auto flex justify-between items-center px-6 py-3">
-      <a href="/index.html" class="text-2xl font-bold tracking-wide">A6 Cars</a>
-
-      <ul id="navMenu" class="flex space-x-6 items-center">
-
-        <li><a href="/home.html" id="nav-home" class="hover:text-gray-300 hidden">Home</a></li>
-        <li><a href="/book.html" id="nav-book" class="hover:text-gray-300 hidden">Book Car</a></li>
-        <li><a href="/history.html" id="nav-history" class="hover:text-gray-300 hidden">My Bookings</a></li>
-
-        <li><a href="/admin-dashboard.html" id="nav-admin" class="hover:text-yellow-300 hidden font-semibold">Admin Dashboard</a></li>
-
-        <li id="nav-user" class="hidden font-semibold"></li>
-        <li><button id="nav-logout" class="bg-red-500 hover:bg-red-600 px-3 py-1 rounded text-white hidden">Logout</button></li>
-
-        <li id="nav-auth" class="flex space-x-2">
-          <a href="/login.html" class="bg-white text-blue-700 px-3 py-1 rounded hover:bg-gray-100">User Login</a>
-          <a href="/register.html" class="bg-blue-500 px-3 py-1 rounded hover:bg-blue-600">Register</a>
-          <a href="/admin.html" class="bg-yellow-400 text-black px-3 py-1 rounded hover:bg-yellow-500 font-semibold">Admin Login</a>
-        </li>
-
-      </ul>
+<body data-page="booking-alias">
+  <section class="redirect-shell">
+    <div class="redirect-card">
+      <span class="hero-chip">Route Cleanup</span>
+      <h1>Redirecting to the upgraded booking center.</h1>
+      <p id="redirectCopy">Your older booking route now forwards into the single booking management page at `/history.html`.</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="/history.html">Open Booking Center</a>
+        <button class="button button-secondary" type="button" data-action="alias-forward">Continue</button>
+      </div>
     </div>
-  </nav>
+  </section>
 
-  <script>
-    // Setup navbar auth state
-    (function setupNavbar() {
-      try {
-        console.log("🔍 Navbar setup running on booking.html...");
-        
-        const customerId = localStorage.getItem("customer_id");
-        const customerName = localStorage.getItem("customer_name");
-        const authToken = localStorage.getItem("auth_token");
-        const adminLogged = sessionStorage.getItem("adminLoggedIn") === "true";
-        const adminToken = sessionStorage.getItem("adminToken");
+  <div class="toast-root" id="toastRoot"></div>
+  <div id="modalRoot"></div>
 
-        const userEl = document.getElementById("nav-user");
-        const logoutBtn = document.getElementById("nav-logout");
-        const authLinks = document.getElementById("nav-auth");
-        const adminLink = document.getElementById("nav-admin");
-        const navHome = document.getElementById("nav-home");
-        const navBook = document.getElementById("nav-book");
-        const navHistory = document.getElementById("nav-history");
-
-        const isUserLoggedIn = Boolean(customerId && authToken);
-        const isAdminLoggedIn = Boolean(adminLogged && adminToken);
-
-        const show = (...els) => els.forEach(el => el?.classList.remove("hidden"));
-        const hide = (...els) => els.forEach(el => el?.classList.add("hidden"));
-
-        console.log("isUserLoggedIn:", isUserLoggedIn, "isAdminLoggedIn:", isAdminLoggedIn);
-
-        if (isAdminLoggedIn) {
-          console.log("✅ Showing ADMIN navbar");
-          hide(authLinks, navHome, navBook, navHistory);
-          show(adminLink, logoutBtn, userEl);
-          userEl.textContent = "🧑‍💼 Admin";
-        } else if (isUserLoggedIn) {
-          console.log("✅ Showing USER navbar");
-          hide(authLinks, adminLink);
-          show(userEl, logoutBtn, navHome, navBook, navHistory);
-          userEl.textContent = `👋 Hello, ${customerName || "User"}`;
-        } else {
-          console.log("✅ Showing GUEST navbar");
-          show(authLinks);
-          hide(userEl, logoutBtn, adminLink, navHome, navBook, navHistory);
-        }
-
-        if (logoutBtn) {
-          logoutBtn.addEventListener("click", () => {
-            localStorage.clear();
-            sessionStorage.clear();
-            alert("You have been logged out.");
-            window.location.href = "/index.html";
-          });
-        }
-      } catch (err) {
-        console.error("❌ Navbar setup error:", err);
-      }
-    })();
-  </script>
-
-  <!-- ✅ Redirect if not logged in -->
-  <script>
-    const customer_id = localStorage.getItem("customer_id");
-    if (!customer_id) {
-      alert("Please log in to view your bookings.");
-      window.location.href = "/login.html";
-    }
-  </script>
-
-  <div class="h-20"></div>
-
-  <div class="text-center mb-6">
-    <h1 class="text-3xl font-bold text-blue-700">My Bookings</h1>
-    <p class="text-gray-600">Track your bookings, payments, and collection QRs</p>
-  </div>
-
-  <div id="booking-list" class="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
-
-  <script>
-    const BACKEND_URL =
-      (location.hostname === "localhost" || location.hostname === "127.0.0.1")
-        ? "http://localhost:3000"
-        : "https://a6cars-backend-ylx7.onrender.com";
-
-    async function loadBookings() {
-      const container = document.getElementById("booking-list");
-      container.innerHTML = `<p class="text-center text-gray-500 col-span-3">Loading your bookings...</p>`;
-
-      try {
-        const token = localStorage.getItem('auth_token');
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const res = await fetch(`${BACKEND_URL}/api/mybookings/${customer_id}`, { headers });
-        const data = await res.json();
-
-        if (!res.ok || !data.length) {
-          container.innerHTML = `<p class="text-center text-gray-600 col-span-3">No bookings yet.</p>`;
-          return;
-        }
-
-        container.innerHTML = "";
-        data.forEach(bk => {
-          const status = bk.paid ? "✅ Paid" : "❌ Pending";
-          const verified = bk.verified ? "✅ Verified" : "❌ Not Verified";
-          const images = bk.images && bk.images.length
-            ? bk.images.map(img =>
-                `<div class='swiper-slide'><img src='${BACKEND_URL}${img}' class='w-full h-48 object-cover rounded-lg'></div>`
-              ).join("")
-            : `<div class='swiper-slide'><img src='https://via.placeholder.com/400x300?text=No+Image' class='w-full h-48 object-cover rounded-lg'></div>`;
-
-          const card = document.createElement("div");
-          card.className = "bg-white rounded-lg shadow-lg p-4";
-          card.innerHTML = `
-            <div class="swiper carSwiper mb-3">
-              <div class="swiper-wrapper">${images}</div>
-              <div class="swiper-pagination"></div>
-            </div>
-            <h2 class="text-xl font-semibold mb-1">${bk.brand} ${bk.model}</h2>
-            <p class="text-gray-600 mb-1">From: ${new Date(bk.start_date).toLocaleDateString()}</p>
-            <p class="text-gray-600 mb-1">To: ${new Date(bk.end_date).toLocaleDateString()}</p>
-            <p class="text-gray-600 mb-1">Amount: ₹${bk.amount}</p>
-            <p class="text-gray-600 mb-1">Payment: ${status}</p>
-            <p class="text-gray-600 mb-3">Verification: ${verified}</p>
-            $ {
-                !bk.paid
-                  ? `<button class ="bg-blue-600 text-white py-2 rounded w-full" onclick="showPaymentQR(${bk.booking_id}, ${bk.amount})">Pay Now</button>`
-                  : `<button class ="bg-green-600 text-white py-2 rounded w-full" onclick="downloadCollectionQR('${bk.collection_qr}', ${bk.booking_id})">Download Collection QR</button>`
-              }
-
-              ${bk.status !== 'cancelled' ? `
-                <button class="mt-2 bg-red-500 text-white w-full py-2 rounded" onclick="cancelBooking(${bk.booking_id})">Cancel Booking</button>
-              ` : `<p class="text-red-600 font-semibold mt-2">Cancelled</p>`}
-          `;
-          container.appendChild(card);
-        });
-
-        new Swiper(".carSwiper", { loop: true, pagination: { el: ".swiper-pagination", clickable: true } });
-      } catch (err) {
-        document.getElementById("booking-list").innerHTML = `<p class="text-red-600 text-center">${err.message}</p>`;
-      }
-    }
-
-    async function showPaymentQR(booking_id, amount) {
-      const res = await fetch(`${BACKEND_URL}/api/payments/qr`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ booking_id, customer_id })
-      });
-      const data = await res.json();
-      showPopupQR("Scan to Pay", `Pay ₹${amount} to A6 Cars`, data.qr);
-    }
-
-    function showPopupQR(title, desc, qr) {
-      const qrPopup = document.createElement("div");
-      qrPopup.className = "fixed inset-0 bg-black bg-opacity-70 flex justify-center items-center z-50";
-      qrPopup.innerHTML = `
-        <div class="bg-white p-6 rounded-lg text-center max-w-sm">
-          <h2 class="text-xl font-bold mb-2 text-blue-700">${title}</h2>
-          <p class="text-gray-600 mb-2">${desc}</p>
-          <img src="${qr}" alt="QR Code" class="mx-auto w-56 h-56 rounded border mb-3">
-          <button class="mt-4 bg-red-600 text-white px-4 py-2 rounded w-full" onclick="this.closest('.fixed').remove()">Close</button>
-        </div>`;
-      document.body.appendChild(qrPopup);
-    }
-
-    function downloadCollectionQR(qr, id) {
-      const a = document.createElement("a");
-      a.href = qr;
-      a.download = `collection_qr_${id}.png`;
-      a.click();
-    }
-
-    // Cancel booking action for customers
-    async function cancelBooking(bookingId) {
-      if (!confirm('Are you sure you want to cancel this booking?')) return;
-      try {
-        const token = localStorage.getItem('auth_token');
-        const res = await fetch(`${BACKEND_URL}/api/cancel-booking`, {
-          method: 'POST',
-          headers: Object.assign({ 'Content-Type':'application/json' }, token ? { Authorization: `Bearer ${token}` } : {}),
-          body: JSON.stringify({ booking_id: bookingId, customer_id })
-        });
-        const j = await res.json();
-        if (!res.ok) throw new Error(j.message || 'Cancel failed');
-        alert(`Booking cancelled. Refund: ₹${j.refund_amount || 0} (status: ${j.refund_status || 'pending'})`);
-        loadBookings();
-      } catch (err) {
-        alert('Error cancelling booking: ' + err.message);
-      }
-    }
-
-    loadBookings();
-    
-    // Fetch active discounts and display banner
-    (async () => {
-      try {
-        const cust = localStorage.getItem('customer_id');
-        if (!cust) return;
-        const resp = await fetch(`${BACKEND_URL}/api/discounts/${cust}`);
-        if (!resp.ok) return;
-        const discounts = await resp.json();
-        if (Array.isArray(discounts) && discounts.length > 0) {
-          const disc = discounts[0];
-          const percent = disc.percent || 0;
-          const code = disc.code ? ` Code: ${disc.code}` : '';
-          const start = disc.start_date ? ` from ${disc.start_date}` : '';
-          const end = disc.end_date ? ` to ${disc.end_date}` : '';
-          const msg = `You've received a ${percent}% discount${start}${end}.${code}`;
-
-          const banner = document.createElement('div');
-          banner.className = 'max-w-6xl mx-auto bg-green-100 border border-green-200 text-green-800 px-4 py-3 rounded mb-4';
-          banner.innerText = msg;
-          const ref = document.querySelector('.h-20');
-          if (ref && ref.parentNode) ref.parentNode.insertBefore(banner, ref.nextSibling);
-        }
-      } catch (e) {
-        console.warn('Could not fetch discounts:', e.message || e);
-      }
-    })();
-
-    // 🎤 Initialize Voice Assistant for My Bookings page
-    document.addEventListener('DOMContentLoaded', () => {
-      const voiceAssistant = initializeVoiceAssistant();
-      if (voiceAssistant) {
-        createVoiceUI('body');
-
-        // NOTE: Payment commands are disabled for security reasons
-        // Users must manually click payment buttons to ensure security
-
-        console.log('🎤 Voice Assistant ready for My Bookings!');
-        console.log('ℹ️ Payment actions require manual confirmation (not via voice)');
-      }
-    });
-  </script>
-  <script src="/video-bg.js"></script>
+  <script src="/api-config.js"></script>
+  <script src="/user.js"></script>
 </body>
 </html>
+

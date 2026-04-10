@@ -12,7 +12,7 @@
   
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     // Local development
-    BACKEND_URL = 'http://localhost:3000';
+    BACKEND_URL = 'http://localhost:10000';
   } else if (hostname.includes('onrender.com')) {
   // On Render platform - use the actual backend URL
   BACKEND_URL = 'https://a6cars-backend-ylx7.onrender.com';

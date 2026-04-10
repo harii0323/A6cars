@@ -1,59 +1,72 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Register | A6 Cars</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="/video-bg.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Create Account | A6 Cars</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/user.css" />
 </head>
-<body class="bg-gray-100 flex justify-center items-center h-screen video-bg-active">
+<body data-page="register">
+  <section class="auth-shell">
+    <div class="auth-card">
+      <div class="auth-copy">
+        <span class="hero-chip">Create Customer Account</span>
+        <h1>Start booking without the messy handoff.</h1>
+        <p>The rebuilt customer flow is designed so your account, booking history, QR passes, and notifications all stay connected from the first reservation onward.</p>
+        <div class="auth-points">
+          <article class="auth-point">
+            <strong>Quick setup</strong>
+            <span>Just your name, email, phone, and password to get moving.</span>
+          </article>
+          <article class="auth-point">
+            <strong>Better follow-up</strong>
+            <span>Upcoming trips, pending payments, and admin-issued offers stay visible after signup.</span>
+          </article>
+          <article class="auth-point">
+            <strong>Future-ready structure</strong>
+            <span>This route now uses the same shared system as the rest of the user-facing pages.</span>
+          </article>
+        </div>
+      </div>
 
-  <div class="bg-white p-8 rounded shadow-lg w-96">
-    <h2 class="text-2xl font-bold mb-6 text-center text-blue-600">Register</h2>
-    <form id="registerForm" class="space-y-4">
-      <input type="text" name="name" placeholder="Name" required class="w-full p-2 border rounded">
-      <input type="email" name="email" placeholder="Email" required class="w-full p-2 border rounded">
-      <input type="text" name="phone" placeholder="Phone" required class="w-full p-2 border rounded">
-      <input type="password" name="password" placeholder="Password" required class="w-full p-2 border rounded">
-      <button type="submit" class="bg-blue-600 text-white w-full p-2 rounded hover:bg-blue-700">Register</button>
-    </form>
-    <p class="mt-4 text-center text-sm">Already have an account? 
-      <a href="login.html" class="text-blue-600 hover:underline">Login here</a>
-    </p>
-  </div>
+      <div class="auth-form-card">
+        <span class="eyebrow">A6 Cars Registration</span>
+        <h2>Create your account</h2>
+        <p class="form-copy">Once you register, you can sign in, browse the fleet, and manage bookings from the upgraded customer workspace.</p>
+        <form id="registerForm" class="field-grid">
+          <label class="field-block">
+            <span>Full name</span>
+            <input class="input" name="name" type="text" placeholder="Your name" required />
+          </label>
+          <label class="field-block">
+            <span>Phone number</span>
+            <input class="input" name="phone" type="text" placeholder="Mobile number" required />
+          </label>
+          <label class="field-block" style="grid-column: 1 / -1;">
+            <span>Email address</span>
+            <input class="input" name="email" type="email" placeholder="you@example.com" required />
+          </label>
+          <label class="field-block" style="grid-column: 1 / -1;">
+            <span>Password</span>
+            <input class="input" name="password" type="password" placeholder="Create a password" required />
+          </label>
+          <div style="grid-column: 1 / -1;">
+            <button class="button button-primary" id="registerSubmitBtn" type="submit">Create Account</button>
+          </div>
+          <div class="feedback" id="registerFeedback" style="grid-column: 1 / -1;"></div>
+        </form>
+        <p class="form-copy" style="margin-top: 18px;">Already registered? <a href="/login.html"><strong>Sign in here</strong></a></p>
+      </div>
+    </div>
+  </section>
+
+  <div class="toast-root" id="toastRoot"></div>
+  <div id="modalRoot"></div>
 
   <script src="/api-config.js"></script>
-  <script src="/video-bg.js"></script>
-  <script>
-    const BACKEND_URL = window.API_CONFIG.BACKEND_URL;
-
-    document.getElementById('registerForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const data = Object.fromEntries(new FormData(e.target).entries());
-
-      try {
-        const res = await fetch(`${BACKEND_URL}/api/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data)
-        });
-
-        const text = await res.text();
-        const json = text ? JSON.parse(text) : {};
-
-        if (!res.ok) {
-          alert(json.message || 'Registration failed.');
-          return;
-        }
-
-        alert(json.message || 'Registered successfully!');
-        window.location.href = 'login.html'; // redirect to login
-
-      } catch (error) {
-        alert('Error: ' + (error.message || 'Network issue, please try again.'));
-      }
-    });
-  </script>
-
+  <script src="/user.js"></script>
 </body>
 </html>

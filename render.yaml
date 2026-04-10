@@ -1,7 +1,7 @@
 # ============================
 # Render Deployment Configuration
 # A6 Cars Full Project
-# Backend + Frontend + Database
+# Backend + Frontend
 # ============================
 
 services:
@@ -15,26 +15,10 @@ services:
     startCommand: "node server.js"
     plan: free
     envVars:
-      - key: DB_HOST
-        fromDatabase:
-          name: a6cars-db
-          property: host
-      - key: DB_PORT
-        fromDatabase:
-          name: a6cars-db
-          property: port
-      - key: DB_USER
-        fromDatabase:
-          name: a6cars-db
-          property: user
-      - key: DB_PASS
-        fromDatabase:
-          name: a6cars-db
-          property: password
-      - key: DB_NAME
-        fromDatabase:
-          name: a6cars-db
-          property: database
+      - key: MONGODB_URI
+        value: mongodb+srv://A6cars:Anu@a6cars.muz7zpm.mongodb.net/?appName=A6cars
+      - key: MONGODB_DB_NAME
+        value: a6cars
       - key: JWT_SECRET
         value: secret123
       - key: ADMIN_EMAIL
@@ -62,12 +46,3 @@ services:
       - key: PORT
         value: "3000"
     autoDeploy: true
-
-# ---------------- DATABASE ----------------
-databases:
-  - name: a6cars-db
-    databaseName: a6cars_db
-    user: root
-    plan: free
-    postgresMajorVersion: "17"
-    region: singapore
