@@ -19,11 +19,11 @@ const {
 
 const app = express();
 
-const JWT_SECRET = process.env.JWT_SECRET || "secretkey123";
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "karikeharikrishna@gmail.com";
+const JWT_SECRET = process.env.JWT_SECRET;
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_PASSWORD =
-  process.env.ADMIN_PASSWORD || process.env.ADMIN_PASS || "Anu";
-const PORT = process.env.PORT || 10000;
+  process.env.ADMIN_PASSWORD || process.env.ADMIN_PASS;
+const PORT = process.env.PORT;
 
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
