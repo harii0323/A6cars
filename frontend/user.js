@@ -32,9 +32,11 @@ const pageState = {
 };
 
 const dom = {};
+let siteNavMediaQuery = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   cacheCommonDom();
+  setupResponsiveNavigation();
   bindGlobalEvents();
   renderNavigation();
 
@@ -97,6 +99,10 @@ function cacheCommonDom() {
   ].forEach((id) => {
     dom[id] = document.getElementById(id);
   });
+
+  dom.siteHeader = document.querySelector(".site-header");
+  dom.siteNavCluster = dom.siteHeader?.querySelector(".nav-cluster") || null;
+  dom.siteNavToggle = document.getElementById("siteNavToggle");
 }
 
 function bindGlobalEvents() {
@@ -107,6 +113,11 @@ function bindGlobalEvents() {
     }
 
     const action = actionEl.dataset.action;
+    if (action === "toggle-nav") {
+      toggleResponsiveNavigation();
+      return;
+    }
+
     if (action === "logout") {
       logoutAndRedirect();
       return;
@@ -194,6 +205,62 @@ function bindGlobalEvents() {
       closeModal();
     }
   });
+}
+
+function setupResponsiveNavigation() {
+  if (!dom.siteHeader || !dom.siteNavCluster) {
+    return;
+  }
+
+  dom.siteNavCluster.id = dom.siteNavCluster.id || "siteNavCluster";
+
+  if (!dom.siteNavToggle) {
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.id = "siteNavToggle";
+    toggle.className = "nav-toggle";
+    toggle.dataset.action = "toggle-nav";
+    toggle.setAttribute("aria-controls", dom.siteNavCluster.id);
+    dom.siteHeader.insertBefore(toggle, dom.siteNavCluster);
+    dom.siteNavToggle = toggle;
+  }
+
+  if (!siteNavMediaQuery) {
+    siteNavMediaQuery = window.matchMedia("(max-width: 760px)");
+    const syncNav = () => syncResponsiveNavigation();
+    if (typeof siteNavMediaQuery.addEventListener === "function") {
+      siteNavMediaQuery.addEventListener("change", syncNav);
+    } else {
+      siteNavMediaQuery.addListener(syncNav);
+    }
+  }
+
+  syncResponsiveNavigation();
+}
+
+function toggleResponsiveNavigation() {
+  if (!siteNavMediaQuery?.matches || !dom.siteHeader) {
+    return;
+  }
+
+  dom.siteHeader.classList.toggle("is-nav-open");
+  syncResponsiveNavigation();
+}
+
+function syncResponsiveNavigation() {
+  if (!dom.siteHeader || !dom.siteNavToggle) {
+    return;
+  }
+
+  const compact = Boolean(siteNavMediaQuery?.matches);
+  if (!compact) {
+    dom.siteHeader.classList.remove("is-nav-open");
+  }
+
+  const expanded = compact && dom.siteHeader.classList.contains("is-nav-open");
+  dom.siteNavToggle.hidden = !compact;
+  dom.siteNavToggle.textContent = expanded ? "Close" : "Menu";
+  dom.siteNavToggle.setAttribute("aria-expanded", compact ? String(expanded) : "false");
 }
 
 function getPageName() {

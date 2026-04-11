@@ -10,6 +10,7 @@ const state = {
   transactionFilter: "all",
   lastSync: null,
   activeModule: sessionStorage.getItem("adminActiveModule") || "overviewSection",
+  sidebarExpanded: true,
 };
 
 const scannerState = {
@@ -21,10 +22,12 @@ const scannerState = {
 };
 
 const dom = {};
+const compactSidebarMediaQuery = window.matchMedia("(max-width: 1180px)");
 
 document.addEventListener("DOMContentLoaded", () => {
   cacheDom();
   bindEvents();
+  configureResponsiveSidebar();
   initializeAdminPage();
 });
 
@@ -36,6 +39,9 @@ function cacheDom() {
   [
     "loginView",
     "dashboardView",
+    "sidebar",
+    "sidebarContent",
+    "sidebarToggleBtn",
     "topbarTitle",
     "topbarCopy",
     "loginForm",
@@ -119,9 +125,14 @@ function bindEvents() {
     await loginAdmin();
   });
 
+  dom.sidebarToggleBtn?.addEventListener("click", toggleResponsiveSidebar);
+
   dom.navButtons.forEach((button) => {
     button.addEventListener("click", () => {
       setActiveNav(button.dataset.target);
+      if (isCompactSidebar()) {
+        setSidebarExpanded(false);
+      }
     });
   });
 
@@ -257,6 +268,51 @@ function bindEvents() {
   });
 }
 
+function configureResponsiveSidebar() {
+  syncResponsiveSidebar();
+
+  const handleSidebarMediaChange = () => {
+    syncResponsiveSidebar();
+  };
+
+  if (typeof compactSidebarMediaQuery.addEventListener === "function") {
+    compactSidebarMediaQuery.addEventListener("change", handleSidebarMediaChange);
+  } else {
+    compactSidebarMediaQuery.addListener(handleSidebarMediaChange);
+  }
+}
+
+function isCompactSidebar() {
+  return compactSidebarMediaQuery.matches;
+}
+
+function toggleResponsiveSidebar() {
+  if (!isCompactSidebar()) {
+    return;
+  }
+
+  setSidebarExpanded(!state.sidebarExpanded);
+}
+
+function syncResponsiveSidebar() {
+  setSidebarExpanded(!isCompactSidebar());
+}
+
+function setSidebarExpanded(expanded) {
+  state.sidebarExpanded = expanded;
+
+  if (!dom.sidebar || !dom.sidebarToggleBtn) {
+    return;
+  }
+
+  const collapsed = isCompactSidebar() && !expanded;
+  dom.sidebar.classList.toggle("is-collapsed", collapsed);
+  dom.sidebarToggleBtn.setAttribute("aria-expanded", String(!collapsed));
+  dom.sidebarToggleBtn.innerHTML = collapsed
+    ? '<i class="fas fa-bars"></i><span>Menu</span>'
+    : '<i class="fas fa-xmark"></i><span>Close</span>';
+}
+
 function ensureAuthenticated() {
   const token = getAdminToken();
   if (!token) {
@@ -347,6 +403,7 @@ function clearAdminSession() {
 function setAdminSessionState(isLoggedIn) {
   dom.loginView?.classList.toggle("hidden", isLoggedIn);
   dom.dashboardView?.classList.toggle("hidden", !isLoggedIn);
+  syncResponsiveSidebar();
 
   if (isLoggedIn) {
     sessionStorage.setItem("adminLoggedIn", "true");
@@ -771,27 +828,39 @@ function renderTransactions() {
       const tone = badgeToneForStatus(status);
       return `
         <tr>
-          <td>
-            <strong>#${escapeHtml(transaction.payment_id || transaction.id || "-")}</strong>
-            <span class="muted">Booking #${escapeHtml(
-              transaction.booking_id || transaction.booking_id_row || "-"
-            )}</span>
-          </td>
-          <td>
-            <strong>${escapeHtml(transaction.customer_name || "Unknown customer")}</strong>
-            <span class="muted">${escapeHtml(transaction.email || "No email")}</span>
-          </td>
-          <td>
-            <strong>${escapeHtml(
-              `${transaction.brand || "Unknown"} ${transaction.model || ""}`.trim()
-            )}</strong>
-          </td>
-          <td>${formatCurrency(transaction.payment_amount || transaction.amount)}</td>
-          <td>${renderStatusBadge(status, tone)}</td>
-          <td>
-            <strong>${formatDate(transaction.start_date)}</strong>
-            <span class="muted">${formatDate(transaction.end_date)}</span>
-          </td>
+          ${tableCell(
+            "Payment",
+            `
+              <strong>#${escapeHtml(transaction.payment_id || transaction.id || "-")}</strong>
+              <span class="muted">Booking #${escapeHtml(
+                transaction.booking_id || transaction.booking_id_row || "-"
+              )}</span>
+            `
+          )}
+          ${tableCell(
+            "Customer",
+            `
+              <strong>${escapeHtml(transaction.customer_name || "Unknown customer")}</strong>
+              <span class="muted">${escapeHtml(transaction.email || "No email")}</span>
+            `
+          )}
+          ${tableCell(
+            "Car",
+            `
+              <strong>${escapeHtml(
+                `${transaction.brand || "Unknown"} ${transaction.model || ""}`.trim()
+              )}</strong>
+            `
+          )}
+          ${tableCell("Amount", formatCurrency(transaction.payment_amount || transaction.amount))}
+          ${tableCell("Status", renderStatusBadge(status, tone))}
+          ${tableCell(
+            "Trip dates",
+            `
+              <strong>${formatDate(transaction.start_date)}</strong>
+              <span class="muted">${formatDate(transaction.end_date)}</span>
+            `
+          )}
         </tr>
       `;
     })
@@ -1005,19 +1074,24 @@ function renderSchedule(data) {
                   const normalized = normalizeBookingStatus(booking.status);
                   return `
                     <tr>
-                      <td>#${escapeHtml(booking.id)}</td>
-                      <td>
-                        <strong>${formatDate(booking.start_date)}</strong>
-                        <span class="muted">${formatDate(booking.end_date)}</span>
-                      </td>
-                      <td>${renderStatusBadge(normalized, badgeToneForStatus(normalized))}</td>
-                      <td>
-                        ${
-                          normalized !== "cancelled"
-                            ? `<button class="card-button danger" type="button" data-cancel-booking="${booking.id}">Cancel</button>`
-                            : "-"
-                        }
-                      </td>
+                      ${tableCell("Booking", `#${escapeHtml(booking.id)}`)}
+                      ${tableCell(
+                        "Dates",
+                        `
+                          <strong>${formatDate(booking.start_date)}</strong>
+                          <span class="muted">${formatDate(booking.end_date)}</span>
+                        `
+                      )}
+                      ${tableCell(
+                        "Status",
+                        renderStatusBadge(normalized, badgeToneForStatus(normalized))
+                      )}
+                      ${tableCell(
+                        "Action",
+                        normalized !== "cancelled"
+                          ? `<button class="card-button danger" type="button" data-cancel-booking="${booking.id}">Cancel</button>`
+                          : "-"
+                      )}
                     </tr>
                   `;
                 })
@@ -1279,17 +1353,23 @@ function renderRefunds(metrics) {
         const tone = badgeToneForStatus(normalizeSimpleStatus(item.status || "pending"));
         return `
           <tr>
-            <td>
-              <strong>#${escapeHtml(item.booking_id || "-")}</strong>
-              <span class="muted">${formatDate(item.cancelled_at || item.created_at)}</span>
-            </td>
-            <td>
-              <strong>${escapeHtml(item.customer_name || "Unknown customer")}</strong>
-              <span class="muted">${escapeHtml(item.reason || "No reason provided")}</span>
-            </td>
-            <td>${escapeHtml(`${item.brand || "Unknown"} ${item.model || ""}`.trim())}</td>
-            <td>${formatCurrency(item.refund_amount || item.amount)}</td>
-            <td>${renderStatusBadge(item.status || "pending", tone)}</td>
+            ${tableCell(
+              "Booking",
+              `
+                <strong>#${escapeHtml(item.booking_id || "-")}</strong>
+                <span class="muted">${formatDate(item.cancelled_at || item.created_at)}</span>
+              `
+            )}
+            ${tableCell(
+              "Customer",
+              `
+                <strong>${escapeHtml(item.customer_name || "Unknown customer")}</strong>
+                <span class="muted">${escapeHtml(item.reason || "No reason provided")}</span>
+              `
+            )}
+            ${tableCell("Car", escapeHtml(`${item.brand || "Unknown"} ${item.model || ""}`.trim()))}
+            ${tableCell("Refund", formatCurrency(item.refund_amount || item.amount))}
+            ${tableCell("Status", renderStatusBadge(item.status || "pending", tone))}
           </tr>
         `;
       })
@@ -1311,17 +1391,23 @@ function renderRefunds(metrics) {
         const status = normalizeSimpleStatus(refund.status || "pending");
         return `
           <tr>
-            <td>
-              <strong>#${escapeHtml(refund.id || "-")}</strong>
-              <span class="muted">Booking #${escapeHtml(refund.booking_id || "-")}</span>
-            </td>
-            <td>
-              <strong>${escapeHtml(refund.customer_name || "Unknown customer")}</strong>
-              <span class="muted">${escapeHtml(refund.email || "No email")}</span>
-            </td>
-            <td>${formatCurrency(refund.amount)}</td>
-            <td>${renderStatusBadge(status, badgeToneForStatus(status))}</td>
-            <td>${formatDate(refund.created_at || refund.processed_at)}</td>
+            ${tableCell(
+              "Refund",
+              `
+                <strong>#${escapeHtml(refund.id || "-")}</strong>
+                <span class="muted">Booking #${escapeHtml(refund.booking_id || "-")}</span>
+              `
+            )}
+            ${tableCell(
+              "Customer",
+              `
+                <strong>${escapeHtml(refund.customer_name || "Unknown customer")}</strong>
+                <span class="muted">${escapeHtml(refund.email || "No email")}</span>
+              `
+            )}
+            ${tableCell("Amount", formatCurrency(refund.amount))}
+            ${tableCell("Status", renderStatusBadge(status, badgeToneForStatus(status)))}
+            ${tableCell("Created", formatDate(refund.created_at || refund.processed_at))}
           </tr>
         `;
       })
@@ -1352,22 +1438,31 @@ function openCarBookingsModal(car) {
               .map(
                 (booking) => `
                   <tr>
-                    <td>#${escapeHtml(booking.booking_id || booking.id || "-")}</td>
-                    <td>
-                      <strong>${escapeHtml(booking.customer_name || "Unknown customer")}</strong>
-                      <span class="muted">${escapeHtml(
-                        booking.customer_email || "No email"
-                      )}</span>
-                    </td>
-                    <td>
-                      <strong>${formatDate(booking.start_date)}</strong>
-                      <span class="muted">${formatDate(booking.end_date)}</span>
-                    </td>
-                    <td>${formatCurrency(booking.amount)}</td>
-                    <td>${renderStatusBadge(
-                      booking.status || "pending",
-                      badgeToneForStatus(normalizeBookingStatus(booking.status))
-                    )}</td>
+                    ${tableCell("Booking", `#${escapeHtml(booking.booking_id || booking.id || "-")}`)}
+                    ${tableCell(
+                      "Customer",
+                      `
+                        <strong>${escapeHtml(booking.customer_name || "Unknown customer")}</strong>
+                        <span class="muted">${escapeHtml(
+                          booking.customer_email || "No email"
+                        )}</span>
+                      `
+                    )}
+                    ${tableCell(
+                      "Dates",
+                      `
+                        <strong>${formatDate(booking.start_date)}</strong>
+                        <span class="muted">${formatDate(booking.end_date)}</span>
+                      `
+                    )}
+                    ${tableCell("Amount", formatCurrency(booking.amount))}
+                    ${tableCell(
+                      "Status",
+                      renderStatusBadge(
+                        booking.status || "pending",
+                        badgeToneForStatus(normalizeBookingStatus(booking.status))
+                      )
+                    )}
                   </tr>
                 `
               )
@@ -1408,6 +1503,10 @@ function showModal(title, bodyHtml) {
 
 function closeModal() {
   dom.modalRoot.innerHTML = "";
+}
+
+function tableCell(label, content) {
+  return `<td data-label="${escapeAttribute(label)}">${content}</td>`;
 }
 
 function setActiveNav(targetId, options = {}) {

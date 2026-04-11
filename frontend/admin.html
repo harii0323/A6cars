@@ -56,70 +56,84 @@
   </section>
 
   <div class="app-shell hidden" id="dashboardView">
-    <aside class="sidebar">
-      <div class="brand-block">
-        <div class="brand-mark">A6</div>
-        <div>
-          <p class="eyebrow">Fleet Control</p>
-          <h1>A6 Cars Admin</h1>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-block">
+          <div class="brand-mark"><img class="brand-logo" src="/assets/a6cars-logo.png" alt="A6 Cars logo" /></div>
+          <div>
+            <p class="eyebrow">Fleet Control</p>
+            <h1>A6 Cars Admin</h1>
+          </div>
         </div>
-      </div>
-
-      <div class="sidebar-panel">
-        <p class="panel-label">Navigate</p>
-        <nav class="nav-list">
-          <button class="nav-button active" type="button" data-target="overviewSection">
-            <i class="fas fa-chart-line"></i>
-            <span>Overview</span>
-          </button>
-          <button class="nav-button" type="button" data-target="transactionsSection">
-            <i class="fas fa-credit-card"></i>
-            <span>Transactions</span>
-          </button>
-          <button class="nav-button" type="button" data-target="fleetSection">
-            <i class="fas fa-car-side"></i>
-            <span>Fleet</span>
-          </button>
-          <button class="nav-button" type="button" data-target="scheduleSection">
-            <i class="fas fa-calendar-days"></i>
-            <span>Schedule</span>
-          </button>
-          <button class="nav-button" type="button" data-target="paymentsSection">
-            <i class="fas fa-qrcode"></i>
-            <span>Payments</span>
-          </button>
-          <button class="nav-button" type="button" data-target="refundsSection">
-            <i class="fas fa-rotate-left"></i>
-            <span>Refunds</span>
-          </button>
-        </nav>
-      </div>
-
-      <div class="sidebar-panel mini-metrics">
-        <p class="panel-label">Live Snapshot</p>
-        <div class="mini-metric">
-          <span>Cars</span>
-          <strong id="miniCars">--</strong>
-        </div>
-        <div class="mini-metric">
-          <span>Bookings</span>
-          <strong id="miniBookings">--</strong>
-        </div>
-        <div class="mini-metric">
-          <span>Pending refunds</span>
-          <strong id="miniRefunds">--</strong>
-        </div>
-      </div>
-
-      <div class="sidebar-footer">
-        <div class="sync-chip sync-idle" id="syncChip">
-          <span class="sync-dot"></span>
-          <span id="syncText">Waiting for first sync</span>
-        </div>
-        <button class="button button-secondary button-full" id="sidebarLogoutBtn" type="button">
-          <i class="fas fa-right-from-bracket"></i>
-          <span>Logout</span>
+        <button
+          class="button button-secondary sidebar-toggle"
+          id="sidebarToggleBtn"
+          type="button"
+          aria-expanded="false"
+          aria-controls="sidebarContent"
+        >
+          <i class="fas fa-bars"></i>
+          <span>Menu</span>
         </button>
+      </div>
+
+      <div class="sidebar-content" id="sidebarContent">
+        <div class="sidebar-panel">
+          <p class="panel-label">Navigate</p>
+          <nav class="nav-list">
+            <button class="nav-button active" type="button" data-target="overviewSection">
+              <i class="fas fa-chart-line"></i>
+              <span>Overview</span>
+            </button>
+            <button class="nav-button" type="button" data-target="transactionsSection">
+              <i class="fas fa-credit-card"></i>
+              <span>Transactions</span>
+            </button>
+            <button class="nav-button" type="button" data-target="fleetSection">
+              <i class="fas fa-car-side"></i>
+              <span>Fleet</span>
+            </button>
+            <button class="nav-button" type="button" data-target="scheduleSection">
+              <i class="fas fa-calendar-days"></i>
+              <span>Schedule</span>
+            </button>
+            <button class="nav-button" type="button" data-target="paymentsSection">
+              <i class="fas fa-qrcode"></i>
+              <span>Payments</span>
+            </button>
+            <button class="nav-button" type="button" data-target="refundsSection">
+              <i class="fas fa-rotate-left"></i>
+              <span>Refunds</span>
+            </button>
+          </nav>
+        </div>
+
+        <div class="sidebar-panel mini-metrics">
+          <p class="panel-label">Live Snapshot</p>
+          <div class="mini-metric">
+            <span>Cars</span>
+            <strong id="miniCars">--</strong>
+          </div>
+          <div class="mini-metric">
+            <span>Bookings</span>
+            <strong id="miniBookings">--</strong>
+          </div>
+          <div class="mini-metric">
+            <span>Pending refunds</span>
+            <strong id="miniRefunds">--</strong>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="sync-chip sync-idle" id="syncChip">
+            <span class="sync-dot"></span>
+            <span id="syncText">Waiting for first sync</span>
+          </div>
+         <button class="button button-secondary button-full" id="sidebarLogoutBtn" type="button">
+            <i class="fas fa-right-from-bracket"></i>
+            <span>Logout</span>
+          </button>
+        </div>
       </div>
     </aside>
 
@@ -135,9 +149,9 @@
             <i class="fas fa-rotate"></i>
             <span>Refresh</span>
           </button>
-          <button class="button button-primary" id="topLogoutBtn" type="button">
+          <!--<button class="button button-primary" id="topLogoutBtn" type="button">
             <i class="fas fa-right-from-bracket"></i>
-            <span>Logout</span>
+            <span>Logout</span>-->
           </button>
         </div>
       </header>
