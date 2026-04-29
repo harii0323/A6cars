@@ -33,6 +33,7 @@ const pageState = {
 
 const dom = {};
 let siteNavMediaQuery = null;
+let voiceAssistantEventsBound = false;
 
 document.addEventListener("DOMContentLoaded", () => {
   cacheCommonDom();
@@ -718,6 +719,7 @@ async function initBookPage() {
   });
 
   await loadBookPageData();
+  restoreStoredVoiceBookingIntent();
 }
 
 async function loadBookPageData() {
@@ -1903,6 +1905,16 @@ function buildBookingSummary(booking) {
     return "Pickup has already been verified on the admin side. Keep the return QR ready when you hand the car back.";
   }
 
+  const pickupDate = parseDate(booking.start_date);
+  if (
+    !booking.collection_verified &&
+    pickupDate &&
+    pickupDate < startOfToday() &&
+    !booking.collection_qr
+  ) {
+    return "The collection QR has expired because pickup was not completed on the scheduled collection date.";
+  }
+
   if (isActiveBooking(booking)) {
     return "Payment is confirmed and the reservation is active. Your QR passes are available directly from this booking card.";
   }
@@ -2246,9 +2258,283 @@ function initializeVoiceAssistantIfAvailable() {
     const assistant = window.initializeVoiceAssistant();
     if (assistant) {
       window.createVoiceUI("body");
+      bindVoiceAssistantEvents();
     }
   } catch (error) {
     console.warn("Voice assistant could not be initialized:", error);
+  }
+}
+
+function bindVoiceAssistantEvents() {
+  if (voiceAssistantEventsBound) {
+    return;
+  }
+
+  document.addEventListener("voiceAiAssistRequest", handleVoiceAiAssistRequest);
+  document.addEventListener("voiceAiIntent", handleVoiceAiIntent);
+  voiceAssistantEventsBound = true;
+}
+
+async function handleVoiceAiAssistRequest(event) {
+  event.preventDefault();
+
+  const transcript = String(event.detail?.transcript || "").trim();
+  if (!transcript) {
+    return;
+  }
+
+  if (typeof window.handleVoiceIntent !== "function") {
+    showToast("AI assist is not available in this build.", "warning");
+    speakVoiceAssistantMessage("AI assist is not available right now.");
+    return;
+  }
+
+  try {
+    await window.handleVoiceIntent(transcript);
+  } catch (error) {
+    const message = error?.message || "AI assist is unavailable right now.";
+    console.warn("AI assist request failed:", error);
+
+    if (/not configured/i.test(message)) {
+      showToast("AI assist is not configured on the backend yet. Add OPENAI_API_KEY and restart the backend.", "warning");
+      speakVoiceAssistantMessage("AI assist is not configured on the backend yet.");
+      return;
+    }
+
+    showToast(message, "warning");
+    speakVoiceAssistantMessage("I could not process that request right now. Please try again.");
+  }
+}
+
+function handleVoiceAiIntent(event) {
+  const intent = event.detail?.intent;
+  if (!intent || typeof intent !== "object") {
+    return;
+  }
+
+  applyVoiceIntent(intent);
+}
+
+function applyVoiceIntent(intent) {
+  const type = String(intent.intent || "").trim().toLowerCase();
+
+  if (type === "book") {
+    applyVoiceBookingIntent(intent);
+    return;
+  }
+
+  if (type === "history") {
+    if (getPageName() === "history") {
+      showToast("Your booking center is already open.", "success");
+      speakVoiceAssistantMessage("Your booking center is already open.");
+      return;
+    }
+
+    window.location.href = "/history.html";
+    return;
+  }
+
+  if (type === "cancel") {
+    if (getPageName() !== "history") {
+      window.location.href = "/history.html";
+      return;
+    }
+
+    showToast("Open the booking card you want and use the Cancel booking button there.", "warning");
+    speakVoiceAssistantMessage("Open the booking card you want and use the cancel booking button.");
+    return;
+  }
+
+  if (type === "help") {
+    const helpMessage =
+      getPageName() === "book"
+        ? "You can ask me to book a car, open booking history, or filter by car and location."
+        : "You can ask me to open bookings, start a new booking, or help with the next step.";
+    showToast(helpMessage, "success");
+    speakVoiceAssistantMessage(helpMessage);
+  }
+}
+
+function restoreStoredVoiceBookingIntent() {
+  const raw = sessionStorage.getItem("voiceBooking");
+  if (!raw) {
+    return;
+  }
+
+  let intent = null;
+  try {
+    intent = JSON.parse(raw);
+  } catch (error) {
+    console.warn("Stored voice booking intent is invalid:", error);
+  }
+
+  sessionStorage.removeItem("voiceBooking");
+
+  if (intent) {
+    applyVoiceBookingIntent(intent);
+  }
+}
+
+function applyVoiceBookingIntent(intent) {
+  if (getPageName() !== "book") {
+    sessionStorage.setItem("voiceBooking", JSON.stringify(intent));
+    window.location.href = "/book.html";
+    return;
+  }
+
+  if (!dom.carGrid || !pageState.cars.length) {
+    sessionStorage.setItem("voiceBooking", JSON.stringify(intent));
+    return;
+  }
+
+  const requestedCar = String(intent.car || "").trim();
+  const requestedLocation = String(intent.location || "").trim();
+
+  if (dom.carSearchInput && requestedCar) {
+    dom.carSearchInput.value = requestedCar;
+    pageState.filters.carSearch = requestedCar.toLowerCase();
+  }
+
+  if (dom.carLocationSelect && requestedLocation) {
+    const locationOption = Array.from(dom.carLocationSelect.options || []).find(
+      (option) =>
+        option.value !== "all" &&
+        option.value.trim().toLowerCase() === requestedLocation.toLowerCase()
+    );
+
+    if (locationOption) {
+      dom.carLocationSelect.value = locationOption.value;
+      pageState.filters.carLocation = locationOption.value;
+    }
+  }
+
+  renderCarGrid();
+
+  const targetCar = findVoiceBookingCar(intent);
+  if (!targetCar) {
+    const noMatchMessage = requestedCar
+      ? `I could not find ${requestedCar} in the current fleet.`
+      : "I could not find a car that matches that request.";
+    showToast(noMatchMessage, "warning");
+    speakVoiceAssistantMessage(noMatchMessage);
+    return;
+  }
+
+  const form = dom.carGrid.querySelector(`[data-car-form="${Number(targetCar.id)}"]`);
+  if (!form) {
+    return;
+  }
+
+  const appliedDates = applyVoiceDatesToBookingForm(form, intent);
+  form.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  const carName = `${targetCar.brand || "A6"} ${targetCar.model || "Vehicle"}`.trim();
+  const confirmationMessage = appliedDates.applied
+    ? `I found ${carName} and filled the booking dates for you.`
+    : `I found ${carName}. Select or review the dates, then continue with payment.`;
+
+  showToast(confirmationMessage, "success");
+  speakVoiceAssistantMessage(confirmationMessage);
+}
+
+function findVoiceBookingCar(intent) {
+  const requestedCar = String(intent.car || "").trim().toLowerCase();
+  const requestedLocation = String(intent.location || "").trim().toLowerCase();
+
+  const candidates = pageState.cars.filter((car) => {
+    const searchable = `${car.brand || ""} ${car.model || ""}`.trim().toLowerCase();
+    const location = String(car.location || "").trim().toLowerCase();
+    const matchesCurrentSearch =
+      !pageState.filters.carSearch ||
+      `${searchable} ${location}`.includes(pageState.filters.carSearch);
+    const matchesCurrentLocation =
+      pageState.filters.carLocation === "all" ||
+      String(car.location || "").trim() === pageState.filters.carLocation;
+    const matchesRequestedCar = !requestedCar || searchable.includes(requestedCar);
+    const matchesRequestedLocation =
+      !requestedLocation || location.includes(requestedLocation);
+
+    return (
+      matchesCurrentSearch &&
+      matchesCurrentLocation &&
+      matchesRequestedCar &&
+      matchesRequestedLocation
+    );
+  });
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  return candidates[0];
+}
+
+function applyVoiceDatesToBookingForm(form, intent) {
+  const startInput = form.querySelector("[data-start-date]");
+  const endInput = form.querySelector("[data-end-date]");
+  if (!startInput || !endInput) {
+    return { applied: false };
+  }
+
+  const startDate = normalizeVoiceDateInput(intent.start_date);
+  const endDate =
+    normalizeVoiceDateInput(intent.end_date) ||
+    deriveVoiceEndDate(startDate, intent.days);
+
+  if (startDate) {
+    startInput.value = startDate;
+    syncBookingFormDates(form, { changedField: "start", notify: false });
+  }
+
+  if (endDate) {
+    endInput.value = endDate;
+    syncBookingFormDates(form, { changedField: "end", notify: false });
+  }
+
+  return {
+    applied: Boolean(startInput.value && endInput.value),
+    start: startInput.value || "",
+    end: endInput.value || "",
+  };
+}
+
+function normalizeVoiceDateInput(value) {
+  if (!value) {
+    return "";
+  }
+
+  const date = parseDate(value);
+  return date ? formatDateInput(date) : "";
+}
+
+function deriveVoiceEndDate(startDate, days) {
+  const tripDays = Number(days);
+  if (!startDate || !Number.isFinite(tripDays) || tripDays < 1) {
+    return "";
+  }
+
+  const date = parseDate(startDate);
+  if (!date) {
+    return "";
+  }
+
+  const endDate = new Date(date);
+  endDate.setDate(endDate.getDate() + Math.max(0, tripDays - 1));
+  return formatDateInput(endDate);
+}
+
+function speakVoiceAssistantMessage(message) {
+  if (!message) {
+    return;
+  }
+
+  if (window.voiceAssistant && typeof window.voiceAssistant.speak === "function") {
+    window.voiceAssistant.speak(message);
+    return;
+  }
+
+  if (typeof window.speak === "function") {
+    window.speak(message, "en");
   }
 }
 

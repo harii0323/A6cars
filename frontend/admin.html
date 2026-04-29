@@ -101,6 +101,10 @@
               <i class="fas fa-qrcode"></i>
               <span>Payments</span>
             </button>
+            <button class="nav-button" type="button" data-target="handoffsSection">
+              <i class="fas fa-clipboard-check"></i>
+              <span>Handoffs</span>
+            </button>
             <button class="nav-button" type="button" data-target="refundsSection">
               <i class="fas fa-rotate-left"></i>
               <span>Refunds</span>
@@ -368,27 +372,12 @@
           <div class="panel-head">
             <div>
               <p class="panel-label">Payment Verification</p>
-              <h3>Scan or verify a manual payment</h3>
+              <h3>Verify a manual payment</h3>
             </div>
-            <span class="panel-tag">Camera optional</span>
+            <span class="panel-tag">Reference required</span>
           </div>
 
           <div class="verification-grid">
-            <div class="scanner-card">
-              <video id="scannerVideo" playsinline muted></video>
-              <div class="scanner-status" id="scannerStatus">Scanner idle.</div>
-              <div class="button-row">
-                <button class="button button-secondary" id="startScannerBtn" type="button">
-                  <i class="fas fa-camera"></i>
-                  <span>Start scanner</span>
-                </button>
-                <button class="button button-secondary" id="stopScannerBtn" type="button">
-                  <i class="fas fa-stop"></i>
-                  <span>Stop</span>
-                </button>
-              </div>
-            </div>
-
             <form class="manual-verify" id="manualVerifyForm">
               <label class="field-block">
                 <span>Booking ID</span>
@@ -404,6 +393,58 @@
               </button>
               <div class="result-box" id="paymentVerificationResult">Verification results will appear here.</div>
             </form>
+          </div>
+        </article>
+      </section>
+
+      <section class="module-view hidden" id="handoffsSection" data-module-view>
+        <article class="panel">
+          <div class="panel-head split-mobile">
+            <div>
+              <p class="panel-label">Collection & Return</p>
+              <h3>Verify collection and return handoffs</h3>
+            </div>
+            <div class="button-row">
+              <button class="button button-secondary" id="processMissedPickupsBtn" type="button">
+                <i class="fas fa-calendar-xmark"></i>
+                <span>Process missed pickups</span>
+              </button>
+              <button class="button button-primary" id="processOverdueReturnsBtn" type="button">
+                <i class="fas fa-triangle-exclamation"></i>
+                <span>Process overdue returns</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="refund-summary" id="handoffSummary">
+            <div class="empty-state compact">Loading handoff summary...</div>
+          </div>
+
+          <div class="handoff-tools">
+            <div class="handoff-scanner">
+              <video id="handoffScannerVideo" playsinline muted></video>
+              <div class="scanner-status" id="handoffScannerStatus">
+                Scanner idle. Start the camera and point it at a collection or return QR code.
+              </div>
+              <div class="button-row">
+                <button class="button button-secondary" id="startHandoffScannerBtn" type="button">
+                  <i class="fas fa-camera"></i>
+                  <span>Start scanner</span>
+                </button>
+                <button class="button button-secondary" id="stopHandoffScannerBtn" type="button">
+                  <i class="fas fa-stop"></i>
+                  <span>Stop scanner</span>
+                </button>
+              </div>
+            </div>
+
+            <div class="result-box" id="handoffResult">
+              Verify collection and return status here. Missed pickup processing cancels not-collected bookings after the pickup date, and overdue return processing cancels the next affected booking for the same car.
+            </div>
+          </div>
+
+          <div class="handoff-grid" id="handoffGrid">
+            <div class="empty-state">Loading handoff queue...</div>
           </div>
         </article>
       </section>

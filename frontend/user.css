@@ -468,7 +468,7 @@ img {
 }
 
 .stat-card span {
-  color: var(--ink-soft);
+  color:rgb(0, 0, 0);
   font-size: 0.94rem;
 }
 
@@ -478,7 +478,7 @@ img {
 }
 
 .stat-card small {
-  color: var(--ink-muted);
+  color: rgb(from color r g b);
 }
 
 .stat-card.accent-sun {
@@ -1224,7 +1224,7 @@ img {
 
 .footer-copy,
 .site-footer {
-  color: rgba(255, 248, 239, 0.82);
+  color: rgba(45, 33, 16, 82%);
 }
 
 .site-footer {

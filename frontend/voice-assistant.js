@@ -11,15 +11,6 @@ class VoiceAssistant {
     this.recognition = new SpeechRecognition();
     this.synth = window.speechSynthesis;
 
-    // Configuration
-    // Auto-detect language from browser if not provided
-    this.language = options.language || this.detectBrowserLanguage() || 'en-IN';
-    this.detectedLanguage = this.language; // Store detected language
-    this.isListening = false;
-    this.isSpeaking = false;
-    this.transcript = '';
-    this.confidence = 0;
-
     // Language mapping
     this.languageMap = {
       'en': 'en-IN',     // English
@@ -33,6 +24,28 @@ class VoiceAssistant {
       'bn': 'bn-IN',     // Bengali
       'pa': 'pa-IN',     // Punjabi
     };
+
+    this.languageLabels = {
+      'en-IN': 'English',
+      'hi-IN': 'Hindi',
+      'ta-IN': 'Tamil',
+      'te-IN': 'Telugu',
+      'kn-IN': 'Kannada',
+      'ml-IN': 'Malayalam',
+      'mr-IN': 'Marathi',
+      'gu-IN': 'Gujarati',
+      'bn-IN': 'Bengali',
+      'pa-IN': 'Punjabi',
+    };
+
+    // Configuration
+    this.autoDetectLanguage = options.autoDetectLanguage !== false;
+    this.language = options.language || this.detectBrowserLanguage() || 'en-IN';
+    this.detectedLanguage = this.language;
+    this.isListening = false;
+    this.isSpeaking = false;
+    this.transcript = '';
+    this.confidence = 0;
 
     // Voice commands and responses
     this.commands = {
@@ -74,30 +87,108 @@ class VoiceAssistant {
    * Auto-detect browser language and return matching voice language
    */
   detectBrowserLanguage() {
-    // Get browser language
-    const browserLang = navigator.language || navigator.userLanguage || 'en';
-    
-    // Extract language code (e.g., 'hi' from 'hi-IN')
-    const langCode = browserLang.split('-')[0].toLowerCase();
-    
-    console.log(`🌐 Detected browser language: ${browserLang} (code: ${langCode})`);
-    
-    // Check if we support this language
-    if (this.languageMap && this.languageMap[langCode]) {
-      const detectedLang = this.languageMap[langCode];
-      console.log(`✅ Auto-detected language: ${detectedLang}`);
-      return detectedLang;
+    const browserLanguages = Array.isArray(navigator.languages) && navigator.languages.length
+      ? navigator.languages
+      : [navigator.language || navigator.userLanguage || 'en'];
+
+    for (const browserLang of browserLanguages) {
+      const langCode = String(browserLang || 'en').split('-')[0].toLowerCase();
+      console.log(`🌐 Detected browser language: ${browserLang} (code: ${langCode})`);
+
+      if (this.languageMap[langCode]) {
+        const detectedLang = this.languageMap[langCode];
+        console.log(`✅ Auto-detected language: ${detectedLang}`);
+        return detectedLang;
+      }
     }
-    
-    // Fallback to English if language not supported
-    console.log(`⚠️ Language '${langCode}' not supported. Using English.`);
+
+    console.log(`⚠️ Browser language not supported. Using English.`);
     return 'en-IN';
+  }
+
+  detectTranscriptLanguage(text) {
+    const value = String(text || '').trim();
+    if (!value) {
+      return null;
+    }
+
+    const scriptMatchers = [
+      { locale: 'te-IN', pattern: /[\u0C00-\u0C7F]/ },
+      { locale: 'ta-IN', pattern: /[\u0B80-\u0BFF]/ },
+      { locale: 'hi-IN', pattern: /[\u0900-\u097F]/ },
+      { locale: 'kn-IN', pattern: /[\u0C80-\u0CFF]/ },
+      { locale: 'ml-IN', pattern: /[\u0D00-\u0D7F]/ },
+      { locale: 'gu-IN', pattern: /[\u0A80-\u0AFF]/ },
+      { locale: 'bn-IN', pattern: /[\u0980-\u09FF]/ },
+      { locale: 'pa-IN', pattern: /[\u0A00-\u0A7F]/ },
+    ];
+
+    for (const matcher of scriptMatchers) {
+      if (matcher.pattern.test(value)) {
+        return matcher.locale;
+      }
+    }
+
+    const keywordMatchers = [
+      {
+        locale: 'hi-IN',
+        pattern: /\b(gaadi|gadi|madad|tarikh|बुक|गाड़ी|मदद|तारीख)\b/i,
+      },
+      {
+        locale: 'te-IN',
+        pattern: /\b(kaaru|cheyyandi|pampandi|పికప్|కారు|బుక్|తేదీ)\b/i,
+      },
+      {
+        locale: 'ta-IN',
+        pattern: /\b(munpathivu|thethi|uruthipadu|உறுதி|கார்|முன்பதிவு|தேதி)\b/i,
+      },
+    ];
+
+    for (const matcher of keywordMatchers) {
+      if (matcher.pattern.test(value)) {
+        return matcher.locale;
+      }
+    }
+
+    return null;
+  }
+
+  applyAutoDetectedLanguage(locale, source = 'auto-detected') {
+    if (!locale || locale === this.language) {
+      return false;
+    }
+
+    this.language = locale;
+    this.detectedLanguage = locale;
+    this.recognition.lang = locale;
+    this.updateLanguageUI(locale, source);
+    console.log(`🌐 ${source}: ${locale}`);
+    return true;
+  }
+
+  updateLanguageUI(locale = this.language, source = 'auto-detected') {
+    const langCode = String(locale || 'en-IN').split('-')[0];
+    const langBtns = document.querySelectorAll('.voice-lang-btn');
+    const langBadge = document.getElementById('voice-lang-badge');
+
+    if (langBtns.length) {
+      langBtns.forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.lang === langCode);
+      });
+    }
+
+    if (langBadge) {
+      const label = this.languageLabels[locale] || locale;
+      langBadge.textContent = `🌐 ${source}: ${label}`;
+      langBadge.classList.remove('hidden');
+    }
   }
 
   /**
    * Setup Speech Recognition configuration
    */
   setupRecognition() {
+    this.recognition.lang = this.language;
     this.recognition.continuous = false;
     this.recognition.interimResults = true;
     this.recognition.maxAlternatives = 1;
@@ -127,6 +218,13 @@ class VoiceAssistant {
       this.updateUI('interim', this.transcript);
 
       if (finalTranscript) {
+        if (this.autoDetectLanguage) {
+          const transcriptLanguage = this.detectTranscriptLanguage(finalTranscript);
+          if (transcriptLanguage) {
+            this.applyAutoDetectedLanguage(transcriptLanguage, 'Detected');
+          }
+        }
+
         this.processCommand(this.transcript);
         this.updateUI('final', this.transcript);
       }
@@ -147,8 +245,10 @@ class VoiceAssistant {
    * Set language for voice assistant
    */
   setLanguage(langCode) {
-    this.language = this.languageMap[langCode] || 'en-IN';
-    this.recognition.language = this.language;
+    this.language = this.languageMap[langCode] || langCode || 'en-IN';
+    this.detectedLanguage = this.language;
+    this.recognition.lang = this.language;
+    this.updateLanguageUI(this.language, 'Selected');
     console.log(`🌐 Language changed to: ${this.language}`);
   }
 
@@ -193,7 +293,7 @@ class VoiceAssistant {
         // Exact match (highest priority)
         if (text.includes(pattern)) {
           this.handleCommand(commandType, command.response);
-          return;
+          return true;
         }
         
         // Fuzzy match for regional languages (allows for typos and variations)
@@ -208,7 +308,21 @@ class VoiceAssistant {
     // If fuzzy match found (especially useful for regional language speech variations)
     if (bestMatch) {
       this.handleCommand(bestMatch.commandType, bestMatch.response);
-      return;
+      return true;
+    }
+
+    const assistRequest = new CustomEvent("voiceAiAssistRequest", {
+      cancelable: true,
+      detail: {
+        transcript: text,
+        language: this.language,
+        confidence: this.confidence,
+      },
+    });
+
+    const handledByAiAssist = !document.dispatchEvent(assistRequest);
+    if (handledByAiAssist) {
+      return false;
     }
 
     // Default response if no match (language-aware)
@@ -221,6 +335,7 @@ class VoiceAssistant {
     
     const errorMsg = errorResponses[this.language] || errorResponses['en-IN'];
     this.speak(errorMsg);
+    return false;
   }
 
   /**
@@ -317,25 +432,33 @@ class VoiceAssistant {
 
     if (!btn || !indicator) return;
 
-    // Remove all state classes
-    btn.className = btn.className.replace(/voice-\w+/g, '');
+    const stateClasses = [
+      'voice-ready',
+      'voice-listening',
+      'voice-interim',
+      'voice-final',
+      'voice-speaking',
+      'voice-error',
+      'voice-stopped',
+    ];
+    btn.classList.remove(...stateClasses);
 
     const states = {
-      listening: { class: 'voice-listening', text: '🎤 Listening...', color: 'bg-red-500' },
-      interim: { class: 'voice-interim', text: `🎤 Interim: ${text}`, color: 'bg-yellow-500' },
-      final: { class: 'voice-final', text: `📝 Heard: ${text}`, color: 'bg-blue-500' },
-      speaking: { class: 'voice-speaking', text: '🔊 Speaking...', color: 'bg-green-500' },
-      error: { class: 'voice-error', text: text, color: 'bg-red-700' },
-      stopped: { class: 'voice-stopped', text: '🎤 Tap to talk', color: 'bg-gray-500' },
-      ready: { class: 'voice-ready', text: '🎤 Tap to talk', color: 'bg-blue-600' },
+      listening: { class: 'voice-listening', text: '🎤 Listening...' },
+      interim: { class: 'voice-interim', text: `🎤 Interim: ${text}` },
+      final: { class: 'voice-final', text: `📝 Heard: ${text}` },
+      speaking: { class: 'voice-speaking', text: '🔊 Speaking...' },
+      error: { class: 'voice-error', text: text },
+      stopped: { class: 'voice-stopped', text: '🎤 Tap to talk' },
+      ready: { class: 'voice-ready', text: '🎤 Tap to talk' },
     };
 
     const stateConfig = states[state] || states.ready;
     btn.classList.add(stateConfig.class);
-    btn.className = btn.className.replace(/bg-\w+-\d+/g, '') + ` ${stateConfig.color}`;
     
     if (indicator) {
       indicator.textContent = stateConfig.text;
+      indicator.classList.remove('hidden');
     }
     
     if (transcript && text) {
@@ -378,44 +501,47 @@ class VoiceAssistant {
  * Handle voice input using backend AI intent extraction
  */
 async function handleVoiceIntent(text) {
-  const res = await fetch("https://a6cars-backend-ylx7.onrender.com/api/ai-intent", {
+  if (!window.API_CONFIG || typeof window.API_CONFIG.fetch !== "function") {
+    throw new Error("API configuration is not available for AI assist.");
+  }
+
+  const res = await window.API_CONFIG.fetch("/api/ai-intent", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": "Bearer " + (localStorage.getItem("token") || "")
-    },
-    body: JSON.stringify({ command: text })
+    body: JSON.stringify({ command: text }),
   });
-  const intent = await res.json();
+
+  const intent = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(intent.message || "AI intent failed");
+  }
+
   processAIIntent(intent);
+  return intent;
 }
 
 /**
  * Process extracted AI intent and perform booking actions
  */
 function processAIIntent(i) {
-  if (i.intent === "book") {
-    autoFillBooking(i);
-  } else if (i.intent === "history") {
-    window.location.href = "history.html";
-  } else if (i.intent === "cancel") {
-    speak("Mee booking cancel chesthunnanu", "te");
-  }
+  document.dispatchEvent(
+    new CustomEvent("voiceAiIntent", {
+      detail: { intent: i },
+    })
+  );
+
+  return i;
 }
 
 /**
  * Auto-fill booking form based on AI intent
  */
 function autoFillBooking(data) {
-  if (!location.pathname.includes("book.html")) {
-    window.location.href = "book.html";
-    sessionStorage.setItem("voiceBooking", JSON.stringify(data));
-    return;
-  }
-  if (data.car) document.querySelector("#car").value = data.car;
-  if (data.start_date) document.querySelector("#start_date").value = data.start_date;
-  if (data.end_date) document.querySelector("#end_date").value = data.end_date;
-  speak("Mee booking details fill chesanu. Confirm cheyyandi", "te");
+  sessionStorage.setItem("voiceBooking", JSON.stringify(data));
+  document.dispatchEvent(
+    new CustomEvent("voiceBookingDraft", {
+      detail: { intent: data },
+    })
+  );
 }
 
 /**
@@ -424,8 +550,11 @@ function autoFillBooking(data) {
 if (location.pathname.includes("book.html")) {
   const vb = sessionStorage.getItem("voiceBooking");
   if (vb) {
-    autoFillBooking(JSON.parse(vb));
-    sessionStorage.removeItem("voiceBooking");
+    try {
+      processAIIntent(JSON.parse(vb));
+    } catch (error) {
+      console.warn("Stored voice booking intent could not be restored:", error);
+    }
   }
 }
 
@@ -467,47 +596,183 @@ function initializeVoiceAssistant(options = {}) {
  * Create Voice UI Component (Button and Indicator)
  */
 function createVoiceUI(container = 'body') {
+  if (document.getElementById('voice-container')) {
+    return;
+  }
+
   const html = `
     <!-- Voice Assistant UI -->
-    <div id="voice-container" class="fixed bottom-6 right-6 z-40">
+    <div id="voice-container" class="voice-shell">
       <!-- Voice Button -->
       <button 
         id="voice-btn" 
-        class="voice-ready bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg transition-all duration-300 flex items-center justify-center cursor-pointer transform hover:scale-110 active:scale-95"
+        class="voice-button voice-ready"
         aria-label="Voice Command"
         title="Click to use voice commands"
       >
-        <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+        <svg class="voice-icon" fill="currentColor" viewBox="0 0 20 20">
           <path d="M10 2a2 2 0 0 0-2 2v6a2 2 0 1 0 4 0V4a2 2 0 0 0-2-2zM4.5 8a2.5 2.5 0 0 1 5 0v2.5h-5V8zm11 0a2.5 2.5 0 0 0-5 0v2.5h5V8z"/>
           <path d="M10 15a1 1 0 0 0-1 1v1a3 3 0 1 0 6 0v-1a1 1 0 1 0-2 0v1a1 1 0 0 1-2 0v-1a1 1 0 0 0-1-1z"/>
         </svg>
       </button>
 
       <!-- Voice Indicator and Transcript -->
-      <div id="voice-indicator" class="text-center mt-3 text-sm font-semibold text-white bg-blue-600 px-3 py-2 rounded-lg shadow-lg max-w-xs hidden">
+      <div id="voice-indicator" class="voice-indicator hidden">
         🎤 Tap to talk
       </div>
-      <div id="voice-transcript" class="text-center mt-2 text-xs text-gray-700 bg-white px-3 py-2 rounded-lg shadow max-w-xs hidden">
+      <div id="voice-transcript" class="voice-transcript hidden">
       </div>
 
       <!-- Language Selector -->
-      <div id="voice-language-selector" class="mt-3 flex flex-wrap gap-1 justify-end">
-        <button data-lang="en" class="voice-lang-btn text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded active" title="English">EN</button>
-        <button data-lang="hi" class="voice-lang-btn text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded" title="हिंदी">HI</button>
-        <button data-lang="ta" class="voice-lang-btn text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded" title="Tamil">TA</button>
-        <button data-lang="te" class="voice-lang-btn text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded" title="Telugu">TE</button>
+      <div id="voice-language-selector" class="voice-language-selector">
+        <button data-lang="en" class="voice-lang-btn active" title="English">EN</button>
+        <button data-lang="hi" class="voice-lang-btn" title="हिंदी">HI</button>
+        <button data-lang="ta" class="voice-lang-btn" title="Tamil">TA</button>
+        <button data-lang="te" class="voice-lang-btn" title="Telugu">TE</button>
       </div>
       
       <!-- Language Auto-Detect Badge -->
-      <div id="voice-lang-badge" class="text-center mt-2 text-xs text-blue-600 font-semibold hidden">
+      <div id="voice-lang-badge" class="voice-lang-badge hidden">
         🌐 Auto-detected
       </div>
     </div>
 
     <style>
+      .voice-shell {
+        position: fixed;
+        right: 20px;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+        z-index: 90;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 10px;
+        width: auto;
+        max-width: min(86vw, 320px);
+        pointer-events: none;
+      }
+
+      .voice-shell > * {
+        pointer-events: auto;
+      }
+
+      .voice-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 64px;
+        height: 64px;
+        padding: 0;
+        border: 0;
+        border-radius: 999px;
+        background: #2563eb;
+        color: #ffffff;
+        box-shadow: 0 16px 36px rgba(9, 24, 43, 0.28);
+        cursor: pointer;
+        transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+      }
+
+      .voice-button:hover,
+      .voice-button:focus-visible {
+        background: #1d4ed8;
+        transform: translateY(-2px) scale(1.04);
+        box-shadow: 0 20px 42px rgba(9, 24, 43, 0.32);
+      }
+
+      .voice-button:active {
+        transform: scale(0.97);
+      }
+
+      .voice-icon {
+        width: 28px;
+        height: 28px;
+      }
+
+      .voice-indicator,
+      .voice-transcript,
+      .voice-lang-badge {
+        width: fit-content;
+        max-width: 100%;
+        margin-left: auto;
+        padding: 10px 14px;
+        border-radius: 14px;
+        box-shadow: 0 12px 28px rgba(9, 24, 43, 0.18);
+      }
+
+      .voice-indicator {
+        background: rgba(14, 28, 48, 0.88);
+        color: #f8fbff;
+        font-size: 0.92rem;
+        font-weight: 700;
+        text-align: right;
+      }
+
+      .voice-transcript {
+        background: rgba(255, 255, 255, 0.96);
+        color: #213248;
+        font-size: 0.78rem;
+        line-height: 1.45;
+        text-align: right;
+      }
+
+      .voice-language-selector {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 6px;
+      }
+
+      .voice-lang-btn {
+        min-width: 42px;
+        min-height: 34px;
+        padding: 6px 10px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(37, 99, 235, 0.9);
+        color: #ffffff;
+        font-size: 0.74rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform 160ms ease, background 160ms ease;
+      }
+
+      .voice-lang-btn:hover,
+      .voice-lang-btn:focus-visible {
+        background: #1d4ed8;
+        transform: translateY(-1px);
+      }
+
+      .voice-lang-btn.active {
+        background: #15803d;
+      }
+
+      .voice-lang-badge {
+        background: rgba(224, 244, 255, 0.96);
+        color: #0f5e87;
+        font-size: 0.74rem;
+        font-weight: 700;
+        text-align: right;
+      }
+
       .voice-ready { animation: pulse-ready 2s infinite; }
+      .voice-stopped,
+      .voice-final {
+        background: #2563eb;
+      }
       .voice-listening { animation: pulse-listening 0.5s infinite; }
+      .voice-listening {
+        background: #ef4444;
+      }
+      .voice-interim {
+        background: #d97706;
+      }
       .voice-speaking { animation: pulse-speaking 0.4s infinite; }
+      .voice-speaking {
+        background: #22c55e;
+      }
+      .voice-error {
+        background: #991b1b;
+      }
 
       @keyframes pulse-ready {
         0%, 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); }
@@ -524,7 +789,18 @@ function createVoiceUI(container = 'body') {
         50% { box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
       }
 
-      .voice-lang-btn.active { @apply bg-green-500 hover:bg-green-600; }
+      @media (max-width: 640px) {
+        .voice-shell {
+          right: 14px;
+          bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+          max-width: calc(100vw - 28px);
+        }
+
+        .voice-button {
+          width: 58px;
+          height: 58px;
+        }
+      }
     </style>
   `;
 
@@ -550,19 +826,10 @@ function createVoiceUI(container = 'body') {
 
   // Auto-select detected language button
   if (window.voiceAssistant) {
-    const detectedLangCode = window.voiceAssistant.detectedLanguage.split('-')[0];
-    const detectedBtn = document.querySelector(`[data-lang="${detectedLangCode}"]`);
-    if (detectedBtn) {
-      langBtns.forEach(b => b.classList.remove('active'));
-      detectedBtn.classList.add('active');
-      
-      // Show auto-detect badge if not English (default)
-      if (detectedLangCode !== 'en' && langBadge) {
-        langBadge.classList.remove('hidden');
-      }
-      
-      console.log(`🌐 Auto-selected language button: ${detectedLangCode}`);
-    }
+    window.voiceAssistant.updateLanguageUI(
+      window.voiceAssistant.detectedLanguage,
+      'Detected'
+    );
   }
 
   langBtns.forEach(btn => {
@@ -570,13 +837,6 @@ function createVoiceUI(container = 'body') {
       const lang = e.target.dataset.lang;
       if (window.voiceAssistant) {
         window.voiceAssistant.setLanguage(lang);
-        langBtns.forEach(b => b.classList.remove('active'));
-        e.target.classList.add('active');
-        
-        // Hide badge when user manually selects language
-        if (langBadge) {
-          langBadge.classList.add('hidden');
-        }
       }
     });
   });

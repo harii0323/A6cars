@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 window.addEventListener("beforeunload", () => {
-  stopScanner(false);
+  stopHandoffScanner(false);
 });
 
 function cacheDom() {
@@ -82,20 +82,25 @@ function cacheDom() {
     "scheduleCarSelect",
     "loadScheduleBtn",
     "scheduleOutput",
-    "scannerVideo",
-    "scannerStatus",
-    "startScannerBtn",
-    "stopScannerBtn",
     "manualVerifyForm",
     "manualBookingId",
     "manualPaymentReference",
     "paymentVerificationResult",
+    "handoffSummary",
+    "handoffGrid",
+    "handoffResult",
+    "handoffScannerVideo",
+    "handoffScannerStatus",
+    "startHandoffScannerBtn",
+    "stopHandoffScannerBtn",
     "refundSummary",
     "cancellationsTableBody",
     "refundsTableBody",
     "refreshDashboardBtn",
     "topLogoutBtn",
     "sidebarLogoutBtn",
+    "processMissedPickupsBtn",
+    "processOverdueReturnsBtn",
     "processRefundsBtn",
     "exportAllCarsBtn",
     "toastRoot",
@@ -221,9 +226,6 @@ function bindEvents() {
     await cancelBookingFromSchedule(bookingId);
   });
 
-  dom.startScannerBtn?.addEventListener("click", startScanner);
-  dom.stopScannerBtn?.addEventListener("click", () => stopScanner(true));
-
   dom.manualVerifyForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const bookingId = dom.manualBookingId?.value.trim();
@@ -236,6 +238,27 @@ function bindEvents() {
 
     await verifyPayment(bookingId, paymentReference);
   });
+
+  dom.startHandoffScannerBtn?.addEventListener("click", startHandoffScanner);
+  dom.stopHandoffScannerBtn?.addEventListener("click", () => stopHandoffScanner(true));
+
+  dom.handoffGrid?.addEventListener("click", async (event) => {
+    const actionButton = event.target.closest("[data-handoff-action]");
+    if (!actionButton) {
+      return;
+    }
+
+    const bookingId = Number(actionButton.dataset.bookingId);
+    const qrType = String(actionButton.dataset.qrType || "").trim();
+    if (!bookingId || !qrType) {
+      return;
+    }
+
+    await verifyBookingHandoff(bookingId, qrType, actionButton);
+  });
+
+  dom.processOverdueReturnsBtn?.addEventListener("click", processOverdueReturns);
+  dom.processMissedPickupsBtn?.addEventListener("click", processMissedPickups);
 
   dom.processRefundsBtn?.addEventListener("click", async () => {
     const ok = window.confirm("Process every pending refund in the current queue?");
@@ -261,9 +284,25 @@ function bindEvents() {
     }
   });
 
+  document.addEventListener("click", (event) => {
+    if (
+      !isCompactSidebar() ||
+      !state.sidebarExpanded ||
+      !dom.sidebar ||
+      dom.sidebar.contains(event.target)
+    ) {
+      return;
+    }
+
+    setSidebarExpanded(false);
+  });
+
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeModal();
+      if (isCompactSidebar() && state.sidebarExpanded) {
+        setSidebarExpanded(false);
+      }
     }
   });
 }
@@ -307,6 +346,10 @@ function setSidebarExpanded(expanded) {
 
   const collapsed = isCompactSidebar() && !expanded;
   dom.sidebar.classList.toggle("is-collapsed", collapsed);
+  document.body.classList.toggle(
+    "sidebar-menu-open",
+    isCompactSidebar() && expanded
+  );
   dom.sidebarToggleBtn.setAttribute("aria-expanded", String(!collapsed));
   dom.sidebarToggleBtn.innerHTML = collapsed
     ? '<i class="fas fa-bars"></i><span>Menu</span>'
@@ -394,7 +437,7 @@ async function fetchJson(path, options = {}) {
 }
 
 function clearAdminSession() {
-  stopScanner(false);
+  stopHandoffScanner(false);
   sessionStorage.removeItem("adminToken");
   sessionStorage.removeItem("adminLoggedIn");
   closeModal();
@@ -415,7 +458,7 @@ function setAdminSessionState(isLoggedIn) {
     setActiveNav(state.activeModule, { persist: false });
     setSyncStatus("Waiting for first sync", "idle");
     setVerificationResult("Verification results will appear here.", "");
-    dom.scannerStatus && (dom.scannerStatus.textContent = "Scanner idle.");
+    setScannerStatus("Scanner idle. Start the camera and point it at a collection or return QR code.");
     dom.loginForm?.reset();
   }
 }
@@ -561,6 +604,7 @@ function renderDashboard() {
   renderTransactions();
   renderFleet();
   renderScheduleOptions();
+  renderHandoffs();
   renderRefunds(metrics);
 }
 
@@ -595,9 +639,7 @@ function computeMetrics() {
   });
 
   const completedTransactions = state.transactions.filter(isCompletedTransaction);
-  const pendingTransactions = state.transactions.filter(
-    (transaction) => !isCompletedTransaction(transaction)
-  );
+  const pendingTransactions = state.transactions.filter(isPendingTransaction);
   const pendingRefunds = state.refunds.filter(
     (refund) => normalizeSimpleStatus(refund.status) === "pending"
   );
@@ -805,7 +847,7 @@ function renderTransactions() {
         ? true
         : state.transactionFilter === "completed"
         ? status === "completed"
-        : status !== "completed";
+        : status === "pending";
 
     return searchMatches && filterMatches;
   });
@@ -1189,14 +1231,53 @@ function setVerificationResult(message, tone) {
   }
 }
 
-async function startScanner() {
+function setResultBox(element, message, tone = "") {
+  if (!element) {
+    return;
+  }
+
+  element.textContent = message;
+  element.classList.remove("success", "error");
+  if (tone) {
+    element.classList.add(tone);
+  }
+}
+
+function setScannerStatus(message, tone = "") {
+  if (!dom.handoffScannerStatus) {
+    return;
+  }
+
+  dom.handoffScannerStatus.textContent = message;
+  dom.handoffScannerStatus.classList.remove("success", "error");
+  if (tone) {
+    dom.handoffScannerStatus.classList.add(tone);
+  }
+}
+
+async function startHandoffScanner() {
   if (scannerState.active) {
     return;
   }
 
+  if (!dom.handoffScannerVideo) {
+    const message = "Scanner preview is not available in this admin view.";
+    setScannerStatus(message, "error");
+    showToast(message, "error");
+    return;
+  }
+
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    dom.scannerStatus.textContent = "Camera access is not supported in this browser.";
-    showToast("Camera access is not supported in this browser.", "error");
+    const message = "Camera access is not supported in this browser.";
+    setScannerStatus(message, "error");
+    showToast(message, "error");
+    return;
+  }
+
+  if (!window.jsQR) {
+    const message = "QR scanner library is not available right now.";
+    setScannerStatus(message, "error");
+    showToast(message, "error");
     return;
   }
 
@@ -1212,24 +1293,27 @@ async function startScanner() {
     scannerState.context = scannerState.canvas.getContext("2d", {
       willReadFrequently: true,
     });
+    if (!scannerState.context) {
+      throw new Error("The scanner could not access the camera frame.");
+    }
 
-    dom.scannerVideo.srcObject = stream;
-    await dom.scannerVideo.play();
-    dom.scannerStatus.textContent = "Scanner active. Hold the QR code steady in front of the camera.";
+    dom.handoffScannerVideo.srcObject = stream;
+    await dom.handoffScannerVideo.play();
+    setScannerStatus("Scanner active. Hold a collection or return QR code steady in front of the camera.");
 
     scannerState.timer = window.setInterval(() => {
-      if (!scannerState.active || !window.jsQR) {
+      if (!scannerState.active || !dom.handoffScannerVideo || !window.jsQR) {
         return;
       }
 
-      if (dom.scannerVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      if (dom.handoffScannerVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
         return;
       }
 
-      scannerState.canvas.width = dom.scannerVideo.videoWidth;
-      scannerState.canvas.height = dom.scannerVideo.videoHeight;
+      scannerState.canvas.width = dom.handoffScannerVideo.videoWidth;
+      scannerState.canvas.height = dom.handoffScannerVideo.videoHeight;
       scannerState.context.drawImage(
-        dom.scannerVideo,
+        dom.handoffScannerVideo,
         0,
         0,
         scannerState.canvas.width,
@@ -1243,24 +1327,19 @@ async function startScanner() {
         scannerState.canvas.height
       );
 
-      const code = window.jsQR(
-        imageData.data,
-        imageData.width,
-        imageData.height
-      );
-
-      if (code && code.data) {
-        handleQrData(code.data);
+      const code = window.jsQR(imageData.data, imageData.width, imageData.height);
+      if (code?.data) {
+        handleScannedHandoffQr(code.data);
       }
     }, 180);
   } catch (error) {
-    dom.scannerStatus.textContent = `Unable to start scanner: ${error.message}`;
+    setScannerStatus(`Unable to start scanner: ${error.message}`, "error");
     showToast(error.message, "error");
-    stopScanner(false);
+    stopHandoffScanner(false);
   }
 }
 
-function stopScanner(updateStatus = true) {
+function stopHandoffScanner(updateStatus = true) {
   if (scannerState.timer) {
     window.clearInterval(scannerState.timer);
     scannerState.timer = null;
@@ -1272,54 +1351,343 @@ function stopScanner(updateStatus = true) {
   }
 
   scannerState.active = false;
+  scannerState.canvas = null;
+  scannerState.context = null;
 
-  if (dom.scannerVideo) {
-    dom.scannerVideo.pause();
-    dom.scannerVideo.srcObject = null;
+  if (dom.handoffScannerVideo) {
+    dom.handoffScannerVideo.pause();
+    dom.handoffScannerVideo.srcObject = null;
   }
 
-  if (updateStatus && dom.scannerStatus) {
-    dom.scannerStatus.textContent = "Scanner stopped.";
+  if (updateStatus) {
+    setScannerStatus("Scanner stopped.");
   }
 }
 
-async function handleQrData(rawValue) {
-  stopScanner(false);
-  dom.scannerStatus.textContent = "QR captured. Parsing booking details...";
+async function handleScannedHandoffQr(rawValue) {
+  stopHandoffScanner(false);
+  setScannerStatus("QR captured. Verifying handoff...");
 
-  const parsed = parseQrPayload(rawValue);
-  if (!parsed) {
-    dom.scannerStatus.textContent =
-      "The scanned QR payload could not be matched to a booking and payment reference.";
-    showToast("Invalid QR payload for payment verification.", "error");
+  let parsed;
+  try {
+    parsed = JSON.parse(rawValue);
+  } catch (error) {
+    const message = "The scanned QR code is not a valid A6 Cars handoff QR.";
+    setScannerStatus(message, "error");
+    setResultBox(dom.handoffResult, message, "error");
+    showToast(message, "error");
     return;
   }
 
-  dom.manualBookingId.value = parsed.booking_id;
-  dom.manualPaymentReference.value = parsed.payment_reference_id;
-  dom.scannerStatus.textContent = "QR data extracted. Verifying payment now.";
-  await verifyPayment(parsed.booking_id, parsed.payment_reference_id);
+  if (!parsed?.booking_id || !parsed?.qr_type) {
+    const message = "The scanned QR is missing booking or handoff details.";
+    setScannerStatus(message, "error");
+    setResultBox(dom.handoffResult, message, "error");
+    showToast(message, "error");
+    return;
+  }
+
+  parsed.qr_type = String(parsed.qr_type).trim().toLowerCase();
+  if (parsed.qr_type !== "collection" && parsed.qr_type !== "return") {
+    const message = "This QR code is not a collection or return handoff QR.";
+    setScannerStatus(message, "error");
+    setResultBox(dom.handoffResult, message, "error");
+    showToast(message, "error");
+    return;
+  }
+
+  try {
+    const result = await fetchJson("/api/admin/verify-qr", {
+      method: "POST",
+      body: JSON.stringify({ qr_data: parsed }),
+    });
+
+    await refreshDashboard();
+    const message =
+      result.message ||
+      `${startCase(parsed.qr_type)} verification completed for booking #${parsed.booking_id}.`;
+    setScannerStatus(message, "success");
+    setResultBox(dom.handoffResult, message, "success");
+    showToast(message, "success");
+  } catch (error) {
+    setScannerStatus(error.message, "error");
+    setResultBox(dom.handoffResult, error.message, "error");
+    showToast(error.message, "error");
+  }
 }
 
-function parseQrPayload(rawValue) {
-  try {
-    const parsed = typeof rawValue === "string" ? JSON.parse(rawValue) : rawValue;
-    const bookingId = Number(parsed.booking_id || parsed.id);
-    const paymentReference = String(
-      parsed.payment_reference_id || parsed.reference || parsed.ref || ""
-    ).trim();
+function renderHandoffs() {
+  const missedPickups = state.bookings.filter(isMissedPickupBooking);
+  const paidBookings = state.bookings.filter(
+    (booking) => booking.paid && normalizeBookingStatus(booking.status) !== "cancelled"
+  );
+  const collectionPending = paidBookings.filter((booking) => !booking.collection_verified);
+  const returnPending = paidBookings.filter(
+    (booking) => booking.collection_verified && !booking.return_verified
+  );
+  const overdueReturns = returnPending.filter(isOverdueReturnBooking);
+  const queue = paidBookings
+    .filter((booking) => !booking.return_verified)
+    .sort(compareBookingsByDate);
 
-    if (!bookingId || !paymentReference) {
-      return null;
-    }
-
-    return {
-      booking_id: bookingId,
-      payment_reference_id: paymentReference,
-    };
-  } catch (error) {
-    return null;
+  if (dom.handoffSummary) {
+    dom.handoffSummary.innerHTML = `
+      <div class="summary-card">
+        <span>Needs collection</span>
+        <strong>${collectionPending.length}</strong>
+      </div>
+      <div class="summary-card">
+        <span>Needs return</span>
+        <strong>${returnPending.length}</strong>
+      </div>
+      <div class="summary-card">
+        <span>Overdue returns</span>
+        <strong>${overdueReturns.length}</strong>
+      </div>
+      <div class="summary-card">
+        <span>Missed pickups</span>
+        <strong>${missedPickups.length}</strong>
+      </div>
+    `;
   }
+
+  if (!dom.handoffGrid) {
+    return;
+  }
+
+  if (!queue.length) {
+    dom.handoffGrid.innerHTML = `<div class="empty-state">No paid collection or return handoffs need attention right now.</div>`;
+    return;
+  }
+
+  dom.handoffGrid.innerHTML = queue.map(buildHandoffCardMarkup).join("");
+}
+
+function buildHandoffCardMarkup(booking) {
+  const overdue = isOverdueReturnBooking(booking);
+  const actions = [];
+  if (!booking.collection_verified && booking.has_collection_qr) {
+    actions.push(`
+      <button class="button button-primary" type="button" data-handoff-action="verify" data-booking-id="${booking.booking_id}" data-qr-type="collection">
+        <i class="fas fa-car-side"></i>
+        <span>Verify collection</span>
+      </button>
+    `);
+  }
+  if (booking.collection_verified && !booking.return_verified && booking.has_return_qr) {
+    actions.push(`
+      <button class="button ${overdue ? "button-danger" : "button-secondary"}" type="button" data-handoff-action="verify" data-booking-id="${booking.booking_id}" data-qr-type="return">
+        <i class="fas fa-flag-checkered"></i>
+        <span>Verify return</span>
+      </button>
+    `);
+  }
+
+  const badges = [
+    renderStatusBadge(booking.collection_verified ? "Collection verified" : "Awaiting collection", booking.collection_verified ? "warning" : "info"),
+    renderStatusBadge(booking.return_verified ? "Return verified" : "Awaiting return", booking.return_verified ? "success" : overdue ? "danger" : "warning"),
+  ];
+
+  if (overdue) {
+    badges.push(renderStatusBadge("Overdue return", "danger"));
+  }
+  if (booking.overdue_next_booking_cancelled_booking_id) {
+    badges.push(
+      renderStatusBadge(
+        `Next booking cancelled`,
+        "plum"
+      )
+    );
+  }
+
+  return `
+    <article class="handoff-card${overdue ? " is-overdue" : ""}">
+      <div class="handoff-head">
+        <div>
+          <p class="panel-label">Booking #${escapeHtml(booking.booking_id || "-")}</p>
+          <h4>${escapeHtml(`${booking.brand || "Unknown"} ${booking.model || ""}`.trim())}</h4>
+          <span class="muted">${escapeHtml(booking.customer_name || "Unknown customer")} - ${escapeHtml(booking.location || "Location unavailable")}</span>
+        </div>
+        <div class="badge-row">${badges.join("")}</div>
+      </div>
+      <div class="handoff-meta">
+        <div>
+          <span>Customer</span>
+          <strong>${escapeHtml(booking.customer_email || "No email")}</strong>
+        </div>
+        <div>
+          <span>Phone</span>
+          <strong>${escapeHtml(booking.customer_phone || "Not available")}</strong>
+        </div>
+        <div>
+          <span>Pickup</span>
+          <strong>${formatDate(booking.start_date)}</strong>
+        </div>
+        <div>
+          <span>Return</span>
+          <strong>${formatDate(booking.end_date)}</strong>
+        </div>
+      </div>
+      <p class="muted">${escapeHtml(buildHandoffNote(booking, overdue))}</p>
+      ${actions.length ? `<div class="card-actions">${actions.join("")}</div>` : ""}
+    </article>
+  `;
+}
+
+function buildHandoffNote(booking, overdue) {
+  if (booking.return_verified) {
+    return "Return verification is complete for this booking.";
+  }
+  if (isMissedPickupBooking(booking)) {
+    return "Collection QR expired because the pickup date passed without vehicle collection. Run missed pickup processing to cancel this booking.";
+  }
+  if (!booking.has_collection_qr && !booking.collection_verified) {
+    return "Collection QR is not available yet for this booking.";
+  }
+  if (!booking.collection_verified) {
+    return "Payment is complete and the car is waiting for collection verification.";
+  }
+  if (!booking.has_return_qr && !booking.return_verified) {
+    return "Return QR is not available yet for this booking.";
+  }
+  if (booking.overdue_next_booking_cancelled_booking_id) {
+    return `This return is overdue. The next booking (#${booking.overdue_next_booking_cancelled_booking_id}) was already cancelled because the car was not received back in time.`;
+  }
+  if (overdue) {
+    return "This car has not been returned and the end date has already passed. Run overdue processing to cancel the next booking on the same car.";
+  }
+  return "Collection is verified. Return verification is still pending for this booking.";
+}
+
+async function verifyBookingHandoff(bookingId, qrType, button) {
+  const booking = state.bookings.find((item) => Number(item.booking_id) === Number(bookingId));
+  if (!booking) {
+    showToast("Booking could not be found anymore. Refresh and try again.", "error");
+    return;
+  }
+
+  const defaultHtml = button?.innerHTML || "";
+  if (button) {
+    button.disabled = true;
+    button.innerHTML = `<span>Working...</span>`;
+  }
+
+  try {
+    const result = await fetchJson("/api/admin/verify-qr", {
+      method: "POST",
+      body: JSON.stringify({
+        booking_id: Number(bookingId),
+        qr_type: qrType,
+      }),
+    });
+
+    await refreshDashboard();
+    const message =
+      result.message ||
+      `${startCase(qrType)} verification completed for booking #${bookingId}.`;
+    setResultBox(dom.handoffResult, message, "success");
+    showToast(message, "success");
+  } catch (error) {
+    setResultBox(dom.handoffResult, error.message, "error");
+    showToast(error.message, "error");
+  } finally {
+    if (button?.isConnected) {
+      button.disabled = false;
+      button.innerHTML = defaultHtml;
+    }
+  }
+}
+
+async function processOverdueReturns() {
+  const ok = window.confirm(
+    "Process overdue returns now? This can cancel the next booking for cars that have not been returned after the end date."
+  );
+  if (!ok) {
+    return;
+  }
+
+  try {
+    const result = await fetchJson("/api/admin/process-overdue-returns", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+
+    await refreshDashboard();
+    const processed = Array.isArray(result.processed) ? result.processed : [];
+    const message = processed.length
+      ? `${result.message} Cancelled booking IDs: ${processed
+          .map((item) => `#${item.cancelled_booking_id}`)
+          .join(", ")}.`
+      : result.message || "Overdue return processing completed.";
+
+    setResultBox(dom.handoffResult, message, processed.length ? "success" : "");
+    showToast(result.message || "Overdue return processing completed.", processed.length ? "success" : "info");
+  } catch (error) {
+    setResultBox(dom.handoffResult, error.message, "error");
+    showToast(error.message, "error");
+  }
+}
+
+async function processMissedPickups() {
+  const ok = window.confirm(
+    "Process missed pickups now? This will cancel bookings whose pickup date has passed without collection. Unpaid bookings will have payment status marked cancelled."
+  );
+  if (!ok) {
+    return;
+  }
+
+  try {
+    const result = await fetchJson("/api/admin/process-missed-pickups", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+
+    await refreshDashboard();
+    const processed = Array.isArray(result.processed) ? result.processed : [];
+    const message = processed.length
+      ? `${result.message} Cancelled booking IDs: ${processed
+          .map((item) => `#${item.booking_id}`)
+          .join(", ")}.`
+      : result.message || "Missed pickup processing completed.";
+
+    setResultBox(dom.handoffResult, message, processed.length ? "success" : "");
+    showToast(
+      result.message || "Missed pickup processing completed.",
+      processed.length ? "success" : "info"
+    );
+  } catch (error) {
+    setResultBox(dom.handoffResult, error.message, "error");
+    showToast(error.message, "error");
+  }
+}
+
+function isMissedPickupBooking(booking) {
+  const startDate = toDate(booking.start_date);
+  return Boolean(
+    !booking.collection_verified &&
+      normalizeBookingStatus(booking.status) !== "cancelled" &&
+      startDate &&
+      startDate < startOfDay(new Date())
+  );
+}
+
+function isOverdueReturnBooking(booking) {
+  const endDate = toDate(booking.end_date);
+  return Boolean(
+    booking.collection_verified &&
+      !booking.return_verified &&
+      endDate &&
+      endDate < startOfDay(new Date())
+  );
+}
+
+function compareBookingsByDate(left, right) {
+  const leftDate = toDate(left.start_date)?.getTime() || 0;
+  const rightDate = toDate(right.start_date)?.getTime() || 0;
+  if (leftDate !== rightDate) {
+    return leftDate - rightDate;
+  }
+  return Number(left.booking_id || left.id || 0) - Number(right.booking_id || right.id || 0);
 }
 
 function renderRefunds(metrics) {
@@ -1514,12 +1882,9 @@ function setActiveNav(targetId, options = {}) {
   const availableTargets = new Set((dom.moduleViews || []).map((view) => view.id));
   const resolvedTarget = availableTargets.has(targetId) ? targetId : "overviewSection";
 
-  if (resolvedTarget !== "paymentsSection") {
-    const wasScannerActive = scannerState.active;
-    stopScanner(wasScannerActive);
-    if (!wasScannerActive && dom.scannerStatus) {
-      dom.scannerStatus.textContent = "Scanner idle.";
-    }
+  if (resolvedTarget !== "handoffsSection") {
+    stopHandoffScanner(false);
+    setScannerStatus("Scanner idle. Start the camera and point it at a collection or return QR code.");
   }
 
   state.activeModule = resolvedTarget;
@@ -1558,7 +1923,11 @@ function updateTopbarForModule(targetId) {
     },
     paymentsSection: {
       title: "Payment verification desk",
-      copy: "Use the scanner or manual reference form to verify bookings without distraction from the rest of the dashboard.",
+      copy: "Verify bookings by entering the booking ID and payment reference in one focused manual workflow.",
+    },
+    handoffsSection: {
+      title: "Collection and return verification",
+      copy: "Track collections and returns, process missed pickups after the pickup date passes, and handle overdue returns before they disrupt the next booking.",
     },
     refundsSection: {
       title: "Refunds and cancellations queue",
@@ -1655,6 +2024,11 @@ function normalizeSimpleStatus(status) {
 function isCompletedTransaction(transaction) {
   const status = normalizeTransactionStatus(transaction.payment_status || transaction.status);
   return status === "completed";
+}
+
+function isPendingTransaction(transaction) {
+  const status = normalizeTransactionStatus(transaction.payment_status || transaction.status);
+  return status === "pending";
 }
 
 function resolveImageUrl(imagePath) {

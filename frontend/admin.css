@@ -45,6 +45,10 @@ body {
     linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 28%, var(--bg-bottom) 100%);
 }
 
+body.sidebar-menu-open {
+  overflow: hidden;
+}
+
 .hidden {
   display: none !important;
 }
@@ -182,6 +186,7 @@ button {
   backdrop-filter: blur(20px);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   color: #f9fbff;
+  z-index: 20;
 }
 
 .sidebar-header {
@@ -196,6 +201,9 @@ button {
   flex: 1;
   flex-direction: column;
   gap: 24px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .brand-block {
@@ -375,6 +383,7 @@ button {
 
 .main-content {
   padding: 34px;
+  min-width: 0;
 }
 
 .topbar {
@@ -425,8 +434,14 @@ button {
 
 .button-secondary {
   background: rgba(255, 255, 255, 0.1);
-  color: #fffaf5;
+  color: #222628;
   border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.button-danger {
+  background: rgba(216, 90, 90, 0.12);
+  color: #932f2f;
+  border: 1px solid rgba(216, 90, 90, 0.18);
 }
 
 .button-full {
@@ -956,32 +971,109 @@ button {
 
 .verification-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 0.95fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 
-.scanner-card,
+.handoff-tools {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.05fr);
+  gap: 18px;
+  margin: 18px 0;
+}
+
+.handoff-scanner {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border-radius: 22px;
+  border: 1px solid rgba(20, 37, 63, 0.08);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(244, 247, 251, 0.98)),
+    rgba(20, 37, 63, 0.05);
+}
+
+#handoffScannerVideo {
+  width: 100%;
+  min-height: 280px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top, rgba(26, 102, 193, 0.18), transparent 56%),
+    #08111f;
+  object-fit: cover;
+}
+
+.scanner-status {
+  padding: 13px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink-soft);
+  min-height: 52px;
+}
+
+.scanner-status.success {
+  background: rgba(23, 138, 123, 0.12);
+  color: #0f665b;
+}
+
+.scanner-status.error {
+  background: rgba(216, 90, 90, 0.12);
+  color: #912f2f;
+}
+
+.handoff-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.handoff-card {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.handoff-card.is-overdue {
+  background: linear-gradient(180deg, rgba(255, 239, 239, 0.92), rgba(255, 255, 255, 0.86));
+}
+
+.handoff-head,
+.handoff-meta {
+  display: grid;
+  gap: 12px;
+}
+
+.handoff-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.handoff-meta {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.handoff-meta div {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(20, 37, 63, 0.05);
+}
+
+.handoff-meta span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
 .manual-verify,
 .subpanel {
   display: grid;
   gap: 14px;
 }
-
-.scanner-card {
-  padding: 18px;
-  border-radius: 20px;
-  background: rgba(20, 37, 63, 0.05);
-}
-
-#scannerVideo {
-  width: 100%;
-  min-height: 280px;
-  border-radius: 18px;
-  background: #08111f;
-  object-fit: cover;
-}
-
-.scanner-status,
 .result-box {
   padding: 13px 14px;
   border-radius: 14px;
@@ -1123,9 +1215,12 @@ button {
   }
 
   .sidebar {
-    position: static;
+    position: sticky;
+    top: 0;
     height: auto;
     padding-bottom: 24px;
+    overflow: visible;
+    z-index: 40;
   }
 
   .sidebar-toggle {
@@ -1136,8 +1231,22 @@ button {
     display: none;
   }
 
+  .sidebar:not(.is-collapsed) .sidebar-content {
+    position: absolute;
+    left: 28px;
+    right: 28px;
+    top: calc(100% - 16px);
+    max-height: calc(100vh - 124px);
+    padding: 4px;
+    overflow: auto;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-lg);
+    background: rgba(7, 18, 38, 0.96);
+    box-shadow: 0 28px 64px rgba(7, 18, 38, 0.34);
+  }
+
   .main-content {
-    padding-top: 0;
+    padding-top: 18px;
   }
 
   .content-grid,
@@ -1157,6 +1266,11 @@ button {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .handoff-tools,
+  .handoff-grid {
+    grid-template-columns: 1fr;
+  }
+
   .fleet-card {
     grid-template-columns: 1fr;
   }
@@ -1169,6 +1283,13 @@ button {
     padding: 16px;
   }
 
+  .sidebar:not(.is-collapsed) .sidebar-content {
+    left: 16px;
+    right: 16px;
+    top: calc(100% - 10px);
+    max-height: calc(100vh - 96px);
+  }
+
   .login-copy,
   .login-form-card {
     padding: 22px;
@@ -1179,6 +1300,20 @@ button {
   .refund-summary,
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .handoff-tools,
+  .handoff-meta,
+  .handoff-head {
+    grid-template-columns: 1fr;
+  }
+
+  .handoff-scanner {
+    padding: 16px;
+  }
+
+  #handoffScannerVideo {
+    min-height: 220px;
   }
 
   .span-2 {
