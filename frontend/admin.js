@@ -239,7 +239,7 @@ function bindEvents() {
     await verifyPayment(bookingId, paymentReference);
   });
 
-  dom.startHandoffScannerBtn?.addEventListener("click", startHandoffScanner);
+  dom.startHandoffScannerBtn?.addEventListener("click", () => startHandoffScanner());
   dom.stopHandoffScannerBtn?.addEventListener("click", () => stopHandoffScanner(true));
 
   dom.handoffGrid?.addEventListener("click", async (event) => {
@@ -937,6 +937,7 @@ function renderFleet() {
         const endDate = toDate(booking.end_date);
         return (
           normalized !== "cancelled" &&
+          normalized !== "returned" &&
           startDate &&
           endDate &&
           startDate <= today &&
@@ -948,6 +949,7 @@ function renderFleet() {
           const startDate = toDate(booking.start_date);
           return (
             normalizeBookingStatus(booking.status) !== "cancelled" &&
+            normalizeBookingStatus(booking.status) !== "returned" &&
             startDate &&
             startDate >= today
           );
@@ -1130,7 +1132,7 @@ function renderSchedule(data) {
                       )}
                       ${tableCell(
                         "Action",
-                        normalized !== "cancelled"
+                        normalized !== "cancelled" && normalized !== "returned"
                           ? `<button class="card-button danger" type="button" data-cancel-booking="${booking.id}">Cancel</button>`
                           : "-"
                       )}
@@ -1201,7 +1203,7 @@ async function cancelBookingFromSchedule(bookingId) {
 }
 
 async function verifyPayment(bookingId, paymentReference) {
-  setVerificationResult("Verifying payment reference...", "");
+  setVerificationResult("Matching booking ID with submitted payment reference...", "");
 
   try {
     const result = await fetchJson("/api/verify-payment", {
@@ -1212,7 +1214,7 @@ async function verifyPayment(bookingId, paymentReference) {
       }),
     });
     setVerificationResult(
-      result.message || "Payment verified successfully.",
+      result.message || "Booking ID and payment reference matched. Payment verified successfully.",
       "success"
     );
     showToast("Payment verification completed.", "success");
@@ -1243,6 +1245,18 @@ function setResultBox(element, message, tone = "") {
   }
 }
 
+function setResultBoxMarkup(element, markup, tone = "") {
+  if (!element) {
+    return;
+  }
+
+  element.innerHTML = markup;
+  element.classList.remove("success", "error");
+  if (tone) {
+    element.classList.add(tone);
+  }
+}
+
 function setScannerStatus(message, tone = "") {
   if (!dom.handoffScannerStatus) {
     return;
@@ -1255,8 +1269,12 @@ function setScannerStatus(message, tone = "") {
   }
 }
 
-async function startHandoffScanner() {
+async function startHandoffScanner(
+  statusMessage = "Scanner active. Hold a collection or return QR code steady in front of the camera."
+) {
+
   if (scannerState.active) {
+    setScannerStatus(statusMessage);
     return;
   }
 
@@ -1299,7 +1317,7 @@ async function startHandoffScanner() {
 
     dom.handoffScannerVideo.srcObject = stream;
     await dom.handoffScannerVideo.play();
-    setScannerStatus("Scanner active. Hold a collection or return QR code steady in front of the camera.");
+    setScannerStatus(statusMessage);
 
     scannerState.timer = window.setInterval(() => {
       if (!scannerState.active || !dom.handoffScannerVideo || !window.jsQR) {
@@ -1396,10 +1414,28 @@ async function handleScannedHandoffQr(rawValue) {
     return;
   }
 
+  let adminPaymentReference = "";
+  if (parsed.qr_type === "collection") {
+    adminPaymentReference = window.prompt(
+      `Enter the customer's payment reference number for booking #${parsed.booking_id}:`
+    )?.trim();
+
+    if (!adminPaymentReference) {
+      const message = "Payment reference is required before pickup can be verified.";
+      setScannerStatus(message, "error");
+      setResultBox(dom.handoffResult, message, "error");
+      showToast(message, "error");
+      return;
+    }
+  }
+
   try {
     const result = await fetchJson("/api/admin/verify-qr", {
       method: "POST",
-      body: JSON.stringify({ qr_data: parsed }),
+      body: JSON.stringify({
+        qr_data: parsed,
+        admin_payment_reference_id: adminPaymentReference,
+      }),
     });
 
     await refreshDashboard();
@@ -1407,13 +1443,61 @@ async function handleScannedHandoffQr(rawValue) {
       result.message ||
       `${startCase(parsed.qr_type)} verification completed for booking #${parsed.booking_id}.`;
     setScannerStatus(message, "success");
-    setResultBox(dom.handoffResult, message, "success");
+    const verificationMarkup = buildHandoffVerificationResultMarkup(result, message);
+    if (verificationMarkup) {
+      setResultBoxMarkup(dom.handoffResult, verificationMarkup, "success");
+    } else {
+      setResultBox(dom.handoffResult, message, "success");
+    }
     showToast(message, "success");
   } catch (error) {
     setScannerStatus(error.message, "error");
     setResultBox(dom.handoffResult, error.message, "error");
     showToast(error.message, "error");
   }
+}
+
+function buildHandoffVerificationResultMarkup(result, message) {
+  const verification = result?.qr_verification;
+  const qrType = String(verification?.qr_type || "").trim().toLowerCase();
+  if (qrType !== "return") {
+    return "";
+  }
+
+  const originalReturnDate = toDate(verification?.booking?.end_date);
+  const returnedEarly = Boolean(originalReturnDate && originalReturnDate > startOfDay(new Date()));
+  if (!returnedEarly) {
+    return "";
+  }
+
+  const vacancies = Array.isArray(verification?.vacancies) ? verification.vacancies : [];
+  const vacancyBlock = vacancies.length
+    ? `
+        <div class="vacancy-grid">
+          ${vacancies
+            .map(
+              (range) => `
+                <div class="vacancy-card">
+                  <strong>${formatDate(range.start)}</strong>
+                  <span class="muted">through ${formatDate(range.end)}</span>
+                </div>
+              `
+            )
+            .join("")}
+        </div>
+      `
+    : `<div class="empty-state compact">No new open dates were found before the original return date.</div>`;
+
+  return `
+    <div class="schedule-block">
+      <div class="subpanel-head">
+        <h4>${escapeHtml(message)}</h4>
+        <span class="panel-tag">${vacancies.length} open windows</span>
+      </div>
+      <p class="muted">Return was verified before ${formatDate(originalReturnDate)}. The car is now available for the next booking in these dates.</p>
+      ${vacancyBlock}
+    </div>
+  `;
 }
 
 function renderHandoffs() {
@@ -1470,7 +1554,7 @@ function buildHandoffCardMarkup(booking) {
     actions.push(`
       <button class="button button-primary" type="button" data-handoff-action="verify" data-booking-id="${booking.booking_id}" data-qr-type="collection">
         <i class="fas fa-car-side"></i>
-        <span>Verify collection</span>
+        <span>Scan collection QR</span>
       </button>
     `);
   }
@@ -1478,7 +1562,7 @@ function buildHandoffCardMarkup(booking) {
     actions.push(`
       <button class="button ${overdue ? "button-danger" : "button-secondary"}" type="button" data-handoff-action="verify" data-booking-id="${booking.booking_id}" data-qr-type="return">
         <i class="fas fa-flag-checkered"></i>
-        <span>Verify return</span>
+        <span>Scan return QR</span>
       </button>
     `);
   }
@@ -1545,7 +1629,7 @@ function buildHandoffNote(booking, overdue) {
     return "Collection QR is not available yet for this booking.";
   }
   if (!booking.collection_verified) {
-    return "Payment is complete and the car is waiting for collection verification.";
+    return "Payment is complete. Scan the collection QR to verify that the vehicle has been handed over.";
   }
   if (!booking.has_return_qr && !booking.return_verified) {
     return "Return QR is not available yet for this booking.";
@@ -1556,7 +1640,7 @@ function buildHandoffNote(booking, overdue) {
   if (overdue) {
     return "This car has not been returned and the end date has already passed. Run overdue processing to cancel the next booking on the same car.";
   }
-  return "Collection is verified. Return verification is still pending for this booking.";
+  return "Collection is verified. Scan the return QR when the car is handed back.";
 }
 
 async function verifyBookingHandoff(bookingId, qrType, button) {
@@ -1569,24 +1653,15 @@ async function verifyBookingHandoff(bookingId, qrType, button) {
   const defaultHtml = button?.innerHTML || "";
   if (button) {
     button.disabled = true;
-    button.innerHTML = `<span>Working...</span>`;
+    button.innerHTML = `<span>Opening scanner...</span>`;
   }
 
   try {
-    const result = await fetchJson("/api/admin/verify-qr", {
-      method: "POST",
-      body: JSON.stringify({
-        booking_id: Number(bookingId),
-        qr_type: qrType,
-      }),
-    });
-
-    await refreshDashboard();
-    const message =
-      result.message ||
-      `${startCase(qrType)} verification completed for booking #${bookingId}.`;
-    setResultBox(dom.handoffResult, message, "success");
-    showToast(message, "success");
+    const message = `Scan the ${startCase(qrType).toLowerCase()} QR for booking #${bookingId} to verify this handoff.`;
+    setResultBox(dom.handoffResult, message, "");
+    setScannerStatus(message);
+    await startHandoffScanner(message);
+    showToast(message, "info");
   } catch (error) {
     setResultBox(dom.handoffResult, error.message, "error");
     showToast(error.message, "error");
@@ -1630,7 +1705,7 @@ async function processOverdueReturns() {
 
 async function processMissedPickups() {
   const ok = window.confirm(
-    "Process missed pickups now? This will cancel bookings whose pickup date has passed without collection. Unpaid bookings will have payment status marked cancelled."
+    "Process missed pickups now? This will cancel bookings whose pickup date has passed without collection. Paid one-day bookings refund 50%; longer bookings hold one day rent and refund the remaining paid amount."
   );
   if (!ok) {
     return;

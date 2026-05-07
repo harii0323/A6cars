@@ -1546,7 +1546,7 @@ function openPaymentModal(booking, qr) {
     </div>
     <article class="qr-card">
       <img src="${qr}" alt="Payment QR" />
-      <p class="detail-note">Scan the QR to pay, then paste the payment reference so the booking can be confirmed and the collection and return passes can be generated.</p>
+      <p class="detail-note">Scan the QR to pay, then paste the payment reference. Admin will match this reference with your booking before confirming payment.</p>
     </article>
     <label class="field-block">
       <span>Payment reference ID</span>
@@ -1554,7 +1554,7 @@ function openPaymentModal(booking, qr) {
     </label>
     <div class="feedback feedback-error" id="paymentVerifyFeedback"></div>
     <div class="modal-actions">
-      <button class="button button-primary" type="button" id="paymentVerifyBtn">Verify Payment</button>
+      <button class="button button-primary" type="button" id="paymentVerifyBtn">Submit Reference</button>
       <button class="button button-secondary" type="button" data-action="close-modal">Close</button>
     </div>
   `;
@@ -1578,7 +1578,7 @@ function openPaymentModal(booking, qr) {
     }
 
     setFeedback(feedback, "", "error");
-    setButtonBusy(verifyBtn, true, "Verifying...");
+    setButtonBusy(verifyBtn, true, "Submitting...");
 
     try {
       const result = await fetchJson("/api/verify-payment", {
@@ -1591,8 +1591,7 @@ function openPaymentModal(booking, qr) {
       });
 
       closeModal();
-      showToast(result.message || "Payment verified.", "success");
-      openPaymentSuccessModal(booking, result);
+      showToast(result.message || "Payment reference submitted.", "success");
       await refreshActivePageData();
     } catch (error) {
       setFeedback(feedback, error.message || "Payment verification failed.", "error");
@@ -1604,6 +1603,7 @@ function openPaymentModal(booking, qr) {
 
 function openPaymentSuccessModal(booking, payload) {
   const bookingId = getBookingId(booking);
+  const hasReturnQr = Boolean(payload.return_qr);
   const content = document.createElement("div");
   content.className = "stack-list";
   content.innerHTML = `
@@ -1611,7 +1611,11 @@ function openPaymentSuccessModal(booking, payload) {
       <span class="status-badge badge-success">Payment confirmed</span>
       <span class="status-badge badge-sky">Booking #${bookingId}</span>
     </div>
-    <p class="detail-note">Save both passes now. The collection QR is used at pickup, and the return QR is used when you hand the car back.</p>
+    <p class="detail-note">${
+      hasReturnQr
+        ? "Save the available QR passes now. The collection QR is used at pickup, and the return QR is used when you hand the car back."
+        : "Your collection QR is ready now. The return QR will appear after pickup is verified."
+    }</p>
     <div class="qr-grid">
       <article class="qr-card">
         <h4>Collection QR</h4>
@@ -1620,13 +1624,17 @@ function openPaymentSuccessModal(booking, payload) {
           <button class="button button-secondary button-inline" type="button" id="downloadCollectionBtn">Download</button>
         </div>
       </article>
-      <article class="qr-card">
+      ${
+        hasReturnQr
+          ? `<article class="qr-card">
         <h4>Return QR</h4>
         <img src="${payload.return_qr}" alt="Return QR" />
         <div class="card-actions">
           <button class="button button-secondary button-inline" type="button" id="downloadReturnBtn">Download</button>
         </div>
-      </article>
+      </article>`
+          : ""
+      }
     </div>
     <div class="modal-actions">
       <a class="button button-primary" href="/history.html">Open Booking Center</a>
@@ -1645,9 +1653,11 @@ function openPaymentSuccessModal(booking, payload) {
     downloadDataUrl(payload.collection_qr, `collection_qr_${bookingId}.png`);
   });
 
-  modal.querySelector("#downloadReturnBtn")?.addEventListener("click", () => {
-    downloadDataUrl(payload.return_qr, `return_qr_${bookingId}.png`);
-  });
+  if (hasReturnQr) {
+    modal.querySelector("#downloadReturnBtn")?.addEventListener("click", () => {
+      downloadDataUrl(payload.return_qr, `return_qr_${bookingId}.png`);
+    });
+  }
 }
 
 function openQrModal({ title, subtitle, qr, filename }) {
@@ -1809,6 +1819,8 @@ function buildBookingCardMarkup(booking) {
 
   if (isCancelled(booking)) {
     badges.push(statusBadge("Cancelled", "danger"));
+  } else if (isReturnedBooking(booking)) {
+    badges.push(statusBadge("Returned", "success"));
   } else if (isActiveBooking(booking)) {
     badges.push(statusBadge("Active", "sky"));
   } else {
@@ -1821,7 +1833,9 @@ function buildBookingCardMarkup(booking) {
     badges.push(statusBadge("Awaiting payment", "warning"));
   }
 
-  if (booking.verified) {
+  if (isReturnedBooking(booking)) {
+    badges.push(statusBadge("Return verified", "success"));
+  } else if (booking.verified) {
     badges.push(statusBadge("Pickup verified", "violet"));
   }
 
@@ -1838,12 +1852,17 @@ function buildBookingCardMarkup(booking) {
       `<button class="button button-primary button-inline" type="button" data-action="pay-booking" data-booking-id="${bookingId}">Pay now</button>`
     );
   }
-  if (booking.collection_qr) {
+  if (booking.collection_qr && !booking.collection_verified && !isCancelled(booking)) {
     actions.push(
       `<button class="button button-secondary button-inline" type="button" data-action="show-collection" data-booking-id="${bookingId}">Collection QR</button>`
     );
   }
-  if (booking.return_qr) {
+  if (
+    booking.return_qr &&
+    booking.collection_verified &&
+    !booking.return_verified &&
+    !isCancelled(booking)
+  ) {
     actions.push(
       `<button class="button button-secondary button-inline" type="button" data-action="show-return" data-booking-id="${bookingId}">Return QR</button>`
     );
@@ -1901,6 +1920,10 @@ function buildBookingSummary(booking) {
     return "Payment is still pending. Add your payment reference to confirm the booking and unlock the collection and return QR passes.";
   }
 
+  if (isReturnedBooking(booking)) {
+    return "Return has already been verified. This trip is complete and the booking can no longer be cancelled.";
+  }
+
   if (booking.verified) {
     return "Pickup has already been verified on the admin side. Keep the return QR ready when you hand the car back.";
   }
@@ -1916,7 +1939,7 @@ function buildBookingSummary(booking) {
   }
 
   if (isActiveBooking(booking)) {
-    return "Payment is confirmed and the reservation is active. Your QR passes are available directly from this booking card.";
+    return "Payment is confirmed and the reservation is active. Your collection QR is available now, and the return QR will appear after pickup verification.";
   }
 
   return "This reservation is closed on the calendar, but its payment and QR history are still stored here for reference.";
@@ -2101,18 +2124,25 @@ function isCancelled(booking) {
   );
 }
 
+function isReturnedBooking(booking) {
+  return (
+    String(booking.status || "").toLowerCase() === "returned" ||
+    Boolean(booking.return_verified)
+  );
+}
+
 function isAwaitingPayment(booking) {
   return !isCancelled(booking) && !booking.paid;
 }
 
 function isActiveBooking(booking) {
   const end = parseDate(booking.end_date);
-  return !isCancelled(booking) && Boolean(end && end >= startOfToday());
+  return !isCancelled(booking) && !isReturnedBooking(booking) && Boolean(end && end >= startOfToday());
 }
 
 function canCancelBooking(booking) {
   const end = parseDate(booking.end_date);
-  return !isCancelled(booking) && Boolean(end && end >= startOfToday());
+  return !isCancelled(booking) && !isReturnedBooking(booking) && Boolean(end && end >= startOfToday());
 }
 
 function parseDate(value) {

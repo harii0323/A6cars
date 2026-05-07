@@ -33,7 +33,7 @@ const PORT = process.env.PORT;
 const OVERDUE_RETURN_CANCELLATION_MESSAGE =
   "car is not yet received yet for that purpose booking has canceled book another car on same dates get 50% off sorry please welcome again😊";
 const MISSED_PICKUP_CANCELLATION_MESSAGE =
-  "Pickup was not completed on the scheduled pickup date. As per policy, this booking is cancelled without refund or discount.";
+  "Pickup was not completed on the scheduled pickup date. As per policy, this booking is cancelled and the missed pickup refund policy applies.";
 const MISSED_PICKUP_SWEEP_INTERVAL_MS = 15 * 60 * 1000;
 const MISSED_PICKUP_SWEEP_COOLDOWN_MS = 60 * 1000;
 
@@ -92,6 +92,14 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function normalizePaymentReference(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function toDateOnly(value) {
   if (!value) return null;
   const date = new Date(value);
@@ -136,6 +144,41 @@ function parseDate(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function calculateRentalDays(startDate, endDate) {
+  const start = parseDate(startDate);
+  const end = parseDate(endDate);
+  if (!start || !end || end < start) return 1;
+
+  return Math.max(
+    1,
+    Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+  );
+}
+
+function calculateMissedPickupRefund({ booking, payment, car }) {
+  const paidAmount = toNumber(payment?.amount || booking?.amount);
+  if (!booking?.paid || paidAmount <= 0) {
+    return { refundAmount: 0, refundPercent: 0, rentalDays: 0, heldAmount: 0 };
+  }
+
+  const rentalDays = calculateRentalDays(booking.start_date, booking.end_date);
+  let refundAmount = 0;
+  let heldAmount = paidAmount;
+
+  if (rentalDays <= 1) {
+    refundAmount = Number((paidAmount * 0.5).toFixed(2));
+    heldAmount = Number((paidAmount - refundAmount).toFixed(2));
+  } else {
+    heldAmount = Math.min(toNumber(car?.daily_rate), paidAmount);
+    refundAmount = Number((paidAmount - heldAmount).toFixed(2));
+  }
+
+  const refundPercent =
+    paidAmount > 0 ? Number(((refundAmount / paidAmount) * 100).toFixed(2)) : 0;
+
+  return { refundAmount, refundPercent, rentalDays, heldAmount };
+}
+
 function normalizeBookingStatus(status) {
   return String(status || "").trim().toLowerCase();
 }
@@ -163,8 +206,17 @@ function isCollectionQrExpired(booking) {
 function isReturnQrExpired(booking) {
   return Boolean(
     booking &&
-      (normalizeBookingStatus(booking.status) === "cancelled" ||
+      (!booking.collection_verified ||
+        booking.return_verified ||
+        normalizeBookingStatus(booking.status) === "cancelled" ||
         hasMissedCollectionDate(booking))
+  );
+}
+
+function isReturnedBooking(booking) {
+  return Boolean(
+    booking &&
+      (booking.return_verified || normalizeBookingStatus(booking.status) === "returned")
   );
 }
 
@@ -230,6 +282,10 @@ async function ensureIndexes() {
     collection("bookings").createIndex({ car_id: 1, start_date: 1, end_date: 1 }),
     collection("payments").createIndex({ id: 1 }, { unique: true }),
     collection("payments").createIndex({ booking_id: 1 }, { unique: true }),
+    collection("payments").createIndex(
+      { payment_reference_key: 1 },
+      { unique: true, sparse: true }
+    ),
     collection("refunds").createIndex({ id: 1 }, { unique: true }),
     collection("booking_cancellations").createIndex(
       { id: 1 },
@@ -260,6 +316,30 @@ async function getBookingById(id) {
 
 async function getPaymentByBookingId(bookingId) {
   return collection("payments").findOne({ booking_id: toNumber(bookingId) });
+}
+
+async function findPaymentByReference(paymentReference, { excludeBookingId = null } = {}) {
+  const reference = String(paymentReference || "").trim();
+  const referenceKey = normalizePaymentReference(reference);
+  if (!referenceKey) return null;
+
+  const query = {
+    $or: [
+      { payment_reference_key: referenceKey },
+      {
+        payment_reference_id: {
+          $regex: `^${escapeRegExp(reference)}$`,
+          $options: "i",
+        },
+      },
+    ],
+  };
+
+  if (excludeBookingId != null) {
+    query.booking_id = { $ne: toNumber(excludeBookingId) };
+  }
+
+  return collection("payments").findOne(query);
 }
 
 async function getCancellationByBookingId(bookingId) {
@@ -546,6 +626,8 @@ async function handleBookingCancellation({
   discountPlan = null,
   issueAdminDiscount = cancelledBy === "admin",
   refundPercentOverride = null,
+  refundAmountOverride = null,
+  refundReason = null,
   notificationTitle = null,
   notificationMessage = null,
 }) {
@@ -556,7 +638,14 @@ async function handleBookingCancellation({
   let refundPercent = 0;
   let refundAmount = 0;
 
-  if (refundPercentOverride != null) {
+  if (refundAmountOverride != null) {
+    const baseAmount = toNumber(payment?.amount || booking.amount);
+    refundAmount = booking.paid
+      ? Math.max(0, Math.min(Number(toNumber(refundAmountOverride).toFixed(2)), baseAmount))
+      : 0;
+    refundPercent =
+      baseAmount > 0 ? Number(((refundAmount / baseAmount) * 100).toFixed(2)) : 0;
+  } else if (refundPercentOverride != null) {
     refundPercent = Math.max(0, toNumber(refundPercentOverride));
     refundAmount = booking.paid
       ? Number(
@@ -608,9 +697,10 @@ async function handleBookingCancellation({
       customer_id: booking.customer_id,
       amount: refundAmount,
       reason:
-        cancelledBy === "admin"
+        refundReason ||
+        (cancelledBy === "admin"
           ? `Admin cancellation${reason ? `: ${reason}` : ""}`
-          : `User cancellation${reason ? `: ${reason}` : ""}`,
+          : `User cancellation${reason ? `: ${reason}` : ""}`),
     });
 
     await collection("payments").updateOne(
@@ -715,10 +805,20 @@ async function processMissedPickupBookings(adminEmail = "system") {
   const processed = [];
 
   for (const booking of missedPickupBookings) {
-    const [customer, car] = await Promise.all([
+    const [customer, car, payment] = await Promise.all([
       getCustomerById(booking.customer_id),
       getCarById(booking.car_id),
+      getPaymentByBookingId(booking.id),
     ]);
+    const missedPickupRefund = calculateMissedPickupRefund({
+      booking,
+      payment,
+      car,
+    });
+    const notificationMessage =
+      missedPickupRefund.refundAmount > 0
+        ? `Your booking #${booking.id} was cancelled because pickup was not completed on the scheduled pickup date. Refund queued: ₹${missedPickupRefund.refundAmount}.`
+        : `Your booking #${booking.id} was cancelled because pickup was not completed on the scheduled pickup date. No refund applies because no payment was recorded.`;
 
     const cancellationResult = await handleBookingCancellation({
       booking,
@@ -726,9 +826,15 @@ async function processMissedPickupBookings(adminEmail = "system") {
       reason: MISSED_PICKUP_CANCELLATION_MESSAGE,
       adminEmail,
       issueAdminDiscount: false,
-      refundPercentOverride: 0,
+      refundAmountOverride: missedPickupRefund.refundAmount,
+      refundReason:
+        !booking.paid
+          ? "Missed pickup cancellation: no payment recorded"
+          : missedPickupRefund.rentalDays <= 1
+          ? "Missed pickup cancellation: 50% refund for one-day booking"
+          : "Missed pickup cancellation: one day car rent held, remaining amount refunded",
       notificationTitle: "Booking Cancelled",
-      notificationMessage: `Your booking #${booking.id} was cancelled because pickup was not completed on the scheduled pickup date. No refund or discount applies to this missed pickup.`,
+      notificationMessage,
     });
 
     if (!booking.paid) {
@@ -749,6 +855,8 @@ async function processMissedPickupBookings(adminEmail = "system") {
       car: car ? `${car.brand} ${car.model}` : null,
       refund_amount: cancellationResult.refundAmount,
       refund_percent: cancellationResult.refundPercent,
+      rental_days: missedPickupRefund.rentalDays,
+      held_amount: missedPickupRefund.heldAmount,
     });
   }
 
@@ -801,7 +909,7 @@ async function cancelNextBookingForOverdueReturn(overdueBooking, adminEmail) {
     .find({
       car_id: overdueBooking.car_id,
       id: { $ne: overdueBooking.id },
-      status: { $ne: "cancelled" },
+      status: { $nin: ["cancelled", "returned"] },
       start_date: { $gte: overdueBooking.end_date },
     })
     .sort({ start_date: 1, id: 1 })
@@ -1104,7 +1212,7 @@ app.post("/api/book", async (req, res) => {
     const existingBookings = await collection("bookings")
       .find({
         car_id: car.id,
-        status: { $ne: "cancelled" },
+        status: { $nin: ["cancelled", "returned"] },
       })
       .toArray();
 
@@ -1258,7 +1366,7 @@ app.get("/api/bookings/:car_id(\\d+)", async (req, res) => {
     const bookings = await collection("bookings")
       .find({
         car_id: toNumber(req.params.car_id),
-        status: { $ne: "cancelled" },
+        status: { $nin: ["cancelled", "returned"] },
       })
       .sort({ start_date: 1, id: 1 })
       .toArray();
@@ -1331,7 +1439,12 @@ app.get("/api/bookings/status/:customer_id", async (req, res) => {
 
     for (const booking of views) {
       const endDate = parseDate(booking.end_date);
-      if (endDate && endDate >= today && booking.status !== "cancelled") {
+      if (
+        endDate &&
+        endDate >= today &&
+        booking.status !== "cancelled" &&
+        !isReturnedBooking(booking)
+      ) {
         active.push(booking);
       } else {
         past.push(booking);
@@ -1436,7 +1549,7 @@ app.post("/api/payment/confirm", async (req, res) => {
     res.json({
       message: "Payment confirmed ✅",
       collection_qr: result.payment.collection_qr,
-      return_qr: result.payment.return_qr,
+      return_qr: null,
       booking_details: {
         booking_id: result.booking.id,
         customer_name: result.customer.name,
@@ -1485,7 +1598,9 @@ app.post("/api/payments/qr", async (req, res) => {
 
 app.post("/api/verify-payment", async (req, res) => {
   const { booking_id, payment_reference_id, customer_id } = req.body || {};
-  if (!booking_id || !payment_reference_id) {
+  const paymentReference = String(payment_reference_id || "").trim();
+  const paymentReferenceKey = normalizePaymentReference(paymentReference);
+  if (!booking_id || !paymentReferenceKey) {
     return res.status(400).json({ message: "Missing booking_id or payment_reference_id" });
   }
 
@@ -1506,10 +1621,80 @@ app.post("/api/verify-payment", async (req, res) => {
       return res.status(409).json({ message: "Payment already completed for this booking" });
     }
 
+    const payment = await getPaymentByBookingId(booking.id);
+    if (!payment) {
+      return res.status(404).json({ message: "Payment record not found for this booking." });
+    }
+
+    const existingReferencePayment = await findPaymentByReference(paymentReference, {
+      excludeBookingId: booking.id,
+    });
+    if (existingReferencePayment) {
+      return res.status(409).json({
+        message:
+          "This payment reference number has already been used. Enter Your unique payment reference Number.",
+      });
+    }
+
+    if (customer_id) {
+      await collection("payments").updateOne(
+        { booking_id: booking.id },
+        {
+          $set: {
+            payment_reference_id: paymentReference,
+            payment_reference_key: paymentReferenceKey,
+            payment_method: "manual",
+            status: "pending_verification",
+            reference_submitted_at: nowIso(),
+          },
+        }
+      );
+
+      await createNotification(
+        booking.customer_id,
+        "Payment Reference Submitted",
+        `Payment reference for booking #${booking.id} was submitted and is waiting for admin verification.`
+      );
+
+      return res.json({
+        message:
+          "Payment reference submitted. Admin will verify the booking ID and reference number before confirming payment.",
+        booking_id: booking.id,
+        payment_status: "pending_verification",
+      });
+    }
+
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+    if (!token) {
+      return res.status(401).json({ message: "Admin authorization required for payment verification." });
+    }
+
+    try {
+      jwt.verify(token, JWT_SECRET);
+    } catch (error) {
+      return res.status(401).json({ message: "Invalid admin token." });
+    }
+
+    const storedReferenceKey = normalizePaymentReference(payment.payment_reference_id);
+    if (!storedReferenceKey) {
+      return res.status(409).json({
+        message:
+          "No payment reference has been submitted by the customer for this booking ID.",
+      });
+    }
+    if (storedReferenceKey !== paymentReferenceKey) {
+      return res.status(409).json({
+        message:
+          "Booking ID and payment reference do not match the customer's submitted payment reference.",
+      });
+    }
+
     const result = await markBookingPaid({
       bookingId: booking.id,
       paymentPatch: {
-        payment_reference_id: String(payment_reference_id).trim(),
+        payment_reference_id: paymentReference,
+        payment_reference_key: paymentReferenceKey,
         payment_method: "manual",
       },
       bookingStatus: "confirmed",
@@ -1518,7 +1703,7 @@ app.post("/api/verify-payment", async (req, res) => {
     res.json({
       message: "✅ Payment verified and booking confirmed!",
       collection_qr: result.payment.collection_qr,
-      return_qr: result.payment.return_qr,
+      return_qr: null,
       booking_details: {
         booking_id: result.booking.id,
         customer_name: result.customer.name,
@@ -1528,12 +1713,18 @@ app.post("/api/verify-payment", async (req, res) => {
     });
   } catch (error) {
     console.error("Manual payment verification error:", error);
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        message:
+          "This payment reference number has already been used. Enter a unique payment reference.",
+      });
+    }
     res.status(500).json({ message: `Payment verification failed: ${error.message}` });
   }
 });
 
 app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {
-  const { qr_data, booking_id, qr_type } = req.body || {};
+  const { qr_data, booking_id, qr_type, admin_payment_reference_id } = req.body || {};
   try {
     await ensureMissedPickupBookingsProcessed(req.admin?.email || "admin");
 
@@ -1546,6 +1737,12 @@ app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {
       }
     } else if (qr_data && typeof qr_data === "object" && !Array.isArray(qr_data)) {
       scannedQr = qr_data;
+    }
+
+    if (!scannedQr) {
+      return res.status(400).json({
+        message: "Scan the collection or return QR code to verify this handoff.",
+      });
     }
 
     const resolvedBookingId = toNumber(scannedQr?.booking_id || booking_id);
@@ -1615,6 +1812,28 @@ app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {
       } else if (!payment.collection_qr) {
         return res.status(409).json({ message: "Collection QR is not available for this booking." });
       } else {
+        const storedReferenceKey = normalizePaymentReference(payment.payment_reference_id);
+        const adminReferenceKey = normalizePaymentReference(admin_payment_reference_id);
+
+        if (!storedReferenceKey) {
+          return res.status(409).json({
+            message:
+              "This booking does not have a stored payment reference number. Verify payment before pickup.",
+          });
+        }
+        if (!adminReferenceKey) {
+          return res.status(400).json({
+            message:
+              "Enter the customer's payment reference number before verifying pickup.",
+          });
+        }
+        if (adminReferenceKey !== storedReferenceKey) {
+          return res.status(409).json({
+            message:
+              "Payment reference mismatch. Pickup verification was not accepted.",
+          });
+        }
+
         status = "collected";
         message = "COLLECTION QR verified successfully ✅";
         const verifiedAt = nowIso();
@@ -1673,7 +1892,7 @@ app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {
           .find({
             car_id: freshBooking.car_id,
             id: { $ne: freshBooking.id },
-            status: { $ne: "cancelled" },
+            status: { $nin: ["cancelled", "returned"] },
           })
           .toArray();
         vacancies = computeVacancies(otherBookings, new Date(), endWindow);
@@ -1725,7 +1944,7 @@ app.post("/api/admin/process-missed-pickups", verifyAdmin, async (req, res) => {
 
     return res.json({
       message: processed.length
-        ? `Cancelled ${processed.length} missed pickup booking(s) with no refund or discount.`
+        ? `Cancelled ${processed.length} missed pickup booking(s) and applied the missed pickup refund policy.`
         : "No missed pickup bookings were found.",
       processed,
     });
@@ -1797,6 +2016,9 @@ app.post("/api/admin/cancel-booking", verifyAdmin, async (req, res) => {
     }
     if (booking.status === "cancelled") {
       return res.status(409).json({ message: "Booking already cancelled." });
+    }
+    if (isReturnedBooking(booking)) {
+      return res.status(409).json({ message: "Returned bookings cannot be cancelled." });
     }
 
     await handleBookingCancellation({
@@ -1981,7 +2203,7 @@ app.get("/api/admin/car-schedule/:car_id", verifyAdmin, async (req, res) => {
     const bookings = await collection("bookings")
       .find({
         car_id: toNumber(req.params.car_id),
-        status: { $ne: "cancelled" },
+        status: { $nin: ["cancelled", "returned"] },
       })
       .sort({ start_date: 1, id: 1 })
       .toArray();
@@ -2024,6 +2246,9 @@ app.post("/api/cancel-booking", async (req, res) => {
     }
     if (booking.status === "cancelled") {
       return res.status(409).json({ message: "Booking already cancelled." });
+    }
+    if (isReturnedBooking(booking)) {
+      return res.status(409).json({ message: "Returned bookings cannot be cancelled." });
     }
 
     let adminEmail = admin_email;
