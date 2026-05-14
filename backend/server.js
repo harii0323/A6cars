@@ -96,6 +96,42 @@ function normalizePaymentReference(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function roundMoney(value) {
+  return Number(toNumber(value).toFixed(2));
+}
+
+function calculateReserveBreakdown(totalAmount) {
+  const total = roundMoney(totalAmount);
+  const reserveAmount = roundMoney(total * 0.1);
+  return {
+    reserveAmount,
+    remainingAmount: roundMoney(Math.max(0, total - reserveAmount)),
+  };
+}
+
+function getPaymentStage(booking, payment) {
+  if (payment?.current_payment_stage) return payment.current_payment_stage;
+  if (booking?.payment_plan === "reserve") {
+    return booking.reserve_paid ? "final" : "reserve";
+  }
+  return "full";
+}
+
+function isReferenceUsedOnSameBooking(payment, referenceKey, currentStage) {
+  if (!payment || !referenceKey) return false;
+  const reserveMatch =
+    currentStage !== "reserve" && payment.reserve_payment_reference_key === referenceKey;
+  const finalMatch =
+    currentStage !== "final" && payment.final_payment_reference_key === referenceKey;
+  const genericIsCurrentStage =
+    (currentStage === "reserve" && payment.reserve_payment_reference_key === referenceKey) ||
+    (currentStage === "final" && payment.final_payment_reference_key === referenceKey) ||
+    currentStage === "full";
+  const genericMatch = !genericIsCurrentStage && payment.payment_reference_key === referenceKey;
+
+  return reserveMatch || finalMatch || genericMatch;
+}
+
 function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -159,6 +195,10 @@ function calculateMissedPickupRefund({ booking, payment, car }) {
   const paidAmount = toNumber(payment?.amount || booking?.amount);
   if (!booking?.paid || paidAmount <= 0) {
     return { refundAmount: 0, refundPercent: 0, rentalDays: 0, heldAmount: 0 };
+  }
+
+  if (booking.payment_plan === "reserve") {
+    return { refundAmount: 0, refundPercent: 0, rentalDays: 0, heldAmount: paidAmount };
   }
 
   const rentalDays = calculateRentalDays(booking.start_date, booking.end_date);
@@ -286,6 +326,24 @@ async function ensureIndexes() {
       { payment_reference_key: 1 },
       { unique: true, sparse: true }
     ),
+    collection("payments").createIndex(
+      { reserve_payment_reference_key: 1 },
+      {
+        unique: true,
+        partialFilterExpression: {
+          reserve_payment_reference_key: { $type: "string" },
+        },
+      }
+    ),
+    collection("payments").createIndex(
+      { final_payment_reference_key: 1 },
+      {
+        unique: true,
+        partialFilterExpression: {
+          final_payment_reference_key: { $type: "string" },
+        },
+      }
+    ),
     collection("refunds").createIndex({ id: 1 }, { unique: true }),
     collection("booking_cancellations").createIndex(
       { id: 1 },
@@ -326,8 +384,22 @@ async function findPaymentByReference(paymentReference, { excludeBookingId = nul
   const query = {
     $or: [
       { payment_reference_key: referenceKey },
+      { reserve_payment_reference_key: referenceKey },
+      { final_payment_reference_key: referenceKey },
       {
         payment_reference_id: {
+          $regex: `^${escapeRegExp(reference)}$`,
+          $options: "i",
+        },
+      },
+      {
+        reserve_payment_reference_id: {
+          $regex: `^${escapeRegExp(reference)}$`,
+          $options: "i",
+        },
+      },
+      {
+        final_payment_reference_id: {
           $regex: `^${escapeRegExp(reference)}$`,
           $options: "i",
         },
@@ -406,6 +478,14 @@ async function createRefundRecord({
 
   await collection("refunds").insertOne(refund);
   return refund;
+}
+
+async function createPaymentQr(amount, bookingId, label = "Booking") {
+  return QRCode.toDataURL(
+    `upi://pay?pa=8179134484@pthdfc&pn=A6Cars&am=${roundMoney(
+      amount
+    )}&tn=${encodeURIComponent(`${label} ${bookingId}`)}`
+  );
 }
 
 async function generateCollectionAndReturnQr(
@@ -604,6 +684,12 @@ async function buildBookingView(booking) {
     location: car?.location || null,
     images: Array.isArray(car?.images) ? car.images : [],
     payment_status: payment?.status || null,
+    payment_plan: booking.payment_plan || "full",
+    reserve_amount: booking.reserve_amount || null,
+    remaining_amount: booking.remaining_amount || null,
+    reserve_paid: Boolean(booking.reserve_paid),
+    current_payment_stage: payment?.current_payment_stage || null,
+    amount_due: payment?.amount || null,
     refund_amount: payment?.refund_amount || null,
     refund_status: payment?.refund_status || null,
     collection_qr: collectionQr,
@@ -816,7 +902,9 @@ async function processMissedPickupBookings(adminEmail = "system") {
       car,
     });
     const notificationMessage =
-      missedPickupRefund.refundAmount > 0
+      booking.payment_plan === "reserve"
+        ? `Your reserved booking #${booking.id} was cancelled because pickup was not completed on the scheduled pickup date. Reservation payments are not refundable after a missed pickup.`
+        : missedPickupRefund.refundAmount > 0
         ? `Your booking #${booking.id} was cancelled because pickup was not completed on the scheduled pickup date. Refund queued: ₹${missedPickupRefund.refundAmount}.`
         : `Your booking #${booking.id} was cancelled because pickup was not completed on the scheduled pickup date. No refund applies because no payment was recorded.`;
 
@@ -828,7 +916,9 @@ async function processMissedPickupBookings(adminEmail = "system") {
       issueAdminDiscount: false,
       refundAmountOverride: missedPickupRefund.refundAmount,
       refundReason:
-        !booking.paid
+        booking.payment_plan === "reserve"
+          ? "Missed pickup cancellation: reserved booking cancelled with no refund"
+          : !booking.paid
           ? "Missed pickup cancellation: no payment recorded"
           : missedPickupRefund.rentalDays <= 1
           ? "Missed pickup cancellation: 50% refund for one-day booking"
@@ -1179,10 +1269,11 @@ app.post("/api/deletecar", verifyAdmin, async (req, res) => {
 });
 
 app.post("/api/book", async (req, res) => {
-  const { car_id, customer_id, start_date, end_date } = req.body || {};
+  const { car_id, customer_id, start_date, end_date, payment_plan = "full" } = req.body || {};
   if (!car_id || !customer_id || !start_date || !end_date) {
     return res.status(400).json({ message: "Missing booking info." });
   }
+  const bookingPaymentPlan = payment_plan === "reserve" ? "reserve" : "full";
 
   try {
     const [car, customer] = await Promise.all([
@@ -1269,8 +1360,13 @@ app.post("/api/book", async (req, res) => {
 
     const bookingId = await nextSequence("bookings");
     const qrToken = createQrToken();
-    const paymentQR = await QRCode.toDataURL(
-      `upi://pay?pa=8179134484@pthdfc&pn=A6Cars&am=${total}&tn=Booking%20${bookingId}`
+    const reserveBreakdown = calculateReserveBreakdown(total);
+    const initialPaymentAmount =
+      bookingPaymentPlan === "reserve" ? reserveBreakdown.reserveAmount : total;
+    const paymentQR = await createPaymentQr(
+      initialPaymentAmount,
+      bookingId,
+      bookingPaymentPlan === "reserve" ? "Reserve Booking" : "Booking"
     );
 
     await collection("bookings").insertOne({
@@ -1281,6 +1377,11 @@ app.post("/api/book", async (req, res) => {
       start_date: toDateOnly(start_date),
       end_date: toDateOnly(end_date),
       amount: total,
+      payment_plan: bookingPaymentPlan,
+      reserve_amount: bookingPaymentPlan === "reserve" ? reserveBreakdown.reserveAmount : null,
+      remaining_amount: bookingPaymentPlan === "reserve" ? reserveBreakdown.remainingAmount : null,
+      reserve_paid: false,
+      reserve_paid_at: null,
       status: "pending",
       paid: false,
       verified: false,
@@ -1297,13 +1398,24 @@ app.post("/api/book", async (req, res) => {
     await collection("payments").insertOne({
       id: await nextSequence("payments"),
       booking_id: bookingId,
-      amount: total,
+      amount: initialPaymentAmount,
+      total_amount: total,
+      reserve_amount: bookingPaymentPlan === "reserve" ? reserveBreakdown.reserveAmount : null,
+      remaining_amount: bookingPaymentPlan === "reserve" ? reserveBreakdown.remainingAmount : null,
       upi_id: "8179134484@pthdfc",
       qr_code: paymentQR,
       status: "pending",
+      payment_plan: bookingPaymentPlan,
+      current_payment_stage: bookingPaymentPlan === "reserve" ? "reserve" : "full",
       created_at: nowIso(),
       expires_at: new Date(Date.now() + 180 * 1000).toISOString(),
       payment_reference_id: null,
+      reserve_payment_reference_id: null,
+      reserve_payment_reference_key: null,
+      reserve_payment_verified_at: null,
+      final_payment_reference_id: null,
+      final_payment_reference_key: null,
+      final_payment_verified_at: null,
       refund_amount: null,
       refund_status: "none",
       refund_requested_at: null,
@@ -1334,6 +1446,10 @@ app.post("/api/book", async (req, res) => {
       message: "Booking created successfully",
       booking_id: bookingId,
       total,
+      payment_plan: bookingPaymentPlan,
+      amount_due: initialPaymentAmount,
+      reserve_amount: bookingPaymentPlan === "reserve" ? reserveBreakdown.reserveAmount : null,
+      remaining_amount: bookingPaymentPlan === "reserve" ? reserveBreakdown.remainingAmount : null,
       payment_qr: paymentQR,
       qr_expires_in: 180,
     });
@@ -1400,7 +1516,7 @@ app.post("/api/bookings/batch", async (req, res) => {
     const bookings = await collection("bookings")
       .find({
         car_id: { $in: car_ids.map((id) => toNumber(id)) },
-        status: "pending",
+        status: { $nin: ["cancelled", "returned"] },
       })
       .sort({ start_date: -1, id: -1 })
       .toArray();
@@ -1539,6 +1655,11 @@ app.post("/api/payment/confirm", async (req, res) => {
     if (booking.status === "cancelled") {
       return res.status(409).json({ message: "This booking has already been cancelled." });
     }
+    if (booking.payment_plan === "reserve") {
+      return res.status(409).json({
+        message: "Reserved bookings must be verified through the reserve and remaining payment reference flow.",
+      });
+    }
 
     const result = await markBookingPaid({
       bookingId: booking_id,
@@ -1588,6 +1709,11 @@ app.post("/api/payments/qr", async (req, res) => {
     res.json({
       qr: payment.qr_code,
       amount: payment.amount,
+      total: payment.total_amount || booking.amount,
+      payment_plan: payment.payment_plan || booking.payment_plan || "full",
+      current_payment_stage: payment.current_payment_stage || null,
+      reserve_amount: payment.reserve_amount || booking.reserve_amount || null,
+      remaining_amount: payment.remaining_amount || booking.remaining_amount || null,
       expires_at: payment.expires_at,
     });
   } catch (error) {
@@ -1625,11 +1751,15 @@ app.post("/api/verify-payment", async (req, res) => {
     if (!payment) {
       return res.status(404).json({ message: "Payment record not found for this booking." });
     }
+    const paymentStage = getPaymentStage(booking, payment);
 
     const existingReferencePayment = await findPaymentByReference(paymentReference, {
       excludeBookingId: booking.id,
     });
-    if (existingReferencePayment) {
+    if (
+      existingReferencePayment ||
+      isReferenceUsedOnSameBooking(payment, paymentReferenceKey, paymentStage)
+    ) {
       return res.status(409).json({
         message:
           "This payment reference number has already been used. Enter Your unique payment reference Number.",
@@ -1637,14 +1767,36 @@ app.post("/api/verify-payment", async (req, res) => {
     }
 
     if (customer_id) {
+      const stagePatch =
+        paymentStage === "reserve"
+          ? {
+              reserve_payment_reference_id: paymentReference,
+              reserve_payment_reference_key: paymentReferenceKey,
+            }
+          : paymentStage === "final"
+          ? {
+              final_payment_reference_id: paymentReference,
+              final_payment_reference_key: paymentReferenceKey,
+            }
+          : {
+              payment_reference_id: paymentReference,
+              payment_reference_key: paymentReferenceKey,
+            };
+
       await collection("payments").updateOne(
         { booking_id: booking.id },
         {
           $set: {
+            ...stagePatch,
             payment_reference_id: paymentReference,
             payment_reference_key: paymentReferenceKey,
             payment_method: "manual",
-            status: "pending_verification",
+            status:
+              paymentStage === "reserve"
+                ? "reserve_pending_verification"
+                : paymentStage === "final"
+                ? "final_pending_verification"
+                : "pending_verification",
             reference_submitted_at: nowIso(),
           },
         }
@@ -1653,14 +1805,20 @@ app.post("/api/verify-payment", async (req, res) => {
       await createNotification(
         booking.customer_id,
         "Payment Reference Submitted",
-        `Payment reference for booking #${booking.id} was submitted and is waiting for admin verification.`
+        `Payment reference for booking #${booking.id} was submitted for ${paymentStage} payment and is waiting for admin verification.`
       );
 
       return res.json({
         message:
           "Payment reference submitted. Admin will verify the booking ID and reference number before confirming payment.",
         booking_id: booking.id,
-        payment_status: "pending_verification",
+        payment_stage: paymentStage,
+        payment_status:
+          paymentStage === "reserve"
+            ? "reserve_pending_verification"
+            : paymentStage === "final"
+            ? "final_pending_verification"
+            : "pending_verification",
       });
     }
 
@@ -1676,11 +1834,16 @@ app.post("/api/verify-payment", async (req, res) => {
       return res.status(401).json({ message: "Invalid admin token." });
     }
 
-    const storedReferenceKey = normalizePaymentReference(payment.payment_reference_id);
+    const storedReferenceKey =
+      paymentStage === "reserve"
+        ? normalizePaymentReference(payment.reserve_payment_reference_id)
+        : paymentStage === "final"
+        ? normalizePaymentReference(payment.final_payment_reference_id)
+        : normalizePaymentReference(payment.payment_reference_id);
     if (!storedReferenceKey) {
       return res.status(409).json({
         message:
-          "No payment reference has been submitted by the customer for this booking ID.",
+          `No ${paymentStage} payment reference has been submitted by the customer for this booking ID.`,
       });
     }
     if (storedReferenceKey !== paymentReferenceKey) {
@@ -1690,18 +1853,82 @@ app.post("/api/verify-payment", async (req, res) => {
       });
     }
 
+    if (paymentStage === "reserve") {
+      const finalQr = await createPaymentQr(
+        booking.remaining_amount || payment.remaining_amount || 0,
+        booking.id,
+        "Remaining Booking"
+      );
+      const verifiedAt = nowIso();
+
+      await Promise.all([
+        collection("bookings").updateOne(
+          { id: booking.id },
+          {
+            $set: {
+              reserve_paid: true,
+              reserve_paid_at: verifiedAt,
+              status: "reserved",
+              updated_at: verifiedAt,
+            },
+          }
+        ),
+        collection("payments").updateOne(
+          { booking_id: booking.id },
+          {
+            $set: {
+              status: "pending",
+              payment_method: "manual",
+              current_payment_stage: "final",
+              amount: booking.remaining_amount || payment.remaining_amount || 0,
+              qr_code: finalQr,
+              reserve_payment_verified_at: verifiedAt,
+              payment_reference_id: null,
+              reference_submitted_at: null,
+            },
+            $unset: {
+              payment_reference_key: "",
+            },
+          }
+        ),
+      ]);
+
+      await createNotification(
+        booking.customer_id,
+        "Reservation Confirmed",
+        `Your 10% reserve payment for booking #${booking.id} was verified. Pay the remaining 90% before pickup.`
+      );
+
+      return res.json({
+        message:
+          "✅ Reserve payment verified. Booking is reserved and remaining 90% payment is now pending.",
+        booking_id: booking.id,
+        payment_stage: "reserve",
+        next_payment_stage: "final",
+        amount_due: booking.remaining_amount || payment.remaining_amount || 0,
+        remaining_amount: booking.remaining_amount || payment.remaining_amount || 0,
+        final_payment_qr: finalQr,
+        payment_qr: finalQr,
+      });
+    }
+
     const result = await markBookingPaid({
       bookingId: booking.id,
       paymentPatch: {
         payment_reference_id: paymentReference,
         payment_reference_key: paymentReferenceKey,
+        final_payment_verified_at: paymentStage === "final" ? nowIso() : payment.final_payment_verified_at,
         payment_method: "manual",
+        current_payment_stage: "complete",
       },
       bookingStatus: "confirmed",
     });
 
     res.json({
       message: "✅ Payment verified and booking confirmed!",
+      payment_stage: paymentStage,
+      next_payment_stage: "complete",
+      payment_status: "paid",
       collection_qr: result.payment.collection_qr,
       return_qr: null,
       booking_details: {

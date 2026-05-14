@@ -715,7 +715,7 @@ async function initBookPage() {
     }
 
     event.preventDefault();
-    await submitCarBooking(form);
+    await submitCarBooking(form, event.submitter);
   });
 
   await loadBookPageData();
@@ -876,7 +876,8 @@ function buildCarCardMarkup(car) {
             <input type="hidden" data-end-date value="" />
           </label>
           <div class="card-actions" style="grid-column: 1 / -1;">
-            <button class="button button-primary" type="submit">Reserve and Pay</button>
+            <button class="button button-primary" type="submit" data-payment-plan="reserve">Reserve 10%</button>
+            <button class="button button-secondary" type="submit" data-payment-plan="full">Pay full amount</button>
             <button class="button button-secondary" type="button" data-action="view-car-availability" data-car-id="${Number(car.id)}">View booked dates</button>
           </div>
         </form>
@@ -897,12 +898,13 @@ function getCarMediaMarkup(car) {
   return `<div class="vehicle-placeholder">${shortLabel}</div>`;
 }
 
-async function submitCarBooking(form) {
+async function submitCarBooking(form, submitter = null) {
   const carId = Number(form.dataset.carForm);
   const car = pageState.cars.find((item) => Number(item.id) === carId);
   const previousStart = form.querySelector("[data-start-date]")?.value || "";
   const previousEnd = form.querySelector("[data-end-date]")?.value || "";
   const submitBtn = form.querySelector('button[type="submit"]');
+  const paymentPlan = submitter?.dataset?.paymentPlan === "full" ? "full" : "reserve";
 
   if (!car) {
     showToast("That car is no longer available in the current list.", "error");
@@ -938,7 +940,7 @@ async function submitCarBooking(form) {
     return;
   }
 
-  setButtonBusy(submitBtn, true, "Reserving...");
+  setButtonBusy(submitter || submitBtn, true, paymentPlan === "reserve" ? "Reserving..." : "Booking...");
 
   try {
     const result = await fetchJson("/api/book", {
@@ -948,6 +950,7 @@ async function submitCarBooking(form) {
         customer_id: readUserSession().customerId,
         start_date: start,
         end_date: end,
+        payment_plan: paymentPlan,
       }),
     });
 
@@ -961,6 +964,10 @@ async function submitCarBooking(form) {
       start_date: start,
       end_date: end,
       amount: result.total,
+      amount_due: result.amount_due,
+      payment_plan: result.payment_plan,
+      reserve_amount: result.reserve_amount,
+      remaining_amount: result.remaining_amount,
       paid: false,
       verified: false,
       status: "pending",
@@ -968,13 +975,18 @@ async function submitCarBooking(form) {
     };
 
     rememberBooking(draftBooking);
-    showToast("Booking created. Finish payment now or later from your booking center.", "success");
+    showToast(
+      paymentPlan === "reserve"
+        ? "Reservation created. Pay 10% now to hold the car."
+        : "Booking created. Finish payment now or later from your booking center.",
+      "success"
+    );
     await loadBookPageData();
     openPaymentModal(draftBooking, result.payment_qr);
   } catch (error) {
     showToast(error.message || "Booking failed.", "error");
   } finally {
-    setButtonBusy(submitBtn, false);
+    setButtonBusy(submitter || submitBtn, false);
   }
 }
 
@@ -1519,7 +1531,17 @@ async function startPaymentFlow(booking) {
       }),
     });
 
-    openPaymentModal(booking, result.qr);
+    openPaymentModal(
+      {
+        ...booking,
+        amount_due: result.amount,
+        payment_plan: result.payment_plan || booking.payment_plan,
+        current_payment_stage: result.current_payment_stage || booking.current_payment_stage,
+        reserve_amount: result.reserve_amount ?? booking.reserve_amount,
+        remaining_amount: result.remaining_amount ?? booking.remaining_amount,
+      },
+      result.qr
+    );
   } catch (error) {
     showToast(error.message || "Could not load the payment QR.", "error");
   }
@@ -1527,6 +1549,20 @@ async function startPaymentFlow(booking) {
 
 function openPaymentModal(booking, qr) {
   const bookingId = getBookingId(booking);
+  const paymentStage = String(booking.current_payment_stage || (booking.payment_plan === "reserve" ? "reserve" : "full"));
+  const amountDue = Number(booking.amount_due || booking.amount || 0);
+  const paymentLabel =
+    paymentStage === "reserve"
+      ? "Reserve amount"
+      : paymentStage === "final"
+      ? "Remaining amount"
+      : "Amount";
+  const paymentCopy =
+    paymentStage === "reserve"
+      ? "Pay 10% now to reserve the car. Admin will verify this reference, then the remaining 90% payment will open before pickup."
+      : paymentStage === "final"
+      ? "Pay the remaining 90% and submit the reference. Admin must match it before pickup QR access is enabled."
+      : "Scan the QR to pay, then paste the payment reference. Admin will match this reference with your booking before confirming payment.";
   const content = document.createElement("div");
   content.className = "stack-list";
   content.innerHTML = `
@@ -1540,13 +1576,13 @@ function openPaymentModal(booking, qr) {
         <strong>${formatDuration(booking.start_date, booking.end_date)}</strong>
       </div>
       <div>
-        <span>Amount</span>
-        <strong>${formatCurrency(booking.amount || 0)}</strong>
+        <span>${paymentLabel}</span>
+        <strong>${formatCurrency(amountDue)}</strong>
       </div>
     </div>
     <article class="qr-card">
       <img src="${qr}" alt="Payment QR" />
-      <p class="detail-note">Scan the QR to pay, then paste the payment reference. Admin will match this reference with your booking before confirming payment.</p>
+      <p class="detail-note">${escapeHtml(paymentCopy)}</p>
     </article>
     <label class="field-block">
       <span>Payment reference ID</span>
@@ -1829,6 +1865,8 @@ function buildBookingCardMarkup(booking) {
 
   if (booking.paid) {
     badges.push(statusBadge("Paid", "success"));
+  } else if (booking.reserve_paid) {
+    badges.push(statusBadge("Reserved 10%", "success"));
   } else if (!isCancelled(booking)) {
     badges.push(statusBadge("Awaiting payment", "warning"));
   }
@@ -1917,6 +1955,12 @@ function buildBookingSummary(booking) {
   }
 
   if (!booking.paid) {
+    if (booking.payment_plan === "reserve" && booking.reserve_paid) {
+      return "Your 10% reserve payment is verified. Pay the remaining 90% and submit the reference so admin can confirm the booking before pickup.";
+    }
+    if (booking.payment_plan === "reserve") {
+      return "Reservation is waiting for the 10% payment reference to be verified by admin. Missed pickup reservations are cancelled without refund.";
+    }
     return "Payment is still pending. Add your payment reference to confirm the booking and unlock the collection and return QR passes.";
   }
 

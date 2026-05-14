@@ -1213,10 +1213,35 @@ async function verifyPayment(bookingId, paymentReference) {
         payment_reference_id: paymentReference,
       }),
     });
-    setVerificationResult(
-      result.message || "Booking ID and payment reference matched. Payment verified successfully.",
-      "success"
-    );
+    const message =
+      result.message || "Booking ID and payment reference matched. Payment verified successfully.";
+    const remainingQr = result.final_payment_qr || result.payment_qr;
+    if (remainingQr && result.next_payment_stage === "final") {
+      setVerificationResultMarkup(
+        `
+          <div class="stack-list">
+            <p>${escapeHtml(message)}</p>
+            <div class="meta-grid">
+              <div>
+                <span>Booking</span>
+                <strong>#${escapeHtml(result.booking_id || bookingId)}</strong>
+              </div>
+              <div>
+                <span>Remaining amount</span>
+                <strong>${formatCurrency(result.remaining_amount || result.amount_due)}</strong>
+              </div>
+            </div>
+            <article class="qr-card">
+              <h4>Remaining payment QR</h4>
+              <img src="${remainingQr}" alt="Remaining payment QR" />
+            </article>
+          </div>
+        `,
+        "success"
+      );
+    } else {
+      setVerificationResult(message, "success");
+    }
     showToast("Payment verification completed.", "success");
     await refreshDashboard();
   } catch (error) {
@@ -1227,6 +1252,14 @@ async function verifyPayment(bookingId, paymentReference) {
 
 function setVerificationResult(message, tone) {
   dom.paymentVerificationResult.textContent = message;
+  dom.paymentVerificationResult.classList.remove("success", "error");
+  if (tone) {
+    dom.paymentVerificationResult.classList.add(tone);
+  }
+}
+
+function setVerificationResultMarkup(markup, tone) {
+  dom.paymentVerificationResult.innerHTML = markup;
   dom.paymentVerificationResult.classList.remove("success", "error");
   if (tone) {
     dom.paymentVerificationResult.classList.add(tone);
