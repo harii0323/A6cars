@@ -199,19 +199,26 @@ async function runTests() {
   const adminUnauth = await client.get('/api/bookings/all');
   assert(adminUnauth.status === 401, 'GET /api/bookings/all unauthenticated returns 401');
 
-  const jwt = require('jsonwebtoken');
-  const adminToken = jwt.sign(
-    { email: process.env.ADMIN_EMAIL || 'karikeharikrishna@gmail.com' },
-    process.env.JWT_SECRET || 'dev_secret',
-    { expiresIn: '2h' }
-  );
-  assert(Boolean(adminToken), 'Admin JWT generated with valid secret');
+  // Test admin login endpoint with wrong password
+  const badLoginRes = await client.post('/api/admin/login', {
+    email: process.env.ADMIN_EMAIL || 'karikeharikrishna@gmail.com',
+    password: 'wrong_password'
+  });
+  assert(badLoginRes.status === 401, 'POST /api/admin/login with wrong password returns 401');
+
+  // Test admin login endpoint with correct credentials
+  const adminLoginRes = await client.post('/api/admin/login', {
+    email: process.env.ADMIN_EMAIL || 'karikeharikrishna@gmail.com',
+    password: process.env.ADMIN_PASS || 'Anu'
+  });
+  assert(adminLoginRes.status === 200 && adminLoginRes.data.token, 'POST /api/admin/login with valid credentials returns 200 and token');
   
+  const adminToken = adminLoginRes.data?.token;
   if (adminToken) {
     const adminBookingsRes = await client.get('/api/bookings/all', {
       headers: { Authorization: `Bearer ${adminToken}` }
     });
-    assert(adminBookingsRes.status === 200 && Array.isArray(adminBookingsRes.data), 'GET /api/bookings/all with admin token returns 200');
+    assert(adminBookingsRes.status === 200 && Array.isArray(adminBookingsRes.data), 'GET /api/bookings/all with returned admin token returns 200');
   }
 
   console.log('\n' + '='.repeat(70));

@@ -392,18 +392,7 @@ function resolveAdminAuthUrl() {
     return String(window.ADMIN_AUTH_URL).replace(/\/$/, "");
   }
 
-  const host = window.location.hostname;
-  const protocol = window.location.protocol;
-
-  if (host === "localhost" || host === "127.0.0.1") {
-    return "http://localhost:10001";
-  }
-
-  if (host.includes("onrender.com")) {
-    return "https://a6cars-admin-login.onrender.com";
-  }
-
-  return `${protocol}//admin-login.${host}`;
+  return resolveBackendUrl();
 }
 
 function api(path) {
