@@ -31,6 +31,8 @@ const pageState = {
   },
 };
 
+const PENDING_BOOKING_KEY = "pendingBookingContext";
+
 const dom = {};
 let siteNavMediaQuery = null;
 let voiceAssistantEventsBound = false;
@@ -326,6 +328,57 @@ function ensureUserSession() {
   return false;
 }
 
+function getPendingBookingContext() {
+  const raw = sessionStorage.getItem(PENDING_BOOKING_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const context = JSON.parse(raw);
+    return context && Number(context.carId) ? context : null;
+  } catch (error) {
+    console.warn("Stored booking context is invalid:", error);
+    sessionStorage.removeItem(PENDING_BOOKING_KEY);
+    return null;
+  }
+}
+
+function savePendingBookingContext(context) {
+  sessionStorage.setItem(
+    PENDING_BOOKING_KEY,
+    JSON.stringify({
+      ...context,
+      createdAt: new Date().toISOString(),
+      returnPath: "/book.html",
+    })
+  );
+}
+
+function clearPendingBookingContext() {
+  sessionStorage.removeItem(PENDING_BOOKING_KEY);
+}
+
+function markPendingBookingAuthCancelled() {
+  const pendingBooking = getPendingBookingContext();
+  if (!pendingBooking) {
+    return;
+  }
+
+  savePendingBookingContext({
+    ...pendingBooking,
+    continueAfterAuth: false,
+  });
+}
+
+function getPostAuthRedirect() {
+  const pendingBooking = getPendingBookingContext();
+  if (pendingBooking?.returnPath) {
+    return pendingBooking.returnPath;
+  }
+  return sessionStorage.getItem("postLoginRedirect") || "/home.html";
+}
+
 function logoutAndRedirect() {
   clearUserSession();
   clearAdminSession();
@@ -363,12 +416,13 @@ function renderNavigation() {
   } else {
     links.push(
       navLink("/index.html", "Overview", page === "landing"),
+      navLink("/book.html", "Browse Cars", page === "book"),
       navLink("/login.html", "Sign In", page === "login"),
       navLink("/register.html", "Create Account", page === "register")
     );
     actions = `
       <a class="button button-secondary" href="/admin.html">Admin</a>
-      <a class="button button-primary" href="/register.html">Start Booking</a>
+      <a class="button button-primary" href="/book.html">Start Booking</a>
     `;
   }
 
@@ -467,16 +521,18 @@ function buildLandingActions() {
   }
 
   return `
-    <a class="button button-primary" href="/register.html">Create Your Account</a>
+    <a class="button button-primary" href="/book.html">Browse Cars</a>
     <a class="button button-warm" href="/login.html">Sign In</a>
   `;
 }
 
 async function initLoginPage() {
   if (hasUserSession()) {
-    window.location.replace("/home.html");
+    window.location.replace(getPostAuthRedirect());
     return;
   }
+
+  renderAuthBookingNotice("login");
 
   dom.loginForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -503,7 +559,7 @@ async function initLoginPage() {
       setUserSession(result);
       showToast(result.message || "Login successful.", "success");
 
-      const redirectTarget = sessionStorage.getItem("postLoginRedirect") || "/home.html";
+      const redirectTarget = getPostAuthRedirect();
       sessionStorage.removeItem("postLoginRedirect");
       window.location.href = redirectTarget;
     } catch (error) {
@@ -516,9 +572,11 @@ async function initLoginPage() {
 
 async function initRegisterPage() {
   if (hasUserSession()) {
-    window.location.replace("/home.html");
+    window.location.replace(getPostAuthRedirect());
     return;
   }
+
+  renderAuthBookingNotice("register");
 
   dom.registerForm?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -545,10 +603,21 @@ async function initRegisterPage() {
         body: JSON.stringify(payload),
       });
 
-      setFeedback(dom.registerFeedback, result.message || "Registration successful. Redirecting to sign in...", "success");
-      showToast("Account created. You can sign in now.", "success");
+      if (result.token && result.customer_id) {
+        clearAdminSession();
+        setUserSession(result);
+      }
+
+      setFeedback(dom.registerFeedback, result.message || "Registration successful.", "success");
+      showToast(result.token ? "Account created. Continuing your booking." : "Account created. You can sign in now.", "success");
       window.setTimeout(() => {
-        window.location.href = "/login.html";
+        if (result.token && result.customer_id) {
+          const redirectTarget = getPostAuthRedirect();
+          sessionStorage.removeItem("postLoginRedirect");
+          window.location.href = redirectTarget;
+        } else {
+          window.location.href = "/login.html";
+        }
       }, 900);
     } catch (error) {
       setFeedback(dom.registerFeedback, error.message || "Registration failed.", "error");
@@ -556,6 +625,38 @@ async function initRegisterPage() {
       setButtonBusy(submitBtn, false);
     }
   });
+}
+
+function renderAuthBookingNotice(mode) {
+  const pendingBooking = getPendingBookingContext();
+  if (!pendingBooking) {
+    return;
+  }
+
+  const formCard = document.querySelector(".auth-form-card");
+  if (!formCard || formCard.querySelector(".auth-context-note")) {
+    return;
+  }
+
+  const carName = pendingBooking.carLabel || "your selected car";
+  const dateRange =
+    pendingBooking.startDate && pendingBooking.endDate
+      ? `${formatDate(pendingBooking.startDate)} to ${formatDate(pendingBooking.endDate)}`
+      : "your selected dates";
+  const verb = mode === "register" ? "Create an account" : "Sign in";
+  const alternateLink =
+    mode === "register"
+      ? '<a href="/login.html"><strong>Sign in instead</strong></a>'
+      : '<a href="/register.html"><strong>Create an account instead</strong></a>';
+
+  const note = document.createElement("div");
+  note.className = "auth-context-note";
+  note.innerHTML = `
+    <strong>Authentication is required to continue booking.</strong>
+    <span>${escapeHtml(verb)} to keep booking ${escapeHtml(carName)} for ${escapeHtml(dateRange)}. Your car, dates, and payment choice are saved.</span>
+    <span>${alternateLink} or <a href="/book.html?authCancelled=1"><strong>return to the selected car</strong></a>.</span>
+  `;
+  formCard.insertBefore(note, formCard.firstChild);
 }
 
 async function initHomePage() {
@@ -694,8 +795,9 @@ function buildHomePriorityCard() {
 }
 
 async function initBookPage() {
-  if (!ensureUserSession()) {
-    return;
+  if (new URLSearchParams(window.location.search).get("authCancelled") === "1") {
+    markPendingBookingAuthCancelled();
+    window.history.replaceState({}, "", "/book.html");
   }
 
   dom.carSearchInput?.addEventListener("input", (event) => {
@@ -720,6 +822,7 @@ async function initBookPage() {
 
   await loadBookPageData();
   restoreStoredVoiceBookingIntent();
+  await restorePendingBookingContextAfterAuth();
 }
 
 async function loadBookPageData() {
@@ -727,7 +830,7 @@ async function loadBookPageData() {
   const customerId = readUserSession().customerId;
   const [cars, discounts] = await Promise.all([
     fetchJson("/api/cars"),
-    fetchJson(`/api/discounts/${customerId}`).catch(() => []),
+    hasUserSession() ? fetchJson(`/api/discounts/${customerId}`).catch(() => []) : Promise.resolve([]),
   ]);
 
   pageState.cars = Array.isArray(cars) ? cars : [];
@@ -899,6 +1002,10 @@ function getCarMediaMarkup(car) {
 }
 
 async function submitCarBooking(form, submitter = null) {
+  if (form.dataset.bookingSubmitting === "true") {
+    return;
+  }
+
   const carId = Number(form.dataset.carForm);
   const car = pageState.cars.find((item) => Number(item.id) === carId);
   const previousStart = form.querySelector("[data-start-date]")?.value || "";
@@ -940,6 +1047,23 @@ async function submitCarBooking(form, submitter = null) {
     return;
   }
 
+  if (!hasUserSession()) {
+    savePendingBookingContext({
+      carId,
+      carLabel: `${car.brand || "A6"} ${car.model || "Vehicle"}`.trim(),
+      location: car.location || "",
+      startDate: start,
+      endDate: end,
+      paymentPlan,
+      continueAfterAuth: true,
+    });
+    sessionStorage.setItem("postLoginRedirect", "/book.html");
+    showToast("Sign in or create an account to continue this booking.", "warning");
+    window.location.href = "/login.html?bookingRequired=1";
+    return;
+  }
+
+  form.dataset.bookingSubmitting = "true";
   setButtonBusy(submitter || submitBtn, true, paymentPlan === "reserve" ? "Reserving..." : "Booking...");
 
   try {
@@ -947,7 +1071,6 @@ async function submitCarBooking(form, submitter = null) {
       method: "POST",
       body: JSON.stringify({
         car_id: carId,
-        customer_id: readUserSession().customerId,
         start_date: start,
         end_date: end,
         payment_plan: paymentPlan,
@@ -986,8 +1109,47 @@ async function submitCarBooking(form, submitter = null) {
   } catch (error) {
     showToast(error.message || "Booking failed.", "error");
   } finally {
+    delete form.dataset.bookingSubmitting;
     setButtonBusy(submitter || submitBtn, false);
   }
+}
+
+async function restorePendingBookingContextAfterAuth() {
+  const pendingBooking = getPendingBookingContext();
+  if (!pendingBooking || getPageName() !== "book") {
+    return;
+  }
+
+  const carId = Number(pendingBooking.carId);
+  const form = dom.carGrid?.querySelector(`[data-car-form="${carId}"]`);
+  if (!form) {
+    if (hasUserSession()) {
+      clearPendingBookingContext();
+    }
+    showToast("The selected car is no longer available. Choose another car to continue.", "warning");
+    return;
+  }
+
+  const startInput = form.querySelector("[data-start-date]");
+  const endInput = form.querySelector("[data-end-date]");
+  if (startInput) startInput.value = pendingBooking.startDate || "";
+  if (endInput) endInput.value = pendingBooking.endDate || "";
+  syncBookingFormDates(form, { notify: false });
+  form.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  const submitter =
+    form.querySelector(`[data-payment-plan="${pendingBooking.paymentPlan === "full" ? "full" : "reserve"}"]`) ||
+    form.querySelector('button[type="submit"]');
+
+  const shouldContinue = hasUserSession() && pendingBooking.continueAfterAuth;
+  if (!shouldContinue) {
+    showToast("Your selected car and dates are restored.", "success");
+    return;
+  }
+
+  clearPendingBookingContext();
+  showToast("You are signed in. Continuing your booking now.", "success");
+  await submitCarBooking(form, submitter);
 }
 
 function syncAllBookingForms() {

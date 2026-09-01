@@ -275,7 +275,7 @@ setTimeout(() => {
   
   console.log(`
 1️⃣  Get Admin Token First:
-    POST http://localhost:3000/api/admin/login
+    POST http://localhost:10001/api/admin/login
     {
       "email": "admin@a6cars.com",
       "password": "AdminPass123"

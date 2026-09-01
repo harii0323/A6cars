@@ -20,16 +20,13 @@ const {
 
 const app = express();
 
-const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
-const ADMIN_PASSWORD =
-  process.env.ADMIN_PASSWORD || process.env.ADMIN_PASS;
+const JWT_SECRET = process.env.JWT_SECRET || "dev_secret";
 
 function createQrToken() {
   return crypto.randomBytes(16).toString("hex");
 }
 
-const PORT = process.env.PORT;
+const PORT = process.env.PORT || 10000;
 const OVERDUE_RETURN_CANCELLATION_MESSAGE =
   "car is not yet received yet for that purpose booking has canceled book another car on same dates get 50% off sorry please welcome again😊";
 const MISSED_PICKUP_CANCELLATION_MESSAGE =
@@ -297,6 +294,36 @@ function verifyAdmin(req, res, next) {
     req.admin = decoded;
     next();
   });
+}
+
+async function getAuthenticatedCustomer(req) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+
+  if (!token) {
+    return null;
+  }
+
+  const decoded = jwt.verify(token, JWT_SECRET);
+  const customer = await getCustomerById(decoded.id);
+  if (!customer || String(customer.email).toLowerCase() !== String(decoded.email || "").toLowerCase()) {
+    return null;
+  }
+
+  return customer;
+}
+
+async function verifyCustomer(req, res, next) {
+  try {
+    const customer = await getAuthenticatedCustomer(req);
+    if (!customer) {
+      return res.status(401).json({ message: "Please sign in to continue this booking." });
+    }
+    req.customer = customer;
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: "Invalid or expired customer session." });
+  }
 }
 
 async function nextSequence(name) {
@@ -1145,8 +1172,9 @@ app.post("/api/register", async (req, res) => {
       return res.status(400).json({ message: "Email already registered." });
     }
 
+    const customerId = await nextSequence("customers");
     await collection("customers").insertOne({
-      id: await nextSequence("customers"),
+      id: customerId,
       name: String(name).trim(),
       email: normalizedEmail,
       phone: String(phone).trim(),
@@ -1154,7 +1182,17 @@ app.post("/api/register", async (req, res) => {
       created_at: nowIso(),
     });
 
-    res.json({ message: "Registration successful!" });
+    const token = jwt.sign({ id: customerId, email: normalizedEmail }, JWT_SECRET, {
+      expiresIn: "2h",
+    });
+
+    res.json({
+      message: "Registration successful!",
+      token,
+      customer_id: customerId,
+      name: String(name).trim(),
+      email: normalizedEmail,
+    });
   } catch (error) {
     console.error("Register error:", error);
     res.status(500).json({ message: "Server error during registration." });
@@ -1189,16 +1227,6 @@ app.post("/api/login", async (req, res) => {
     console.error("Login error:", error);
     res.status(500).json({ message: "Login failed." });
   }
-});
-
-app.post("/api/admin/login", (req, res) => {
-  const { email, password } = req.body || {};
-  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-    return res.status(401).json({ message: "Invalid admin credentials" });
-  }
-
-  const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: "2h" });
-  res.json({ message: "Admin login successful", token });
 });
 
 app.post(
@@ -1268,18 +1296,18 @@ app.post("/api/deletecar", verifyAdmin, async (req, res) => {
   }
 });
 
-app.post("/api/book", async (req, res) => {
+app.post("/api/book", verifyCustomer, async (req, res) => {
   const { car_id, customer_id, start_date, end_date, payment_plan = "full" } = req.body || {};
-  if (!car_id || !customer_id || !start_date || !end_date) {
+  if (!car_id || !start_date || !end_date) {
     return res.status(400).json({ message: "Missing booking info." });
+  }
+  if (customer_id && toNumber(customer_id) !== toNumber(req.customer.id)) {
+    return res.status(403).json({ message: "Booking customer does not match the signed-in user." });
   }
   const bookingPaymentPlan = payment_plan === "reserve" ? "reserve" : "full";
 
   try {
-    const [car, customer] = await Promise.all([
-      getCarById(car_id),
-      getCustomerById(customer_id),
-    ]);
+    const [car, customer] = await Promise.all([getCarById(car_id), getCustomerById(req.customer.id)]);
 
     if (!car) {
       return res.status(404).json({ message: "Car not found." });
@@ -1459,8 +1487,12 @@ app.post("/api/book", async (req, res) => {
   }
 });
 
-app.get("/api/mybookings/:customer_id", async (req, res) => {
+app.get("/api/mybookings/:customer_id", verifyCustomer, async (req, res) => {
   try {
+    if (toNumber(req.params.customer_id) !== req.customer.id) {
+      return res.status(403).json({ message: "Bookings do not belong to this customer." });
+    }
+
     await ensureMissedPickupBookingsProcessed();
 
     const bookings = await collection("bookings")
@@ -1491,10 +1523,6 @@ app.get("/api/bookings/:car_id(\\d+)", async (req, res) => {
       id: booking.id,
       start_date: booking.start_date,
       end_date: booking.end_date,
-      amount: booking.amount,
-      status: booking.status,
-      paid: booking.paid,
-      verified: booking.verified,
     }));
 
     res.json(rows);
@@ -1539,8 +1567,12 @@ app.post("/api/bookings/batch", async (req, res) => {
   }
 });
 
-app.get("/api/bookings/status/:customer_id", async (req, res) => {
+app.get("/api/bookings/status/:customer_id", verifyCustomer, async (req, res) => {
   try {
+    if (toNumber(req.params.customer_id) !== req.customer.id) {
+      return res.status(403).json({ message: "Bookings do not belong to this customer." });
+    }
+
     await ensureMissedPickupBookingsProcessed();
 
     const bookings = await collection("bookings")
@@ -1574,8 +1606,12 @@ app.get("/api/bookings/status/:customer_id", async (req, res) => {
   }
 });
 
-app.get("/api/discounts/:customer_id", async (req, res) => {
+app.get("/api/discounts/:customer_id", verifyCustomer, async (req, res) => {
   try {
+    if (toNumber(req.params.customer_id) !== req.customer.id) {
+      return res.status(403).json({ message: "Discounts do not belong to this customer." });
+    }
+
     const discounts = await collection("discounts")
       .find({ customer_id: toNumber(req.params.customer_id), used: false })
       .sort({ created_at: -1, id: -1 })
@@ -1587,8 +1623,12 @@ app.get("/api/discounts/:customer_id", async (req, res) => {
   }
 });
 
-app.get("/api/notifications/:customer_id", async (req, res) => {
+app.get("/api/notifications/:customer_id", verifyCustomer, async (req, res) => {
   try {
+    if (toNumber(req.params.customer_id) !== req.customer.id) {
+      return res.status(403).json({ message: "Notifications do not belong to this customer." });
+    }
+
     await ensureMissedPickupBookingsProcessed();
 
     const notifications = await collection("notifications")
@@ -1603,8 +1643,12 @@ app.get("/api/notifications/:customer_id", async (req, res) => {
   }
 });
 
-app.get("/api/history/:customer_id", async (req, res) => {
+app.get("/api/history/:customer_id", verifyCustomer, async (req, res) => {
   try {
+    if (toNumber(req.params.customer_id) !== req.customer.id) {
+      return res.status(403).json({ message: "History does not belong to this customer." });
+    }
+
     await ensureMissedPickupBookingsProcessed();
 
     const bookings = await collection("bookings")
@@ -1645,6 +1689,10 @@ app.get("/api/payment/status/:booking_id", async (req, res) => {
 
 app.post("/api/payment/confirm", async (req, res) => {
   const { booking_id } = req.body || {};
+  if (!booking_id) {
+    return res.status(400).json({ message: "Missing booking_id." });
+  }
+
   try {
     await ensureMissedPickupBookingsProcessed();
 
@@ -1652,6 +1700,22 @@ app.post("/api/payment/confirm", async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: "Booking not found." });
     }
+
+    const authenticatedCustomer = await getAuthenticatedCustomer(req);
+    const header = req.headers.authorization || "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+    let isAdmin = false;
+    if (token) {
+      try {
+        jwt.verify(token, JWT_SECRET);
+        isAdmin = true;
+      } catch (e) {}
+    }
+
+    if (!isAdmin && (!authenticatedCustomer || authenticatedCustomer.id !== booking.customer_id)) {
+      return res.status(401).json({ message: "Authorization required to confirm payment for this booking." });
+    }
+
     if (booking.status === "cancelled") {
       return res.status(409).json({ message: "This booking has already been cancelled." });
     }
@@ -1684,7 +1748,7 @@ app.post("/api/payment/confirm", async (req, res) => {
   }
 });
 
-app.post("/api/payments/qr", async (req, res) => {
+app.post("/api/payments/qr", verifyCustomer, async (req, res) => {
   const { booking_id } = req.body || {};
   if (!booking_id) {
     return res.status(400).json({ message: "Missing booking_id" });
@@ -1696,6 +1760,9 @@ app.post("/api/payments/qr", async (req, res) => {
     const booking = await getBookingById(booking_id);
     if (!booking) {
       return res.status(404).json({ message: "Booking not found" });
+    }
+    if (booking.customer_id !== req.customer.id) {
+      return res.status(403).json({ message: "Booking does not belong to this customer." });
     }
     if (booking.status === "cancelled") {
       return res.status(409).json({ message: "This booking has already been cancelled." });
@@ -1723,7 +1790,7 @@ app.post("/api/payments/qr", async (req, res) => {
 });
 
 app.post("/api/verify-payment", async (req, res) => {
-  const { booking_id, payment_reference_id, customer_id } = req.body || {};
+  const { booking_id, payment_reference_id, customer_id, admin_email } = req.body || {};
   const paymentReference = String(payment_reference_id || "").trim();
   const paymentReferenceKey = normalizePaymentReference(paymentReference);
   if (!booking_id || !paymentReferenceKey) {
@@ -1736,9 +1803,6 @@ app.post("/api/verify-payment", async (req, res) => {
     const booking = await getBookingById(booking_id);
     if (!booking) {
       return res.status(404).json({ message: "Booking not found." });
-    }
-    if (customer_id && booking.customer_id !== toNumber(customer_id)) {
-      return res.status(403).json({ message: "Booking does not belong to this customer." });
     }
     if (booking.status === "cancelled") {
       return res.status(409).json({ message: "This booking has already been cancelled." });
@@ -1766,7 +1830,20 @@ app.post("/api/verify-payment", async (req, res) => {
       });
     }
 
-    if (customer_id) {
+    const authenticatedCustomer = await getAuthenticatedCustomer(req);
+    const isCustomerSubmission = Boolean(customer_id || (!admin_email && authenticatedCustomer));
+
+    if (isCustomerSubmission) {
+      if (!authenticatedCustomer) {
+        return res.status(401).json({ message: "Please sign in to submit payment for this booking." });
+      }
+      if (authenticatedCustomer.id !== booking.customer_id) {
+        return res.status(403).json({ message: "Booking does not belong to this customer." });
+      }
+      if (customer_id && toNumber(customer_id) !== booking.customer_id) {
+        return res.status(403).json({ message: "Booking does not belong to this customer." });
+      }
+
       const stagePatch =
         paymentStage === "reserve"
           ? {
@@ -2492,8 +2569,17 @@ app.post("/api/cancel-booking", async (req, res) => {
       } catch (error) {
         return res.status(401).json({ message: "Invalid admin token" });
       }
-    } else if (customer_id && booking.customer_id !== toNumber(customer_id)) {
-      return res.status(403).json({ message: "Booking does not belong to this customer." });
+    } else {
+      const authenticatedCustomer = await getAuthenticatedCustomer(req);
+      if (!authenticatedCustomer) {
+        return res.status(401).json({ message: "Please sign in to cancel this booking." });
+      }
+      if (booking.customer_id !== authenticatedCustomer.id) {
+        return res.status(403).json({ message: "Booking does not belong to this customer." });
+      }
+      if (customer_id && booking.customer_id !== toNumber(customer_id)) {
+        return res.status(403).json({ message: "Booking does not belong to this customer." });
+      }
     }
 
     const { refundAmount, refundPercent } = await handleBookingCancellation({

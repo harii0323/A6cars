@@ -1200,6 +1200,27 @@ img {
   margin: 0 0 20px;
 }
 
+.auth-context-note {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(216, 146, 45, 0.36);
+  border-radius: var(--radius-md);
+  background: rgba(216, 146, 45, 0.12);
+  color: var(--ink);
+}
+
+.auth-context-note strong,
+.auth-context-note a {
+  color: var(--ink);
+}
+
+.auth-context-note span {
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
 .feedback {
   display: none;
   margin-top: 12px;

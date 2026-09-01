@@ -387,8 +387,35 @@ function resolveBackendUrl() {
   return `${protocol}//api.${host}`;
 }
 
+function resolveAdminAuthUrl() {
+  if (window.ADMIN_AUTH_URL) {
+    return String(window.ADMIN_AUTH_URL).replace(/\/$/, "");
+  }
+
+  const host = window.location.hostname;
+  const protocol = window.location.protocol;
+
+  if (host === "localhost" || host === "127.0.0.1") {
+    return "http://localhost:10001";
+  }
+
+  if (host.includes("onrender.com")) {
+    return "https://a6cars-admin-login.onrender.com";
+  }
+
+  return `${protocol}//admin-login.${host}`;
+}
+
 function api(path) {
   const base = resolveBackendUrl();
+  if (!path.startsWith("/")) {
+    return `${base}/${path}`;
+  }
+  return `${base}${path}`;
+}
+
+function adminAuthApi(path) {
+  const base = resolveAdminAuthUrl();
   if (!path.startsWith("/")) {
     return `${base}/${path}`;
   }
@@ -486,11 +513,24 @@ async function loginAdmin() {
   }
 
   try {
-    const result = await fetchJson("/api/admin/login", {
-      auth: false,
+    const response = await fetch(adminAuthApi("/api/admin/login"), {
       method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
+    const text = await response.text();
+    let result = {};
+    if (text) {
+      try {
+        result = JSON.parse(text);
+      } catch (error) {
+        result = { message: text };
+      }
+    }
+
+    if (!response.ok) {
+      throw new Error(result.message || `Login failed with status ${response.status}`);
+    }
 
     sessionStorage.setItem("adminToken", result.token || "");
     sessionStorage.setItem("adminLoggedIn", "true");
