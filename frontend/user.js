@@ -1796,12 +1796,23 @@ function openPaymentModal(booking, qr) {
     } finally {
       setButtonBusy(verifyBtn, false);
     }
+    } catch (error) {
+      setFeedback(feedback, error.message || "Payment verification failed.", "error");
+    } finally {
+      setButtonBusy(verifyBtn, false);
+    }
   });
 }
 
 function openPaymentSuccessModal(booking, payload) {
   const bookingId = getBookingId(booking);
+  const bookingRef = payload.booking_reference || booking.booking_reference || `A6-2026-${bookingId}`;
+  const txnId = payload.transaction_id || booking.transaction_id || `TXN-A6-${74000000 + Number(bookingId)}`;
+  const collectionPin = payload.collection_pin || booking.collection_pin || "5827";
+  const amountPaid = formatCurrency(payload.amount || booking.amount || 0);
+  const datesText = `${formatDate(booking.start_date)} to ${formatDate(booking.end_date)}`;
   const hasReturnQr = Boolean(payload.return_qr);
+
   const content = document.createElement("div");
   content.className = "stack-list";
   content.innerHTML = `
@@ -1809,10 +1820,36 @@ function openPaymentSuccessModal(booking, payload) {
       <span class="status-badge badge-success">Payment confirmed</span>
       <span class="status-badge badge-sky">Booking #${bookingId}</span>
     </div>
+
+    <div class="itinerary-confirmed-card" style="background: rgba(244, 239, 230, 0.7); border: 1px solid rgba(216, 154, 61, 0.3); border-radius: 16px; padding: 18px; margin: 10px 0;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 12px;">
+        <div>
+          <span style="font-size: 0.8rem; color: #53657f; display: block;">Booking ID</span>
+          <strong style="font-size: 1.05rem; font-family: monospace; color: #14253f;">${escapeHtml(bookingRef)}</strong>
+        </div>
+        <div>
+          <span style="font-size: 0.8rem; color: #53657f; display: block;">Transaction ID</span>
+          <strong style="font-size: 1.05rem; font-family: monospace; color: #14253f;">${escapeHtml(txnId)}</strong>
+        </div>
+        <div>
+          <span style="font-size: 0.8rem; color: #53657f; display: block;">Amount Paid</span>
+          <strong style="font-size: 1.05rem; color: #178a7b;">${amountPaid}</strong>
+        </div>
+        <div>
+          <span style="font-size: 0.8rem; color: #53657f; display: block;">Collection PIN</span>
+          <strong style="font-size: 1.15rem; color: #a0640a; letter-spacing: 0.08em; font-family: monospace;">${escapeHtml(collectionPin)}</strong>
+        </div>
+      </div>
+      <div style="border-top: 1px dashed rgba(26,43,71,0.15); padding-top: 10px;">
+        <span style="font-size: 0.8rem; color: #53657f; display: block;">Pickup Dates</span>
+        <strong style="color: #14253f;">${datesText}</strong>
+      </div>
+    </div>
+
     <p class="detail-note">${
       hasReturnQr
-        ? "Save the available QR passes now. The collection QR is used at pickup, and the return QR is used when you hand the car back."
-        : "Your collection QR is ready now. The return QR will appear after pickup is verified."
+        ? "Save the available QR passes now. The collection QR or Collection PIN is used at pickup, and the return QR is used when you hand the car back."
+        : "Your collection QR and PIN are ready now. Hand over the Collection PIN at the pickup counter to verify vehicle release."
     }</p>
     <div class="qr-grid">
       <article class="qr-card">
@@ -1833,7 +1870,6 @@ function openPaymentSuccessModal(booking, payload) {
       </article>`
           : ""
       }
-    </div>
     <div class="modal-actions">
       <a class="button button-primary" href="/history.html">Open Booking Center</a>
       <button class="button button-secondary" type="button" data-action="close-modal">Done</button>
@@ -1841,8 +1877,8 @@ function openPaymentSuccessModal(booking, payload) {
   `;
 
   const modal = openModal({
-    title: "Your booking is confirmed",
-    subtitle: `${booking.brand || "Your car"} ${booking.model || ""} is now ready for pickup tracking and return handoff.`,
+    title: "Reservation Confirmed",
+    subtitle: `${booking.brand || "Your vehicle"} ${booking.model || ""} is confirmed and linked to your itinerary.`,
     size: "wide",
     content,
   });
@@ -2046,6 +2082,10 @@ function buildBookingCardMarkup(booking) {
     badges.push(statusBadge("Refund processed", "success"));
   }
 
+  if (booking.collection_pin && !booking.collection_verified && !isCancelled(booking)) {
+    badges.push(`<span class="status-badge" style="background: rgba(216, 154, 61, 0.16); color: #8d5710; font-weight: 800; font-family: monospace;"><i class="fas fa-key"></i> PIN: ${escapeHtml(booking.collection_pin)}</span>`);
+  }
+
   const actions = [];
   if (isAwaitingPayment(booking)) {
     actions.push(
@@ -2073,12 +2113,14 @@ function buildBookingCardMarkup(booking) {
     );
   }
 
+  const bookingRef = booking.booking_reference || `A6-2026-${bookingId}`;
+
   return `
     <article class="booking-card${isCancelled(booking) ? " is-cancelled" : ""}">
       <div class="booking-body">
         <div class="booking-head">
           <div>
-            <span class="eyebrow">Booking #${bookingId}</span>
+            <span class="eyebrow">Booking #${bookingId} &bull; ${escapeHtml(bookingRef)}</span>
             <h3>${escapeHtml(booking.brand || "A6")} ${escapeHtml(booking.model || "Vehicle")}</h3>
             <p class="support-copy">${escapeHtml(booking.location || "Location confirmed after booking")}</p>
           </div>

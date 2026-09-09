@@ -221,6 +221,68 @@ async function runTests() {
     assert(adminBookingsRes.status === 200 && Array.isArray(adminBookingsRes.data), 'GET /api/bookings/all with returned admin token returns 200');
   }
 
+  // 9. Testing Collection PIN Verification (AI Travel Planner Integration)
+  console.log('\n[9] Testing AI Travel Planner Collection PIN Verification...');
+  const futureYear = 2030 + Math.floor(Math.random() * 40);
+  const bookCRes = await client.post('/api/book', {
+    car_id: testCar ? testCar.id : 1,
+    customer_id: userAId,
+    start_date: `${futureYear}-06-10`,
+    end_date: `${futureYear}-06-12`,
+    payment_plan: 'full'
+  }, {
+    headers: { Authorization: `Bearer ${userAToken}` }
+  });
+  assert(bookCRes.status === 200 && bookCRes.data.collection_pin, 'POST /api/book generates 4-digit Collection PIN');
+  assert(bookCRes.data?.booking_reference, 'POST /api/book returns formatted Booking Reference (e.g. A6-2026-XX)');
+
+  const bookingCId = bookCRes.data?.booking_id;
+  const bookingCRef = bookCRes.data?.booking_reference;
+  const collectionPin = bookCRes.data?.collection_pin;
+
+  if (bookingCId && adminToken) {
+    // Confirm payment for booking C
+    await client.post('/api/payment/confirm', {
+      booking_id: bookingCId
+    }, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+
+    // Test verify-pin unauthenticated
+    const pinUnauth = await client.post('/api/admin/verify-pin', {
+      booking_id: bookingCRef,
+      collection_pin: collectionPin
+    });
+    assert(pinUnauth.status === 401, 'POST /api/admin/verify-pin unauthenticated returns 401');
+
+    // Test verify-pin with wrong PIN
+    const pinWrong = await client.post('/api/admin/verify-pin', {
+      booking_id: bookingCRef,
+      collection_pin: '0000'
+    }, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    assert(pinWrong.status === 401, 'POST /api/admin/verify-pin with wrong PIN returns 401');
+
+    // Test verify-pin with correct PIN and formatted Booking Reference (A6-2026-XX)
+    const pinSuccess = await client.post('/api/admin/verify-pin', {
+      booking_id: bookingCRef,
+      collection_pin: collectionPin
+    }, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    assert(pinSuccess.status === 200 && pinSuccess.data.qr_verification?.booking?.collection_verified, 'POST /api/admin/verify-pin with valid PIN and Booking ID marks vehicle collected');
+
+    // Test repeat verification
+    const pinRepeat = await client.post('/api/admin/verify-pin', {
+      booking_id: bookingCId,
+      collection_pin: collectionPin
+    }, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    assert(pinRepeat.status === 200, 'POST /api/admin/verify-pin for already collected vehicle returns 200');
+  }
+
   console.log('\n' + '='.repeat(70));
   console.log(`📊 TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);
   console.log('='.repeat(70));

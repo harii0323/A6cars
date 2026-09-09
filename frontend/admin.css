@@ -977,20 +977,67 @@ button {
 
 .handoff-tools {
   display: grid;
-  grid-template-columns: minmax(320px, 0.95fr) minmax(0, 1.05fr);
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 18px;
   margin: 18px 0;
 }
 
+.handoff-pin-box,
 .handoff-scanner {
   display: grid;
   gap: 14px;
-  padding: 18px;
+  padding: 22px;
   border-radius: 22px;
   border: 1px solid rgba(20, 37, 63, 0.08);
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(244, 247, 251, 0.98)),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(244, 247, 251, 0.98)),
     rgba(20, 37, 63, 0.05);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+}
+
+.handoff-pin-box h4,
+.handoff-scanner h4 {
+  margin: 4px 0;
+  font-size: 1.15rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pin-inputs-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.pin-badge-display {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(216, 154, 61, 0.15);
+  color: #a0640a;
+  border: 1px solid rgba(216, 154, 61, 0.3);
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-weight: 800;
+  font-family: monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.05em;
+}
+
+.booking-ref-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(60, 119, 209, 0.12);
+  color: #1f57ae;
+  border: 1px solid rgba(60, 119, 209, 0.25);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-family: monospace;
+  font-size: 0.85rem;
 }
 
 #handoffScannerVideo {

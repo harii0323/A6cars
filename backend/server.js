@@ -99,6 +99,30 @@ function roundMoney(value) {
   return Number(toNumber(value).toFixed(2));
 }
 
+function generateCollectionPin(bookingId) {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function formatBookingReference(bookingId, year = null) {
+  const y = year || new Date().getFullYear();
+  return `A6-${y}-${bookingId}`;
+}
+
+function generateTransactionId(bookingId) {
+  const rand = Math.floor(10000000 + Math.random() * 90000000);
+  return `TXN-A6-${rand}`;
+}
+
+function parseBookingId(rawId) {
+  if (rawId == null) return 0;
+  const str = String(rawId).trim();
+  const match = str.match(/(\d+)$/);
+  if (match) {
+    return toNumber(match[1]);
+  }
+  return toNumber(str);
+}
+
 function calculateReserveBreakdown(totalAmount) {
   const total = roundMoney(totalAmount);
   const reserveAmount = roundMoney(total * 0.1);
@@ -398,7 +422,21 @@ async function getCarById(id) {
 }
 
 async function getBookingById(id) {
-  return collection("bookings").findOne({ id: toNumber(id) });
+  const parsedId = parseBookingId(id);
+  if (parsedId) {
+    const doc = await collection("bookings").findOne({ id: parsedId });
+    if (doc) return doc;
+  }
+  const strId = String(id || "").trim();
+  if (strId) {
+    return collection("bookings").findOne({
+      $or: [
+        { booking_reference: { $regex: `^${escapeRegExp(strId)}$`, $options: "i" } },
+        { id: strId },
+      ],
+    });
+  }
+  return null;
 }
 
 async function getPaymentByBookingId(bookingId) {
@@ -580,7 +618,18 @@ async function markBookingPaid({
   }
 
   const qrToken = booking.qr_token || createQrToken();
-  const bookingForQr = { ...booking, qr_token: qrToken };
+  const collectionPin = booking.collection_pin || payment.collection_pin || generateCollectionPin(booking.id);
+  const startYear = booking.start_date ? new Date(booking.start_date).getFullYear() : 2026;
+  const bookingReference = booking.booking_reference || formatBookingReference(booking.id, startYear);
+  const transactionId = booking.transaction_id || payment.transaction_id || generateTransactionId(booking.id);
+
+  const bookingForQr = {
+    ...booking,
+    qr_token: qrToken,
+    collection_pin: collectionPin,
+    booking_reference: bookingReference,
+    transaction_id: transactionId,
+  };
   const qrCodes = await generateCollectionAndReturnQr(bookingForQr, customer, car);
 
   await collection("bookings").updateOne(
@@ -589,6 +638,9 @@ async function markBookingPaid({
       $set: {
         paid: true,
         qr_token: qrToken,
+        collection_pin: collectionPin,
+        booking_reference: bookingReference,
+        transaction_id: transactionId,
         status: bookingStatus,
         updated_at: nowIso(),
       },
@@ -602,6 +654,9 @@ async function markBookingPaid({
         status: "paid",
         processed_at: nowIso(),
         payment_method: paymentPatch.payment_method || payment.payment_method || "manual",
+        collection_pin: collectionPin,
+        booking_reference: bookingReference,
+        transaction_id: transactionId,
         collection_qr: qrCodes.collection_qr,
         return_qr: qrCodes.return_qr,
         ...paymentPatch,
@@ -705,9 +760,17 @@ async function buildBookingView(booking) {
     : payment?.collection_qr || null;
   const returnQr = isReturnQrExpired(booking) ? null : payment?.return_qr || null;
 
+  const startYear = booking.start_date ? new Date(booking.start_date).getFullYear() : 2026;
+  const bookingReference = booking.booking_reference || formatBookingReference(booking.id, startYear);
+  const collectionPin = booking.collection_pin || payment?.collection_pin || String(1000 + (booking.id * 137) % 9000);
+  const transactionId = booking.transaction_id || payment?.transaction_id || `TXN-A6-${74000000 + booking.id}`;
+
   return {
     ...booking,
     booking_id: booking.id,
+    booking_reference: bookingReference,
+    collection_pin: collectionPin,
+    transaction_id: transactionId,
     brand: car?.brand || null,
     model: car?.model || null,
     location: car?.location || null,
@@ -1413,6 +1476,10 @@ app.post("/api/book", verifyCustomer, async (req, res) => {
 
     const bookingId = await nextSequence("bookings");
     const qrToken = createQrToken();
+    const collectionPin = generateCollectionPin(bookingId);
+    const startYear = parseDate(start_date)?.getFullYear() || 2026;
+    const bookingReference = formatBookingReference(bookingId, startYear);
+    const transactionId = generateTransactionId(bookingId);
     const reserveBreakdown = calculateReserveBreakdown(total);
     const initialPaymentAmount =
       bookingPaymentPlan === "reserve" ? reserveBreakdown.reserveAmount : total;
@@ -1424,6 +1491,9 @@ app.post("/api/book", verifyCustomer, async (req, res) => {
 
     await collection("bookings").insertOne({
       id: bookingId,
+      booking_reference: bookingReference,
+      collection_pin: collectionPin,
+      transaction_id: transactionId,
       car_id: car.id,
       customer_id: customer.id,
       qr_token: qrToken,
@@ -1451,6 +1521,9 @@ app.post("/api/book", verifyCustomer, async (req, res) => {
     await collection("payments").insertOne({
       id: await nextSequence("payments"),
       booking_id: bookingId,
+      booking_reference: bookingReference,
+      collection_pin: collectionPin,
+      transaction_id: transactionId,
       amount: initialPaymentAmount,
       total_amount: total,
       reserve_amount: bookingPaymentPlan === "reserve" ? reserveBreakdown.reserveAmount : null,
@@ -1498,12 +1571,17 @@ app.post("/api/book", verifyCustomer, async (req, res) => {
     res.json({
       message: "Booking created successfully",
       booking_id: bookingId,
+      booking_reference: bookingReference,
+      transaction_id: transactionId,
+      collection_pin: collectionPin,
       total,
       payment_plan: bookingPaymentPlan,
-      amount_due: initialPaymentAmount,
       reserve_amount: bookingPaymentPlan === "reserve" ? reserveBreakdown.reserveAmount : null,
       remaining_amount: bookingPaymentPlan === "reserve" ? reserveBreakdown.remainingAmount : null,
+      initial_payment_amount: initialPaymentAmount,
+      amount_due: initialPaymentAmount,
       payment_qr: paymentQR,
+      qr_code: paymentQR,
       qr_expires_in: 180,
     });
   } catch (error) {
@@ -1760,8 +1838,14 @@ app.post("/api/payment/confirm", async (req, res) => {
       message: "Payment confirmed ✅",
       collection_qr: result.payment.collection_qr,
       return_qr: null,
+      booking_reference: result.booking.booking_reference || formatBookingReference(result.booking.id),
+      transaction_id: result.booking.transaction_id || result.payment.transaction_id,
+      collection_pin: result.booking.collection_pin || result.payment.collection_pin,
       booking_details: {
         booking_id: result.booking.id,
+        booking_reference: result.booking.booking_reference || formatBookingReference(result.booking.id),
+        transaction_id: result.booking.transaction_id || result.payment.transaction_id,
+        collection_pin: result.booking.collection_pin || result.payment.collection_pin,
         customer_name: result.customer.name,
         car: `${result.car.brand} ${result.car.model}`,
         amount: result.booking.amount,
@@ -2033,8 +2117,14 @@ app.post("/api/verify-payment", async (req, res) => {
       payment_status: "paid",
       collection_qr: result.payment.collection_qr,
       return_qr: null,
+      booking_reference: result.booking.booking_reference || formatBookingReference(result.booking.id),
+      transaction_id: result.booking.transaction_id || result.payment.transaction_id,
+      collection_pin: result.booking.collection_pin || result.payment.collection_pin,
       booking_details: {
         booking_id: result.booking.id,
+        booking_reference: result.booking.booking_reference || formatBookingReference(result.booking.id),
+        transaction_id: result.booking.transaction_id || result.payment.transaction_id,
+        collection_pin: result.booking.collection_pin || result.payment.collection_pin,
         customer_name: result.customer.name,
         car: `${result.car.brand} ${result.car.model}`,
         amount: result.booking.amount,
@@ -2260,6 +2350,141 @@ app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {
   } catch (error) {
     console.error("QR verification error:", error);
     res.status(500).json({ message: "Error verifying booking." });
+  }
+});
+
+app.post("/api/admin/verify-pin", verifyAdmin, async (req, res) => {
+  const { booking_id, collection_pin, pin } = req.body || {};
+  const enteredPin = String(collection_pin || pin || "").trim();
+
+  if (!booking_id) {
+    return res.status(400).json({ message: "Booking ID is required." });
+  }
+  if (!enteredPin) {
+    return res.status(400).json({ message: "Collection PIN is required." });
+  }
+
+  try {
+    await ensureMissedPickupBookingsProcessed(req.admin?.email || "admin");
+
+    const booking = await getBookingById(booking_id);
+    if (!booking) {
+      return res.status(404).json({ message: "Booking not found with this ID." });
+    }
+    if (booking.status === "cancelled") {
+      return res.status(409).json({ message: "This booking has already been cancelled." });
+    }
+    if (!booking.paid) {
+      return res.status(409).json({ message: "This booking has not been marked as paid yet. Confirm payment first." });
+    }
+
+    const [customer, car, payment] = await Promise.all([
+      getCustomerById(booking.customer_id),
+      getCarById(booking.car_id),
+      getPaymentByBookingId(booking.id),
+    ]);
+
+    const expectedPin = String(booking.collection_pin || payment?.collection_pin || "").trim();
+    if (expectedPin && enteredPin !== expectedPin) {
+      return res.status(401).json({
+        message: `Invalid Collection PIN. The entered PIN does not match Booking #${booking.id}.`,
+      });
+    }
+
+    const startYear = booking.start_date ? new Date(booking.start_date).getFullYear() : 2026;
+    const bookingReference = booking.booking_reference || formatBookingReference(booking.id, startYear);
+    const transactionId = booking.transaction_id || payment?.transaction_id || `TXN-A6-${74000000 + booking.id}`;
+
+    if (booking.collection_verified) {
+      return res.json({
+        message: "Collection was already verified previously ✅",
+        booking_id: booking.id,
+        booking_reference: bookingReference,
+        transaction_id: transactionId,
+        collection_pin: expectedPin || enteredPin,
+        status: "collected",
+        customer: {
+          id: customer?.id,
+          name: customer?.name,
+          email: customer?.email,
+          phone: customer?.phone,
+        },
+        car: {
+          id: car?.id,
+          model: `${car?.brand || ""} ${car?.model || ""}`.trim(),
+          location: car?.location,
+        },
+        booking: {
+          start_date: booking.start_date,
+          end_date: booking.end_date,
+          amount: booking.amount,
+          collection_verified: true,
+          collection_verified_at: booking.collection_verified_at,
+          status: "collected",
+        },
+      });
+    }
+
+    if (hasMissedCollectionDate(booking)) {
+      await clearBookingHandoffQrs(booking.id);
+      return res.status(409).json({
+        message: "Collection window expired because the vehicle was not collected on the scheduled date.",
+      });
+    }
+
+    const verifiedAt = nowIso();
+    await Promise.all([
+      collection("bookings").updateOne(
+        { id: booking.id },
+        {
+          $set: {
+            collection_verified: true,
+            collection_verified_at: verifiedAt,
+            verified: true,
+            status: "collected",
+            updated_at: verifiedAt,
+          },
+        }
+      ),
+      clearBookingHandoffQrs(booking.id, {
+        clearCollection: true,
+        clearReturn: false,
+      }),
+    ]);
+
+    res.json({
+      message: "Collection PIN verified successfully ✅ Vehicle handed over.",
+      qr_verification: {
+        qr_type: "collection",
+        verification_method: "collection_pin",
+        booking_id: booking.id,
+        booking_reference: bookingReference,
+        transaction_id: transactionId,
+        collection_pin: expectedPin || enteredPin,
+        customer: {
+          id: customer?.id,
+          name: customer?.name,
+          email: customer?.email,
+          phone: customer?.phone,
+        },
+        car: {
+          id: car?.id,
+          model: `${car?.brand || ""} ${car?.model || ""}`.trim(),
+          location: car?.location,
+        },
+        booking: {
+          start_date: booking.start_date,
+          end_date: booking.end_date,
+          amount: booking.amount,
+          collection_verified: true,
+          collection_verified_at: verifiedAt,
+          status: "collected",
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Collection PIN verification error:", error);
+    res.status(500).json({ message: "PIN verification failed: " + error.message });
   }
 });
 
@@ -2652,9 +2877,17 @@ app.get("/api/bookings/all", verifyAdmin, async (req, res) => {
           getPaymentByBookingId(booking.id),
         ]);
 
+        const startYear = booking.start_date ? new Date(booking.start_date).getFullYear() : 2026;
+        const bookingReference = booking.booking_reference || formatBookingReference(booking.id, startYear);
+        const collectionPin = booking.collection_pin || payment?.collection_pin || String(1000 + (booking.id * 137) % 9000);
+        const transactionId = booking.transaction_id || payment?.transaction_id || `TXN-A6-${74000000 + booking.id}`;
+
         return {
           payment_id: payment?.id || null,
           booking_id: booking.id,
+          booking_reference: bookingReference,
+          collection_pin: collectionPin,
+          transaction_id: transactionId,
           customer_id: booking.customer_id,
           customer_name: customer?.name || null,
           customer_email: customer?.email || null,

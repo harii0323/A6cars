@@ -86,6 +86,10 @@ function cacheDom() {
     "manualBookingId",
     "manualPaymentReference",
     "paymentVerificationResult",
+    "pinVerifyForm",
+    "pinBookingIdInput",
+    "pinCollectionPinInput",
+    "pinVerifyBtn",
     "handoffSummary",
     "handoffGrid",
     "handoffResult",
@@ -239,12 +243,34 @@ function bindEvents() {
     await verifyPayment(bookingId, paymentReference);
   });
 
+  dom.pinVerifyForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const bookingId = dom.pinBookingIdInput?.value.trim();
+    const pin = dom.pinCollectionPinInput?.value.trim();
+    await verifyCollectionPin(bookingId, pin);
+  });
+
   dom.startHandoffScannerBtn?.addEventListener("click", () => startHandoffScanner());
   dom.stopHandoffScannerBtn?.addEventListener("click", () => stopHandoffScanner(true));
 
   dom.handoffGrid?.addEventListener("click", async (event) => {
     const actionButton = event.target.closest("[data-handoff-action]");
     if (!actionButton) {
+      return;
+    }
+
+    const action = actionButton.dataset.handoffAction;
+    if (action === "verify-pin") {
+      const bookingId = actionButton.dataset.bookingId;
+      const pin = actionButton.dataset.pin;
+      if (dom.pinBookingIdInput) dom.pinBookingIdInput.value = bookingId;
+      if (dom.pinCollectionPinInput) dom.pinCollectionPinInput.value = pin || "";
+      if (pin) {
+        await verifyCollectionPin(bookingId, pin);
+      } else {
+        dom.pinCollectionPinInput?.focus();
+        showToast(`Enter the Collection PIN for Booking #${bookingId}`, "info");
+      }
       return;
     }
 
@@ -1519,6 +1545,38 @@ async function handleScannedHandoffQr(rawValue) {
   }
 }
 
+async function verifyCollectionPin(bookingId, pin) {
+  const cleanId = String(bookingId || "").trim();
+  const cleanPin = String(pin || "").trim();
+
+  if (!cleanId || !cleanPin) {
+    showToast("Enter both Booking ID and 4-digit Collection PIN.", "warning");
+    return;
+  }
+
+  setResultBox(dom.handoffResult, "Verifying Collection PIN with server...", "");
+  try {
+    const result = await fetchJson("/api/admin/verify-pin", {
+      method: "POST",
+      body: JSON.stringify({
+        booking_id: cleanId,
+        collection_pin: cleanPin,
+      }),
+    });
+
+    await refreshDashboard();
+    const message = result.message || `Collection PIN verified successfully for Booking ${cleanId}.`;
+    setResultBox(dom.handoffResult, message, "success");
+    showToast(message, "success");
+
+    if (dom.pinBookingIdInput) dom.pinBookingIdInput.value = "";
+    if (dom.pinCollectionPinInput) dom.pinCollectionPinInput.value = "";
+  } catch (error) {
+    setResultBox(dom.handoffResult, error.message, "error");
+    showToast(error.message, "error");
+  }
+}
+
 function buildHandoffVerificationResultMarkup(result, message) {
   const verification = result?.qr_verification;
   const qrType = String(verification?.qr_type || "").trim().toLowerCase();
@@ -1612,13 +1670,21 @@ function renderHandoffs() {
 function buildHandoffCardMarkup(booking) {
   const overdue = isOverdueReturnBooking(booking);
   const actions = [];
-  if (!booking.collection_verified && booking.has_collection_qr) {
+  if (!booking.collection_verified) {
     actions.push(`
-      <button class="button button-primary" type="button" data-handoff-action="verify" data-booking-id="${booking.booking_id}" data-qr-type="collection">
-        <i class="fas fa-car-side"></i>
-        <span>Scan collection QR</span>
+      <button class="button button-primary" type="button" data-handoff-action="verify-pin" data-booking-id="${escapeHtml(booking.booking_reference || booking.booking_id)}" data-pin="${escapeHtml(booking.collection_pin || '')}">
+        <i class="fas fa-key"></i>
+        <span>Verify with PIN</span>
       </button>
     `);
+    if (booking.has_collection_qr) {
+      actions.push(`
+        <button class="button button-secondary" type="button" data-handoff-action="verify" data-booking-id="${booking.booking_id}" data-qr-type="collection">
+          <i class="fas fa-car-side"></i>
+          <span>Scan collection QR</span>
+        </button>
+      `);
+    }
   }
   if (booking.collection_verified && !booking.return_verified && booking.has_return_qr) {
     actions.push(`
@@ -1630,9 +1696,13 @@ function buildHandoffCardMarkup(booking) {
   }
 
   const badges = [
-    renderStatusBadge(booking.collection_verified ? "Collection verified" : "Awaiting collection", booking.collection_verified ? "warning" : "info"),
+    renderStatusBadge(booking.collection_verified ? "Collection verified" : "Awaiting collection", booking.collection_verified ? "success" : "info"),
     renderStatusBadge(booking.return_verified ? "Return verified" : "Awaiting return", booking.return_verified ? "success" : overdue ? "danger" : "warning"),
   ];
+
+  if (booking.collection_pin && !booking.collection_verified) {
+    badges.push(`<span class="pin-badge-display"><i class="fas fa-key"></i> PIN: ${escapeHtml(booking.collection_pin)}</span>`);
+  }
 
   if (overdue) {
     badges.push(renderStatusBadge("Overdue return", "danger"));
@@ -1646,11 +1716,13 @@ function buildHandoffCardMarkup(booking) {
     );
   }
 
+  const bookingRef = booking.booking_reference || `A6-2026-${booking.booking_id}`;
+
   return `
     <article class="handoff-card${overdue ? " is-overdue" : ""}">
       <div class="handoff-head">
         <div>
-          <p class="panel-label">Booking #${escapeHtml(booking.booking_id || "-")}</p>
+          <p class="panel-label">Booking #${escapeHtml(booking.booking_id || "-")} <span class="booking-ref-chip">${escapeHtml(bookingRef)}</span></p>
           <h4>${escapeHtml(`${booking.brand || "Unknown"} ${booking.model || ""}`.trim())}</h4>
           <span class="muted">${escapeHtml(booking.customer_name || "Unknown customer")} - ${escapeHtml(booking.location || "Location unavailable")}</span>
         </div>

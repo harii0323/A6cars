@@ -421,7 +421,35 @@
           </div>
 
           <div class="handoff-tools">
+            <div class="handoff-pin-box">
+              <div class="pin-box-header">
+                <span class="panel-label">AI Travel Planner Integration</span>
+                <h4><i class="fas fa-key"></i> Verify Collection via PIN</h4>
+                <p class="muted">Enter customer's Booking ID (e.g. A6-2026-32 or 32) and 4-digit Collection PIN.</p>
+              </div>
+              <form id="pinVerifyForm" class="pin-verify-form">
+                <div class="pin-inputs-grid">
+                  <label class="field-block">
+                    <span>Booking ID</span>
+                    <input class="input" id="pinBookingIdInput" type="text" placeholder="e.g. A6-2026-32 or 32" required />
+                  </label>
+                  <label class="field-block">
+                    <span>Collection PIN</span>
+                    <input class="input" id="pinCollectionPinInput" type="text" maxlength="6" placeholder="e.g. 5827" required />
+                  </label>
+                </div>
+                <button class="button button-primary button-full" id="pinVerifyBtn" type="submit">
+                  <i class="fas fa-check-double"></i>
+                  <span>Verify Collection PIN</span>
+                </button>
+              </form>
+            </div>
+
             <div class="handoff-scanner">
+              <div class="pin-box-header">
+                <span class="panel-label">Pass Scanner</span>
+                <h4><i class="fas fa-qrcode"></i> Scan QR Code</h4>
+              </div>
               <video id="handoffScannerVideo" playsinline muted></video>
               <div class="scanner-status" id="handoffScannerStatus">
                 Scanner idle. Start the camera and point it at a collection or return QR code.
@@ -437,10 +465,10 @@
                 </button>
               </div>
             </div>
+          </div>
 
-            <div class="result-box" id="handoffResult">
-              Verify collection and return status here. Missed pickup processing cancels not-collected bookings after the pickup date, and overdue return processing cancels the next affected booking for the same car.
-            </div>
+          <div class="result-box" id="handoffResult">
+            Verify collection and return status here. Missed pickup processing cancels not-collected bookings after the pickup date, and overdue return processing cancels the next affected booking for the same car.
           </div>
 
           <div class="handoff-grid" id="handoffGrid">
