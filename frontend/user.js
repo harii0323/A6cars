@@ -1796,11 +1796,6 @@ function openPaymentModal(booking, qr) {
     } finally {
       setButtonBusy(verifyBtn, false);
     }
-    } catch (error) {
-      setFeedback(feedback, error.message || "Payment verification failed.", "error");
-    } finally {
-      setButtonBusy(verifyBtn, false);
-    }
   });
 }
 

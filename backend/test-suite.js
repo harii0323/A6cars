@@ -233,7 +233,10 @@ async function runTests() {
   }, {
     headers: { Authorization: `Bearer ${userAToken}` }
   });
-  assert(bookCRes.status === 200 && bookCRes.data.collection_pin, 'POST /api/book generates 4-digit Collection PIN');
+  if (bookCRes.status !== 200) {
+    console.error('bookCRes error:', bookCRes.status, bookCRes.data);
+  }
+  assert(bookCRes.status === 200 && bookCRes.data?.collection_pin, 'POST /api/book generates 4-digit Collection PIN');
   assert(bookCRes.data?.booking_reference, 'POST /api/book returns formatted Booking Reference (e.g. A6-2026-XX)');
 
   const bookingCId = bookCRes.data?.booking_id;
@@ -241,12 +244,44 @@ async function runTests() {
   const collectionPin = bookCRes.data?.collection_pin;
 
   if (bookingCId && adminToken) {
+    // Test verify-pin with non-existent booking ID returns 404
+    const pinNotFound = await client.post('/api/admin/verify-pin', {
+      booking_id: 'A6-2099-999999',
+      collection_pin: '1234'
+    }, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    assert(pinNotFound.status === 404, 'POST /api/admin/verify-pin with non-existent booking ID returns 404');
+
+    // Test verify-pin before payment is confirmed (unpaid) returns 409
+    const pinUnpaid = await client.post('/api/admin/verify-pin', {
+      booking_id: bookingCRef,
+      collection_pin: collectionPin
+    }, {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    assert(pinUnpaid.status === 409, 'POST /api/admin/verify-pin on unpaid booking returns 409');
+
     // Confirm payment for booking C
     await client.post('/api/payment/confirm', {
       booking_id: bookingCId
     }, {
       headers: { Authorization: `Bearer ${adminToken}` }
     });
+
+    // Test that customer booking view contains collection_pin and booking_reference
+    const custBookingsRes = await client.get(`/api/mybookings/${userAId}`, {
+      headers: { Authorization: `Bearer ${userAToken}` }
+    });
+    const foundBookingC = (custBookingsRes.data || []).find(b => b.id === bookingCId);
+    assert(foundBookingC && foundBookingC.collection_pin && foundBookingC.booking_reference, 'GET /api/mybookings/:id includes collection_pin and booking_reference');
+
+    // Test that admin all bookings includes collection_pin and booking_reference
+    const adminAllRes = await client.get('/api/bookings/all', {
+      headers: { Authorization: `Bearer ${adminToken}` }
+    });
+    const adminFoundC = (adminAllRes.data || []).find(b => (b.id === bookingCId || b.booking_id === bookingCId));
+    assert(adminFoundC && adminFoundC.collection_pin && adminFoundC.booking_reference, 'GET /api/bookings/all includes collection_pin and booking_reference');
 
     // Test verify-pin unauthenticated
     const pinUnauth = await client.post('/api/admin/verify-pin', {

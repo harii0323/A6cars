@@ -2883,6 +2883,7 @@ app.get("/api/bookings/all", verifyAdmin, async (req, res) => {
         const transactionId = booking.transaction_id || payment?.transaction_id || `TXN-A6-${74000000 + booking.id}`;
 
         return {
+          id: booking.id,
           payment_id: payment?.id || null,
           booking_id: booking.id,
           booking_reference: bookingReference,
