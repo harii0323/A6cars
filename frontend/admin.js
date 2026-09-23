@@ -107,6 +107,16 @@ function cacheDom() {
     "processOverdueReturnsBtn",
     "processRefundsBtn",
     "exportAllCarsBtn",
+    "adminCarpoolTotalTrips",
+    "adminCarpoolActiveTrips",
+    "adminCarpoolPassengers",
+    "adminCarpoolReports",
+    "adminCarpoolSearchInput",
+    "adminCarpoolStatusFilter",
+    "adminCarpoolRefreshBtn",
+    "adminCarpoolTableBody",
+    "adminCarpoolReportsTableBody",
+    "exportCarpoolCsvBtn",
     "toastRoot",
     "modalRoot",
   ].forEach((id) => {
@@ -330,6 +340,31 @@ function bindEvents() {
         setSidebarExpanded(false);
       }
     }
+  });
+
+  // Carpool admin bindings
+  dom.exportCarpoolCsvBtn?.addEventListener("click", () => {
+    const token = getAdminToken();
+    if (!token) return;
+    const url = `${getApiBase()}/api/admin/carpool/export`;
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "a6cars_carpool_trips.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+
+  dom.adminCarpoolRefreshBtn?.addEventListener("click", () => {
+    loadAdminCarpoolData();
+  });
+
+  dom.adminCarpoolSearchInput?.addEventListener("input", debounce(() => {
+    loadAdminCarpoolData();
+  }, 400));
+
+  dom.adminCarpoolStatusFilter?.addEventListener("change", () => {
+    loadAdminCarpoolData();
   });
 }
 
@@ -2141,6 +2176,10 @@ function updateTopbarForModule(targetId) {
     refundsSection: {
       title: "Refunds and cancellations queue",
       copy: "Stay focused on recovery actions, recent cancellations, and pending refund processing from a single admin module.",
+    },
+    carpoolSection: {
+      title: "Carpooling operations and trip moderation",
+      copy: "Monitor active rides, inspect driver schedules and occupancy, handle safety reports, and export carpool data.",
     },
   };
 

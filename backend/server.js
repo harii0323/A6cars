@@ -17,6 +17,9 @@ const {
   sendPaymentConfirmedEmail,
   sendCancellationEmail,
 } = require("./emailService");
+const carpoolRoutes = require("./carpool/routes/carpoolRoutes");
+const adminCarpoolRoutes = require("./carpool/routes/adminCarpoolRoutes");
+const { ensureCarpoolIndexes } = require("./carpool/models/carpoolIndexes");
 
 const app = express();
 
@@ -2928,6 +2931,10 @@ app.get("/api/bookings/all", verifyAdmin, async (req, res) => {
   }
 });
 
+// Carpooling System Routes
+app.use("/api/carpool", carpoolRoutes);
+app.use("/api/admin/carpool", adminCarpoolRoutes);
+
 // ROUTES_MARKER
 
 let server;
@@ -2935,6 +2942,7 @@ let server;
 async function startServer() {
   await connectMongo();
   await ensureIndexes();
+  await ensureCarpoolIndexes();
 
   if (!openai) {
     console.warn(

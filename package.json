@@ -15,5 +15,17 @@
   },
   "engines": {
     "node": ">=14.0.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/harii0323/A6cars.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/harii0323/A6cars/issues"
+  },
+  "homepage": "https://github.com/harii0323/A6cars#readme",
+  "devDependencies": {}
 }

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Carpooling & Shared Rides | A6 Cars</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/user.css" />
+</head>
+<body data-page="carpool">
+  <div class="site-shell">
+    <header class="site-header">
+      <a class="brand" href="/index.html">
+        <span class="brand-mark"><img class="brand-logo" src="/assets/a6cars-logo.png" alt="A6 Cars logo" /></span>
+        <span>
+          <strong>A6 Cars</strong>
+          <small>Fleet & Carpool</small>
+        </span>
+      </a>
+      <div class="nav-cluster">
+        <nav class="nav-links" id="siteNavLinks"></nav>
+        <div class="nav-actions" id="siteNavActions"></div>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <!-- Carpool Hero -->
+      <section class="hero hero-grid">
+        <div class="hero-copy">
+          <span class="hero-chip">A6 Carpooling System</span>
+          <h1>Share empty seats, split fuel costs, and travel sustainably.</h1>
+          <p class="light-copy">Search available verified rides or offer seats on your own intercity journeys across Andhra Pradesh, Telangana, and beyond.</p>
+          <div class="hero-actions">
+            <button class="button button-primary" type="button" data-action="switch-carpool-tab" data-tab="find">
+              🔍 Find a Ride
+            </button>
+            <button class="button button-secondary" type="button" data-action="switch-carpool-tab" data-tab="offer">
+              🚗 Offer a Ride
+            </button>
+            <button class="button button-warm" type="button" data-action="switch-carpool-tab" data-tab="myCarpools">
+              📋 My Carpools
+            </button>
+          </div>
+        </div>
+        <div class="hero-aside" id="carpoolSpotlight">
+          <div class="panel-card-highlight">
+            <span class="eyebrow">Smart Matching</span>
+            <h3>Safe, verified rides with mutual community ratings.</h3>
+            <p>Every trip features driver ratings, seat locks with zero overbooking, route previews, and direct contact options.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Main Navigation Tabs -->
+      <div class="carpool-tab-bar" id="carpoolTabBar">
+        <button class="carpool-tab-btn active" type="button" data-tab="find">
+          <span>🔍 Find a Ride</span>
+        </button>
+        <button class="carpool-tab-btn" type="button" data-tab="offer">
+          <span>🚗 Offer a Ride</span>
+        </button>
+        <button class="carpool-tab-btn" type="button" data-tab="myCarpools">
+          <span>📋 My Carpools</span>
+        </button>
+      </div>
+
+      <!-- SECTION 1: FIND A RIDE -->
+      <section class="panel carpool-section" id="findSection">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="eyebrow">Available Rides</span>
+            <h2>Search matching carpool journeys</h2>
+            <p class="panel-copy">Filter by starting city, destination, travel date, seat count, and maximum price.</p>
+          </div>
+        </div>
+
+        <!-- Search Toolbar -->
+        <div class="carpool-search-toolbar">
+          <form id="carpoolSearchForm" class="carpool-search-grid">
+            <div class="field-block">
+              <label for="searchFrom">From (Origin)</label>
+              <input class="input" id="searchFrom" type="text" placeholder="e.g. Hyderabad" />
+            </div>
+            <div class="field-block">
+              <label for="searchTo">To (Destination)</label>
+              <input class="input" id="searchTo" type="text" placeholder="e.g. Vijayawada" />
+            </div>
+            <div class="field-block">
+              <label for="searchDate">Travel Date</label>
+              <input class="input" id="searchDate" type="date" />
+            </div>
+            <div class="field-block">
+              <label for="searchPassengers">Passengers</label>
+              <select class="select" id="searchPassengers">
+                <option value="1">1 Passenger</option>
+                <option value="2">2 Passengers</option>
+                <option value="3">3 Passengers</option>
+                <option value="4">4+ Passengers</option>
+              </select>
+            </div>
+            <div class="field-block">
+              <label for="searchMaxPrice">Max Price (₹)</label>
+              <input class="input" id="searchMaxPrice" type="number" min="0" placeholder="Optional max price" />
+            </div>
+            <div class="field-block">
+              <label for="searchVehicleType">Vehicle Type</label>
+              <select class="select" id="searchVehicleType">
+                <option value="all">All Vehicles</option>
+                <option value="Sedan">Sedan</option>
+                <option value="SUV">SUV</option>
+                <option value="Hatchback">Hatchback</option>
+                <option value="MUV">MUV</option>
+              </select>
+            </div>
+            <div class="carpool-search-actions">
+              <button class="button button-primary" type="submit">Search Rides</button>
+              <button class="button button-ghost" type="button" id="resetSearchBtn">Clear</button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Results Grid -->
+        <div class="carpool-results-container" id="carpoolResultsContainer">
+          <div class="carpool-grid" id="carpoolTripGrid"></div>
+        </div>
+      </section>
+
+      <!-- SECTION 2: OFFER A RIDE -->
+      <section class="panel carpool-section hidden" id="offerSection">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="eyebrow">Driver Workspace</span>
+            <h2>Create and publish a new carpool trip</h2>
+            <p class="panel-copy">Share your travel itinerary, specify available seats, set your per-passenger price, and manage join requests.</p>
+          </div>
+        </div>
+
+        <div class="carpool-offer-layout">
+          <form id="offerRideForm" class="carpool-offer-form">
+            <div class="field-grid">
+              <div class="field-block">
+                <label for="offerSource">Starting Location (Origin) *</label>
+                <input class="input" id="offerSource" type="text" placeholder="e.g. Hyderabad (Gachibowli)" required />
+              </div>
+              <div class="field-block">
+                <label for="offerDestination">Final Destination *</label>
+                <input class="input" id="offerDestination" type="text" placeholder="e.g. Vijayawada (Benz Circle)" required />
+              </div>
+            </div>
+
+            <div class="field-block">
+              <label for="offerStops">Intermediate Pickup Points / Stops (Optional)</label>
+              <input class="input" id="offerStops" type="text" placeholder="e.g. LB Nagar, Nalgonda, Suryapet (comma separated)" />
+              <small class="field-note">Passengers can request pickup from these defined stops along your route.</small>
+            </div>
+
+            <div class="field-grid">
+              <div class="field-block">
+                <label for="offerDate">Travel Date *</label>
+                <input class="input" id="offerDate" type="date" required />
+              </div>
+              <div class="field-block">
+                <label for="offerTime">Departure Time *</label>
+                <input class="input" id="offerTime" type="time" required />
+              </div>
+            </div>
+
+            <div class="field-grid">
+              <div class="field-block">
+                <label for="offerSeats">Available Seats *</label>
+                <input class="input" id="offerSeats" type="number" min="1" max="15" value="3" required />
+              </div>
+              <div class="field-block">
+                <label for="offerPrice">Price per Passenger (₹) *</label>
+                <input class="input" id="offerPrice" type="number" min="0" step="50" placeholder="e.g. 500" required />
+              </div>
+            </div>
+
+            <div class="field-grid">
+              <div class="field-block">
+                <div class="field-label-split">
+                  <label for="offerVehicleSelect">Vehicle *</label>
+                  <button class="button-link" type="button" data-action="open-register-vehicle-modal">+ Register New Vehicle</button>
+                </div>
+                <select class="select" id="offerVehicleSelect" required>
+                  <option value="">Select a registered vehicle or fleet car...</option>
+                </select>
+              </div>
+              <div class="field-block">
+                <label for="offerContactPref">Preferred Contact Mode</label>
+                <select class="select" id="offerContactPref">
+                  <option value="phone">Phone & In-App</option>
+                  <option value="in_app">In-App Notification Only</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="field-block">
+              <label for="offerDescription">Trip Notes & Rules</label>
+              <textarea class="input input-textarea" id="offerDescription" rows="3" placeholder="e.g., Morning commute, AC ride, light luggage allowed, non-smoking vehicle."></textarea>
+            </div>
+
+            <!-- Route Calculation Summary Box -->
+            <div class="route-preview-card hidden" id="offerRoutePreviewCard">
+              <span class="eyebrow">Estimated Route</span>
+              <div class="route-preview-metrics">
+                <div><strong>Distance:</strong> <span id="routePreviewDistance">—</span></div>
+                <div><strong>Estimated Duration:</strong> <span id="routePreviewDuration">—</span></div>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button class="button button-primary" id="publishTripBtn" type="submit">Publish Carpool Trip</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- SECTION 3: MY CARPOOLS -->
+      <section class="panel carpool-section hidden" id="myCarpoolsSection">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="eyebrow">Personal Dashboard</span>
+            <h2>My Carpool Rides & Requests</h2>
+            <p class="panel-copy">Manage rides you have offered, review passenger join requests, and track rides you have joined.</p>
+          </div>
+        </div>
+
+        <div class="carpool-subtab-bar">
+          <button class="carpool-subtab-btn active" type="button" data-subtab="offered">
+            Offered Rides (<span id="offeredCount">0</span>)
+          </button>
+          <button class="carpool-subtab-btn" type="button" data-subtab="joined">
+            Joined Rides (<span id="joinedCount">0</span>)
+          </button>
+        </div>
+
+        <!-- Offered Rides Subtab -->
+        <div class="carpool-subtab-content" id="offeredRidesContent">
+          <div class="carpool-manage-list" id="offeredRidesList"></div>
+        </div>
+
+        <!-- Joined Rides Subtab -->
+        <div class="carpool-subtab-content hidden" id="joinedRidesContent">
+          <div class="carpool-manage-list" id="joinedRidesList"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>A6 Cars & Lucky Rentals Carpooling System. Verified journeys, shared costs, and community trust.</p>
+      <span>© 2026 A6 Cars</span>
+    </footer>
+  </div>
+
+  <!-- MODALS CONTAINER -->
+  <div class="toast-root" id="toastRoot"></div>
+  <div id="modalRoot"></div>
+
+  <!-- Application Scripts -->
+  <script src="/api-config.js"></script>
+  <script src="/voice-assistant.js"></script>
+  <script src="/user.js"></script>
+</body>
+</html>
+

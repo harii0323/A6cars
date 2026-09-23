@@ -544,19 +544,9 @@ function autoFillBooking(data) {
   );
 }
 
-/**
- * On book.html load, auto-fill booking if voiceBooking is present
- */
-if (location.pathname.includes("book.html")) {
-  const vb = sessionStorage.getItem("voiceBooking");
-  if (vb) {
-    try {
-      processAIIntent(JSON.parse(vb));
-    } catch (error) {
-      console.warn("Stored voice booking intent could not be restored:", error);
-    }
-  }
-}
+// NOTE: Session-restore of voiceBooking is handled by user.js
+// in restoreStoredVoiceBookingIntent(), called after loadBookPageData()
+// so that pageState.cars is already populated before the intent is applied.
 
 /**
  * Speak a message in the specified language

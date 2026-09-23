@@ -109,6 +109,10 @@
               <i class="fas fa-rotate-left"></i>
               <span>Refunds</span>
             </button>
+            <button class="nav-button" type="button" data-target="carpoolSection">
+              <i class="fas fa-users"></i>
+              <span>Carpool Operations</span>
+            </button>
           </nav>
         </div>
 
@@ -539,6 +543,116 @@
                   <tr>
                     <td colspan="5">
                       <div class="empty-state compact">Loading refunds...</div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <!-- Carpool Operations Section -->
+      <section class="module-view hidden" id="carpoolSection" data-module-view>
+        <article class="panel-card">
+          <div class="panel-header">
+            <div>
+              <h3>Carpool Operations & Moderation</h3>
+              <p>Monitor intercity carpools, view passenger occupancy, moderate safety reports, and export trip records.</p>
+            </div>
+            <div class="header-actions">
+              <button class="button button-secondary" id="exportCarpoolCsvBtn" type="button">
+                <i class="fas fa-file-export"></i>
+                <span>Export Carpool CSV</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Carpool Key Metrics -->
+          <div class="metric-grid" style="margin-bottom: 24px;">
+            <div class="metric-card">
+              <span class="metric-label">Total Rides</span>
+              <strong class="metric-value" id="adminCarpoolTotalTrips">0</strong>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Active / Open</span>
+              <strong class="metric-value" id="adminCarpoolActiveTrips">0</strong>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Confirmed Passengers</span>
+              <strong class="metric-value" id="adminCarpoolPassengers">0</strong>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Pending Reports</span>
+              <strong class="metric-value" id="adminCarpoolReports" style="color:var(--rose);">0</strong>
+            </div>
+          </div>
+
+          <!-- Filter Toolbar -->
+          <div class="table-toolbar" style="margin-bottom: 16px; display:flex; gap:12px; flex-wrap:wrap;">
+            <input class="input" id="adminCarpoolSearchInput" type="search" placeholder="Search by driver, origin, or destination..." style="max-width:320px;" />
+            <select class="select" id="adminCarpoolStatusFilter" style="max-width:200px;">
+              <option value="all">All Statuses</option>
+              <option value="ACTIVE">Active</option>
+              <option value="FULL">Full</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+            <button class="button button-ghost" id="adminCarpoolRefreshBtn" type="button">
+              <i class="fas fa-sync-alt"></i>
+              <span>Refresh</span>
+            </button>
+          </div>
+
+          <!-- Trips Table -->
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Driver</th>
+                  <th>Route</th>
+                  <th>Travel Date & Time</th>
+                  <th>Vehicle</th>
+                  <th>Occupancy</th>
+                  <th>Fare</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="adminCarpoolTableBody">
+                <tr>
+                  <td colspan="9">
+                    <div class="empty-state compact">Loading carpool trips...</div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- User & Trip Reports Moderation Subpanel -->
+          <div class="subpanel" style="margin-top: 30px;">
+            <div class="subpanel-head">
+              <h4>Safety & Behavior Reports</h4>
+            </div>
+            <div class="table-wrap compact">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Report ID</th>
+                    <th>Reporter</th>
+                    <th>Trip ID</th>
+                    <th>Reason</th>
+                    <th>Description</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="adminCarpoolReportsTableBody">
+                  <tr>
+                    <td colspan="8">
+                      <div class="empty-state compact">No pending reports.</div>
                     </td>
                   </tr>
                 </tbody>

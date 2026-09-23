@@ -1627,3 +1627,324 @@ img {
     font-size: 0.86rem;
   }
 }
+
+/* ==========================================================================
+   Carpooling System Styles
+   ========================================================================== */
+
+.carpool-tab-bar {
+  display: flex;
+  gap: 12px;
+  margin: 24px 0 20px 0;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 4px;
+}
+
+.carpool-tab-btn {
+  background: transparent;
+  border: none;
+  padding: 12px 20px;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border-bottom: 3px solid transparent;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.carpool-tab-btn:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.carpool-tab-btn.active {
+  color: var(--sky);
+  border-bottom-color: var(--sky);
+  background: rgba(63, 115, 211, 0.08);
+}
+
+.carpool-subtab-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.carpool-subtab-btn {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.carpool-subtab-btn.active {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+}
+
+.carpool-search-toolbar {
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-soft);
+}
+
+.carpool-search-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+
+.carpool-search-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.carpool-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.carpool-card {
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  position: relative;
+}
+
+.carpool-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow);
+  border-color: var(--sky);
+}
+
+.carpool-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.driver-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.driver-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.driver-info strong {
+  display: block;
+  font-size: 0.96rem;
+  color: var(--ink);
+}
+
+.driver-rating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+.carpool-route-block {
+  background: var(--surface-soft);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.route-endpoint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.route-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--sky);
+  flex-shrink: 0;
+}
+
+.route-dot.dest {
+  background: var(--rose);
+}
+
+.route-connector {
+  width: 2px;
+  height: 14px;
+  background: var(--border-strong);
+  margin-left: 4px;
+}
+
+.stops-pill {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+
+.stop-tag {
+  background: rgba(16, 38, 59, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.carpool-card-meta {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  border-top: 1px dashed var(--border);
+  padding-top: 10px;
+}
+
+.carpool-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.carpool-price-tag {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.carpool-price-tag small {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--ink-muted);
+}
+
+.carpool-status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.status-active { background: #dcfce7; color: #15803d; }
+.status-full { background: #fee2e2; color: #b91c1c; }
+.status-completed { background: #e0f2fe; color: #0369a1; }
+.status-cancelled { background: #f3f4f6; color: #4b5563; }
+.status-pending { background: #fef3c7; color: #b45309; }
+.status-accepted { background: #dcfce7; color: #15803d; }
+.status-rejected { background: #fee2e2; color: #b91c1c; }
+
+.route-preview-card {
+  background: rgba(63, 115, 211, 0.08);
+  border: 1px solid rgba(63, 115, 211, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin: 16px 0;
+}
+
+.route-preview-metrics {
+  display: flex;
+  gap: 20px;
+  margin-top: 6px;
+  font-size: 0.92rem;
+}
+
+.carpool-manage-card {
+  background: var(--surface-strong);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 22px;
+  margin-bottom: 20px;
+  box-shadow: var(--shadow-soft);
+}
+
+.manage-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.requests-drawer {
+  background: var(--surface-soft);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-top: 14px;
+}
+
+.request-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.request-item:last-child {
+  border-bottom: none;
+}
+
+.field-label-split {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.button-link {
+  background: transparent;
+  border: none;
+  color: var(--sky);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.button-link:hover {
+  text-decoration: underline;
+}

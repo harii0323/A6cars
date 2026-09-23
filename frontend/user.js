@@ -2538,14 +2538,543 @@ function initializeVoiceAssistantIfAvailable() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Event binding — connects all voice + wizard custom events
+// ---------------------------------------------------------------------------
+
 function bindVoiceAssistantEvents() {
   if (voiceAssistantEventsBound) {
     return;
   }
 
   document.addEventListener("voiceAiAssistRequest", handleVoiceAiAssistRequest);
-  document.addEventListener("voiceAiIntent", handleVoiceAiIntent);
+  document.addEventListener("voiceAiIntent",        handleVoiceAiIntent);
+  document.addEventListener("voiceCommand",         handleVoiceCommand);
+  document.addEventListener("voiceWizardStep",      handleVoiceWizardStep);
+  document.addEventListener("voiceWizardReset",     handleVoiceWizardReset);
   voiceAssistantEventsBound = true;
+}
+
+// ---------------------------------------------------------------------------
+// handleVoiceCommand — routes confirm_booking, cancel, and wizard steps
+// ---------------------------------------------------------------------------
+
+function handleVoiceCommand(event) {
+  const { commandType } = event.detail || {};
+
+  if (commandType === "cancel") {
+    clearVoiceCarHighlights();
+    _hideWizardPanel();
+    return;
+  }
+
+  if (commandType !== "confirm_booking") {
+    return;
+  }
+
+  if (getPageName() !== "book") {
+    return;
+  }
+
+  // Prefer the wizard's targeted car form
+  const wizardCarId = window.voiceWizard?.carId;
+  let readyForm = null;
+
+  if (wizardCarId) {
+    const wizardForm = dom.carGrid?.querySelector(`[data-car-form="${Number(wizardCarId)}"]`);
+    if (wizardForm) {
+      const s = wizardForm.querySelector("[data-start-date]");
+      const e = wizardForm.querySelector("[data-end-date]");
+      if (s?.value && e?.value) readyForm = wizardForm;
+    }
+  }
+
+  // Fallback: first form with both dates filled
+  if (!readyForm) {
+    const forms = Array.from(dom.carGrid?.querySelectorAll("[data-car-form]") || []);
+    readyForm = forms.find((form) => {
+      const s = form.querySelector("[data-start-date]");
+      const e = form.querySelector("[data-end-date]");
+      return s?.value && e?.value;
+    });
+  }
+
+  if (readyForm) {
+    const plan     = window.voiceWizard?.paymentPlan || "reserve";
+    const submitter = readyForm.querySelector(
+      plan === "full" ? '[data-payment-plan="full"]' : '[data-payment-plan="reserve"]'
+    );
+    readyForm.requestSubmit(submitter || undefined);
+  } else {
+    showToast("Please fill the dates on a car before confirming.", "warning");
+    speakAndPrompt("Please choose a car and fill the dates first.", null);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// handleVoiceWizardStep — update UI when wizard advances to a new step
+// ---------------------------------------------------------------------------
+
+function handleVoiceWizardStep(event) {
+  const { step, wizard } = event.detail || {};
+  if (!step) return;
+
+  _showWizardPanelStep(step, wizard);
+
+  // Highlight car when we move past car selection
+  if (step === "start_date" && wizard?.carId) {
+    highlightVoiceTargetedCar(wizard.carId);
+  }
+
+  // Fill dates into the form as the wizard advances
+  if (["end_date", "payment", "confirm"].includes(step) && wizard?.carId) {
+    const form = dom.carGrid?.querySelector(`[data-car-form="${Number(wizard.carId)}"]`);
+    if (form) {
+      const startInput = form.querySelector("[data-start-date]");
+      const endInput   = form.querySelector("[data-end-date]");
+      if (startInput && wizard.startDate && !startInput.value) {
+        startInput.value = wizard.startDate;
+        syncBookingFormDates(form, { changedField: "start", notify: false });
+      }
+      if (endInput && wizard.endDate && !endInput.value) {
+        endInput.value = wizard.endDate;
+        syncBookingFormDates(form, { changedField: "end", notify: false });
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// handleVoiceWizardReset — clear all highlights and hide the step panel
+// ---------------------------------------------------------------------------
+
+function handleVoiceWizardReset() {
+  clearVoiceCarHighlights();
+  _hideWizardPanel();
+}
+
+// ---------------------------------------------------------------------------
+// Car highlight system
+// ---------------------------------------------------------------------------
+
+function highlightVoiceTargetedCar(carId) {
+  clearVoiceCarHighlights();
+  const card = dom.carGrid
+    ?.querySelector(`[data-car-form="${Number(carId)}"]`)
+    ?.closest(".vehicle-card");
+  if (card) {
+    card.classList.add("voice-targeted");
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+function clearVoiceCarHighlights() {
+  document.querySelectorAll(".voice-targeted").forEach((el) =>
+    el.classList.remove("voice-targeted")
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Wizard panel helpers
+// ---------------------------------------------------------------------------
+
+function _showWizardPanelStep(step, wizard) {
+  const promptEl = document.getElementById("voice-wizard-step-prompt");
+  if (!promptEl) return;
+
+  const assistant = window.voiceAssistant;
+  const lang      = assistant?.language || "en-IN";
+  let text        = assistant?._prompt(step, lang) || "";
+
+  // Enrich confirm step with full summary
+  if (step === "confirm" && wizard) {
+    const days    = wizard.days || 0;
+    const cost    = wizard.totalCost;
+    const costStr = cost ? `\u20B9${Number(cost).toLocaleString("en-IN")}` : "";
+    const parts   = [
+      wizard.carLabel,
+      wizard.startDate && wizard.endDate ? `${wizard.startDate} \u2192 ${wizard.endDate}` : "",
+      days ? `${days} day${days !== 1 ? "s" : ""}` : "",
+      costStr ? `Pay ${costStr}` : "",
+    ].filter(Boolean);
+    if (parts.length) text = `\uD83D\uDCCB ${parts.join(" \u00B7 ")}. ${text}`;
+  }
+
+  // Enrich start_date step with car name
+  if (step === "start_date" && wizard?.carLabel) {
+    const prefixes = {
+      "en-IN": `Car: ${wizard.carLabel}. `,
+      "hi-IN": `\u0917\u093E\u0921\u093C\u0940: ${wizard.carLabel}. `,
+      "ta-IN": `\u0B95\u0BBE\u0BB0\u0BCD: ${wizard.carLabel}. `,
+      "te-IN": `\u0C15\u0C3E\u0C30\u0C41: ${wizard.carLabel}. `,
+      "kn-IN": `\u0C95\u0CBE\u0CB0\u0CCD: ${wizard.carLabel}. `,
+    };
+    text = (prefixes[lang] || prefixes["en-IN"]) + text;
+  }
+
+  promptEl.textContent = text;
+  promptEl.classList.remove("hidden");
+}
+
+function _hideWizardPanel() {
+  const promptEl  = document.getElementById("voice-wizard-step-prompt");
+  const trackerEl = document.getElementById("voice-step-tracker");
+  if (promptEl)  { promptEl.textContent = ""; promptEl.classList.add("hidden"); }
+  if (trackerEl) trackerEl.classList.add("hidden");
+}
+
+// ---------------------------------------------------------------------------
+// handleVoiceAiAssistRequest — calls backend AI intent endpoint
+// ---------------------------------------------------------------------------
+
+async function handleVoiceAiAssistRequest(event) {
+  event.preventDefault();
+
+  const transcript = String(event.detail?.transcript || "").trim();
+  if (!transcript) {
+    return;
+  }
+
+  if (typeof window.handleVoiceIntent !== "function") {
+    showToast("AI assist is not available in this build.", "warning");
+    speakAndPrompt("AI assist is not available right now.", null);
+    return;
+  }
+
+  try {
+    await window.handleVoiceIntent(transcript);
+  } catch (error) {
+    const message = error?.message || "AI assist is unavailable right now.";
+    console.warn("AI assist request failed:", error);
+
+    if (/not configured/i.test(message)) {
+      showToast(
+        "AI assist is not configured. Add OPENAI_API_KEY and restart the backend.",
+        "warning"
+      );
+      speakAndPrompt("AI assist is not configured on the backend yet.", null);
+      return;
+    }
+
+    showToast(message, "warning");
+    speakAndPrompt("I could not process that request. Please try again.", null);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// handleVoiceAiIntent — processes structured AI intent
+// ---------------------------------------------------------------------------
+
+function handleVoiceAiIntent(event) {
+  const intent = event.detail?.intent;
+  if (!intent || typeof intent !== "object") {
+    return;
+  }
+  applyVoiceIntent(intent);
+}
+
+// ---------------------------------------------------------------------------
+// applyVoiceIntent — top-level intent dispatcher
+// ---------------------------------------------------------------------------
+
+function applyVoiceIntent(intent) {
+  const type = String(intent.intent || "").trim().toLowerCase();
+
+  if (type === "book") {
+    // Redirect from home / history → book page
+    if (getPageName() !== "book") {
+      sessionStorage.setItem("voiceBooking", JSON.stringify(intent));
+      window.location.href = "/book.html";
+      return;
+    }
+    applyVoiceBookingIntent(intent);
+    return;
+  }
+
+  if (type === "history") {
+    if (getPageName() === "history") {
+      showToast("Your booking center is already open.", "success");
+      speakAndPrompt("Your booking center is already open.", null);
+      return;
+    }
+    window.location.href = "/history.html";
+    return;
+  }
+
+  if (type === "cancel") {
+    if (getPageName() !== "history") {
+      window.location.href = "/history.html";
+      return;
+    }
+    showToast(
+      "Open the booking card you want and use the Cancel booking button there.",
+      "warning"
+    );
+    speakAndPrompt(
+      "Open the booking card you want and use the cancel booking button.",
+      null
+    );
+    return;
+  }
+
+  if (type === "help") {
+    const helpMessage =
+      getPageName() === "book"
+        ? "You can say: book a car, start date, end date, reserve, full payment, or confirm."
+        : "You can say: book a car, open my bookings, or ask for help anytime.";
+    showToast(helpMessage, "success");
+    speakAndPrompt(helpMessage, null);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// restoreStoredVoiceBookingIntent
+// ---------------------------------------------------------------------------
+
+function restoreStoredVoiceBookingIntent() {
+  const raw = sessionStorage.getItem("voiceBooking");
+  if (!raw) {
+    return;
+  }
+
+  let intent = null;
+  try {
+    intent = JSON.parse(raw);
+  } catch (error) {
+    console.warn("Stored voice booking intent is invalid:", error);
+    sessionStorage.removeItem("voiceBooking");
+    return;
+  }
+
+  if (intent) {
+    sessionStorage.removeItem("voiceBooking");
+    applyVoiceBookingIntent(intent);
+  } else {
+    sessionStorage.removeItem("voiceBooking");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// applyVoiceBookingIntent — fills the car grid + dates + syncs wizard state
+// ---------------------------------------------------------------------------
+
+function applyVoiceBookingIntent(intent) {
+  if (getPageName() !== "book") {
+    sessionStorage.setItem("voiceBooking", JSON.stringify(intent));
+    window.location.href = "/book.html";
+    return;
+  }
+
+  if (!dom.carGrid || !pageState.cars.length) {
+    sessionStorage.setItem("voiceBooking", JSON.stringify(intent));
+    return;
+  }
+
+  const requestedCar      = String(intent.car      || "").trim();
+  const requestedLocation = String(intent.location  || "").trim();
+
+  if (dom.carSearchInput && requestedCar) {
+    dom.carSearchInput.value    = requestedCar;
+    pageState.filters.carSearch = requestedCar.toLowerCase();
+  }
+
+  if (dom.carLocationSelect && requestedLocation) {
+    const locationOption = Array.from(dom.carLocationSelect.options || []).find(
+      (option) =>
+        option.value !== "all" &&
+        option.value.trim().toLowerCase() === requestedLocation.toLowerCase()
+    );
+    if (locationOption) {
+      dom.carLocationSelect.value   = locationOption.value;
+      pageState.filters.carLocation = locationOption.value;
+    }
+  }
+
+  renderCarGrid();
+
+  const targetCar = findVoiceBookingCar(intent);
+  if (!targetCar) {
+    const noMatchMessage = requestedCar
+      ? `I could not find ${requestedCar} in the current fleet.`
+      : "I could not find a car that matches that request.";
+    showToast(noMatchMessage, "warning");
+    speakAndPrompt(noMatchMessage, null);
+    return;
+  }
+
+  const form = dom.carGrid.querySelector(`[data-car-form="${Number(targetCar.id)}"]`);
+  if (!form) return;
+
+  const appliedDates = applyVoiceDatesToBookingForm(form, intent);
+
+  // Highlight the matched car and scroll to it
+  highlightVoiceTargetedCar(targetCar.id);
+
+  // Sync wizard state
+  const wizard = window.voiceWizard;
+  if (wizard) {
+    wizard.setCarInfo({
+      carId:    targetCar.id,
+      carLabel: `${targetCar.brand || "A6"} ${targetCar.model || "Vehicle"}`.trim(),
+      dailyRate: targetCar.daily_rate || 0,
+    });
+    if (appliedDates.start) wizard.setStartDate(appliedDates.start);
+    if (appliedDates.end)   wizard.setEndDate(appliedDates.end);
+
+    if (appliedDates.applied) {
+      wizard.advance("payment");
+    } else if (appliedDates.start) {
+      wizard.advance("end_date");
+    } else {
+      wizard.advance("start_date");
+    }
+  }
+
+  const carName = `${targetCar.brand || "A6"} ${targetCar.model || "Vehicle"}`.trim();
+  const confirmationMessage = appliedDates.applied
+    ? `Found ${carName} and filled the dates. Now choose your payment plan.`
+    : `Found ${carName}. Tell me your start date.`;
+
+  showToast(confirmationMessage, "success");
+  speakAndPrompt(confirmationMessage, null);
+}
+
+// ---------------------------------------------------------------------------
+// findVoiceBookingCar — match intent to a car in the fleet
+// ---------------------------------------------------------------------------
+
+function findVoiceBookingCar(intent) {
+  const requestedCar      = String(intent.car      || "").trim().toLowerCase();
+  const requestedLocation = String(intent.location  || "").trim().toLowerCase();
+
+  const candidates = pageState.cars.filter((car) => {
+    const searchable = `${car.brand || ""} ${car.model || ""}`.trim().toLowerCase();
+    const location   = String(car.location || "").trim().toLowerCase();
+    const matchesCurrentSearch =
+      !pageState.filters.carSearch ||
+      `${searchable} ${location}`.includes(pageState.filters.carSearch);
+    const matchesCurrentLocation =
+      pageState.filters.carLocation === "all" ||
+      String(car.location || "").trim() === pageState.filters.carLocation;
+    const matchesRequestedCar      = !requestedCar      || searchable.includes(requestedCar);
+    const matchesRequestedLocation = !requestedLocation || location.includes(requestedLocation);
+
+    return (
+      matchesCurrentSearch &&
+      matchesCurrentLocation &&
+      matchesRequestedCar &&
+      matchesRequestedLocation
+    );
+  });
+
+  return candidates.length ? candidates[0] : null;
+}
+
+// ---------------------------------------------------------------------------
+// applyVoiceDatesToBookingForm — fill hidden date inputs from intent
+// ---------------------------------------------------------------------------
+
+function applyVoiceDatesToBookingForm(form, intent) {
+  const startInput = form.querySelector("[data-start-date]");
+  const endInput   = form.querySelector("[data-end-date]");
+  if (!startInput || !endInput) {
+    return { applied: false };
+  }
+
+  const startDate = normalizeVoiceDateInput(intent.start_date);
+  const endDate   =
+    normalizeVoiceDateInput(intent.end_date) ||
+    deriveVoiceEndDate(startDate, intent.days);
+
+  if (startDate) {
+    startInput.value = startDate;
+    syncBookingFormDates(form, { changedField: "start", notify: false });
+  }
+
+  if (endDate) {
+    endInput.value = endDate;
+    syncBookingFormDates(form, { changedField: "end", notify: false });
+  }
+
+  return {
+    applied: Boolean(startInput.value && endInput.value),
+    start:   startInput.value || "",
+    end:     endInput.value   || "",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Date helpers
+// ---------------------------------------------------------------------------
+
+function normalizeVoiceDateInput(value) {
+  if (!value) return "";
+  const date = parseDate(value);
+  return date ? formatDateInput(date) : "";
+}
+
+function deriveVoiceEndDate(startDate, days) {
+  const tripDays = Number(days);
+  if (!startDate || !Number.isFinite(tripDays) || tripDays < 1) return "";
+  const date = parseDate(startDate);
+  if (!date) return "";
+  const endDate = new Date(date);
+  endDate.setDate(endDate.getDate() + Math.max(0, tripDays - 1));
+  return formatDateInput(endDate);
+}
+
+// ---------------------------------------------------------------------------
+// speakAndPrompt — speak a message AND update the wizard prompt card
+// ---------------------------------------------------------------------------
+
+function speakAndPrompt(message, promptOverride) {
+  if (!message) return;
+
+  if (window.voiceAssistant && typeof window.voiceAssistant.speak === "function") {
+    window.voiceAssistant.speak(message);
+  } else if (typeof window.speak === "function") {
+    window.speak(message, "en");
+  }
+
+  const promptEl = document.getElementById("voice-wizard-step-prompt");
+  if (promptEl && promptOverride !== null) {
+    const text = promptOverride ?? message;
+    promptEl.textContent = text;
+    promptEl.classList.toggle("hidden", !text);
+  }
+}
+
+/** @deprecated — use speakAndPrompt instead */
+function speakVoiceAssistantMessage(message) {
+  speakAndPrompt(message, null);
+}
+
+
+function handleVoiceCommand(event) {
+  const { commandType } = event.detail || {};
+
+  if (commandType !== "confirm_booking") {
+    return;
+  }
+
+  if (getPageName() !== "book") {
+    return;
+  }
+
+  // Find the first booking form in the car grid that has both dates filled
+  const forms = Array.from(dom.carGrid?.querySelectorAll("[data-car-form]") || []);
+  const readyForm = forms.find((form) => {
+    const startInput = form.querySelector("[data-start-date]");
+    const endInput = form.querySelector("[data-end-date]");
+    return startInput?.value && endInput?.value;
+  });
+
+  if (readyForm) {
+    readyForm.requestSubmit();
+  } else {
+    showToast("Please fill the dates on a car before confirming.", "warning");
+    speakVoiceAssistantMessage("Please choose a car and fill the dates first.");
+  }
 }
 
 async function handleVoiceAiAssistRequest(event) {
@@ -2639,12 +3168,17 @@ function restoreStoredVoiceBookingIntent() {
     intent = JSON.parse(raw);
   } catch (error) {
     console.warn("Stored voice booking intent is invalid:", error);
+    sessionStorage.removeItem("voiceBooking");
+    return;
   }
 
-  sessionStorage.removeItem("voiceBooking");
-
   if (intent) {
+    // Remove before applying — applyVoiceBookingIntent may re-save it
+    // if it needs to redirect to /book.html first, and that is intentional.
+    sessionStorage.removeItem("voiceBooking");
     applyVoiceBookingIntent(intent);
+  } else {
+    sessionStorage.removeItem("voiceBooking");
   }
 }
 
