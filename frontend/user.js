@@ -162,7 +162,7 @@ function bindGlobalEvents() {
       return;
     }
 
-    const bookingId = Number(actionEl.dataset.bookingId);
+    const bookingId = parseBookingId(actionEl.dataset.bookingId);
     if (!bookingId) {
       return;
     }
@@ -1651,10 +1651,19 @@ function renderHistoryCards() {
 
   const filtered = pageState.history.filter((booking) => {
     const filter = pageState.filters.historyFilter;
-    const search = pageState.filters.historySearch;
-    const text = `${booking.brand || ""} ${booking.model || ""} ${booking.location || ""} ${getBookingId(booking)}`.toLowerCase();
+    const search = (pageState.filters.historySearch || "").trim().toLowerCase();
+    const bId = getBookingId(booking);
+    const bRef = String(booking.booking_reference || `A6-2026-${bId}`).toLowerCase();
+    const parsedQuery = parseBookingId(search);
 
-    const matchesSearch = !search || text.includes(search);
+    const matchesSearch =
+      !search ||
+      (parsedQuery && bId === parsedQuery) ||
+      bRef.includes(search) ||
+      `${booking.brand || ""} ${booking.model || ""} ${booking.location || ""} ${bId} ${bRef}`
+        .toLowerCase()
+        .includes(search);
+
     const matchesFilter =
       filter === "all" ||
       (filter === "active" && isActiveBooking(booking)) ||
@@ -2352,12 +2361,47 @@ function rememberBooking(booking) {
   pageState.bookingIndex.set(getBookingId(booking), booking);
 }
 
+function toNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseBookingId(rawId) {
+  if (rawId == null) return 0;
+  const str = String(rawId).trim().replace(/^#/, "");
+  const match = str.match(/^(?:A6-\d{4}-)?(\d+)$/i);
+  if (match) {
+    return toNumber(match[1]);
+  }
+  const trailingMatch = str.match(/(\d+)$/);
+  if (trailingMatch) {
+    return toNumber(trailingMatch[1]);
+  }
+  return toNumber(str);
+}
+
+function formatBookingReference(bookingId, year = null) {
+  const y = year || new Date().getFullYear();
+  return `A6-${y}-${bookingId}`;
+}
+
 function findBookingById(bookingId) {
-  return pageState.bookingIndex.get(Number(bookingId)) || null;
+  const parsedId = parseBookingId(bookingId);
+  if (parsedId && pageState.bookingIndex.has(parsedId)) {
+    return pageState.bookingIndex.get(parsedId);
+  }
+  const clean = String(bookingId || "").trim().toLowerCase();
+  for (const [, booking] of pageState.bookingIndex) {
+    const ref = String(booking.booking_reference || `a6-2026-${getBookingId(booking)}`).toLowerCase();
+    if (ref === clean) {
+      return booking;
+    }
+  }
+  return null;
 }
 
 function getBookingId(booking) {
-  return Number(booking.booking_id || booking.id);
+  return parseBookingId(booking?.booking_id || booking?.id);
 }
 
 function isCancelled(booking) {

@@ -233,7 +233,7 @@ function bindEvents() {
     if (!actionButton) {
       return;
     }
-    const bookingId = Number(actionButton.dataset.cancelBooking);
+    const bookingId = parseBookingId(actionButton.dataset.cancelBooking);
     if (!bookingId) {
       return;
     }
@@ -284,7 +284,7 @@ function bindEvents() {
       return;
     }
 
-    const bookingId = Number(actionButton.dataset.bookingId);
+    const bookingId = parseBookingId(actionButton.dataset.bookingId);
     const qrType = String(actionButton.dataset.qrType || "").trim();
     if (!bookingId || !qrType) {
       return;
@@ -917,19 +917,30 @@ function renderTrendChart(metrics) {
 }
 
 function renderTransactions() {
+  const query = (state.transactionSearch || "").trim().toLowerCase();
+  const parsedQueryId = parseBookingId(query);
+
   const filtered = state.transactions.filter((transaction) => {
-    const searchMatches = !state.transactionSearch
+    const bId = parseBookingId(transaction.booking_id || transaction.booking_id_row);
+    const bRef = String(
+      transaction.booking_reference || (bId ? `a6-2026-${bId}` : "")
+    ).toLowerCase();
+
+    const searchMatches = !query
       ? true
-      : [
+      : (parsedQueryId && bId === parsedQueryId) ||
+        bRef.includes(query) ||
+        [
           transaction.payment_id,
           transaction.booking_id,
+          bRef,
           transaction.customer_name,
           transaction.email,
           transaction.brand,
           transaction.model,
         ]
           .map((value) => String(value || "").toLowerCase())
-          .some((value) => value.includes(state.transactionSearch));
+          .some((value) => value.includes(query));
 
     const status = normalizeTransactionStatus(transaction.payment_status || transaction.status);
     const filterMatches =
@@ -1296,10 +1307,11 @@ async function verifyPayment(bookingId, paymentReference) {
   setVerificationResult("Matching booking ID with submitted payment reference...", "");
 
   try {
+    const cleanId = String(bookingId || "").trim();
     const result = await fetchJson("/api/verify-payment", {
       method: "POST",
       body: JSON.stringify({
-        booking_id: Number(bookingId),
+        booking_id: cleanId,
         payment_reference_id: paymentReference,
       }),
     });
@@ -1813,7 +1825,13 @@ function buildHandoffNote(booking, overdue) {
 }
 
 async function verifyBookingHandoff(bookingId, qrType, button) {
-  const booking = state.bookings.find((item) => Number(item.booking_id) === Number(bookingId));
+  const parsedId = parseBookingId(bookingId);
+  const searchStr = String(bookingId || "").trim().toLowerCase();
+  const booking = state.bookings.find((item) => {
+    const id = parseBookingId(item.booking_id || item.id);
+    const ref = String(item.booking_reference || "").toLowerCase();
+    return (parsedId && id === parsedId) || (ref && ref === searchStr);
+  });
   if (!booking) {
     showToast("Booking could not be found anymore. Refresh and try again.", "error");
     return;
@@ -2364,6 +2382,25 @@ function addDays(date, days) {
 function toNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseBookingId(rawId) {
+  if (rawId == null) return 0;
+  const str = String(rawId).trim().replace(/^#/, "");
+  const match = str.match(/^(?:A6-\d{4}-)?(\d+)$/i);
+  if (match) {
+    return toNumber(match[1]);
+  }
+  const trailingMatch = str.match(/(\d+)$/);
+  if (trailingMatch) {
+    return toNumber(trailingMatch[1]);
+  }
+  return toNumber(str);
+}
+
+function formatBookingReference(bookingId, year = null) {
+  const y = year || new Date().getFullYear();
+  return `A6-${y}-${bookingId}`;
 }
 
 function formatCurrency(value) {

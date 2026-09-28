@@ -118,10 +118,14 @@ function generateTransactionId(bookingId) {
 
 function parseBookingId(rawId) {
   if (rawId == null) return 0;
-  const str = String(rawId).trim();
-  const match = str.match(/(\d+)$/);
+  const str = String(rawId).trim().replace(/^#/, "");
+  const match = str.match(/^(?:A6-\d{4}-)?(\d+)$/i);
   if (match) {
     return toNumber(match[1]);
+  }
+  const trailingMatch = str.match(/(\d+)$/);
+  if (trailingMatch) {
+    return toNumber(trailingMatch[1]);
   }
   return toNumber(str);
 }
@@ -299,7 +303,7 @@ async function clearBookingHandoffQrs(
   }
 
   await collection("payments").updateOne(
-    { booking_id: toNumber(bookingId) },
+    { booking_id: parseBookingId(bookingId) || toNumber(bookingId) },
     { $set: patch }
   );
 }
@@ -425,25 +429,47 @@ async function getCarById(id) {
 }
 
 async function getBookingById(id) {
-  const parsedId = parseBookingId(id);
+  if (id == null) return null;
+  const strId = String(id).trim().replace(/^#/, "");
+  if (!strId) return null;
+
+  // 1. Direct match by booking_reference (case-insensitive)
+  const byRef = await collection("bookings").findOne({
+    booking_reference: { $regex: `^${escapeRegExp(strId)}$`, $options: "i" },
+  });
+  if (byRef) return byRef;
+
+  // 2. Parse numeric id (from XX or A6-20XX-XX)
+  const parsedId = parseBookingId(strId);
   if (parsedId) {
     const doc = await collection("bookings").findOne({ id: parsedId });
     if (doc) return doc;
   }
-  const strId = String(id || "").trim();
-  if (strId) {
-    return collection("bookings").findOne({
+
+  // 3. Fallback string / number id
+  return collection("bookings").findOne({
+    $or: [{ id: strId }, { id: toNumber(strId) }],
+  });
+}
+
+async function getPaymentByBookingId(bookingId) {
+  if (bookingId == null) return null;
+  const parsedId = parseBookingId(bookingId);
+  const targetId = parsedId || toNumber(bookingId);
+  if (targetId) {
+    const payment = await collection("payments").findOne({ booking_id: targetId });
+    if (payment) return payment;
+  }
+  const str = String(bookingId).trim().replace(/^#/, "");
+  if (str) {
+    return collection("payments").findOne({
       $or: [
-        { booking_reference: { $regex: `^${escapeRegExp(strId)}$`, $options: "i" } },
-        { id: strId },
+        { booking_reference: { $regex: `^${escapeRegExp(str)}$`, $options: "i" } },
+        { booking_id: str },
       ],
     });
   }
   return null;
-}
-
-async function getPaymentByBookingId(bookingId) {
-  return collection("payments").findOne({ booking_id: toNumber(bookingId) });
 }
 
 async function findPaymentByReference(paymentReference, { excludeBookingId = null } = {}) {
@@ -485,8 +511,14 @@ async function findPaymentByReference(paymentReference, { excludeBookingId = nul
 }
 
 async function getCancellationByBookingId(bookingId) {
+  const parsedId = parseBookingId(bookingId) || toNumber(bookingId);
   return collection("booking_cancellations")
-    .find({ booking_id: toNumber(bookingId) })
+    .find({
+      $or: [
+        { booking_id: parsedId },
+        { booking_id: String(bookingId || "").trim() },
+      ],
+    })
     .sort({ cancelled_at: -1, id: -1 })
     .limit(1)
     .next();
@@ -1880,7 +1912,7 @@ app.post("/api/payments/qr", verifyCustomer, async (req, res) => {
       return res.status(409).json({ message: "This booking has already been cancelled." });
     }
 
-    const payment = await getPaymentByBookingId(booking_id);
+    const payment = await getPaymentByBookingId(booking.id);
     if (!payment) {
       return res.status(404).json({ message: "Payment QR not found for this booking" });
     }
@@ -2167,11 +2199,11 @@ app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {
       });
     }
 
-    const resolvedBookingId = toNumber(scannedQr?.booking_id || booking_id);
+    const rawBookingId = scannedQr?.booking_id || booking_id;
     const resolvedQrType = String(scannedQr?.qr_type || qr_type || "")
       .trim()
       .toLowerCase();
-    const booking = await getBookingById(resolvedBookingId);
+    const booking = await getBookingById(rawBookingId);
     const [customer, car, payment] = booking
       ? await Promise.all([
           getCustomerById(booking.customer_id),
@@ -2197,7 +2229,7 @@ app.post("/api/admin/verify-qr", verifyAdmin, async (req, res) => {
 
     if (scannedQr) {
       const mismatchedQr =
-        toNumber(scannedQr.booking_id) !== booking.id ||
+        parseBookingId(scannedQr.booking_id) !== booking.id ||
         resolvedQrType !== String(scannedQr.qr_type || "").trim().toLowerCase() ||
         (scannedQr.customer_id != null && toNumber(scannedQr.customer_id) !== customer.id) ||
         (scannedQr.car_id != null && toNumber(scannedQr.car_id) !== car.id) ||

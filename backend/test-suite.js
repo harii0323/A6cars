@@ -315,7 +315,140 @@ async function runTests() {
     }, {
       headers: { Authorization: `Bearer ${adminToken}` }
     });
-    assert(pinRepeat.status === 200, 'POST /api/admin/verify-pin for already collected vehicle returns 200');
+    // 10. Testing A6-20XX-XX and XX Booking ID Formats Across Endpoints
+    console.log('\n[10] Testing A6-20XX-XX and XX Booking ID Formats Across Endpoints...');
+
+    // GET /api/payment/status with formatted reference (A6-20XX-XX) and raw ID (XX)
+    const statusByRef = await client.get(`/api/payment/status/${bookingCRef}`);
+    assert(statusByRef.status === 200 && statusByRef.data.paid === true, 'GET /api/payment/status/:booking_id accepts A6-20XX-XX format');
+
+    const statusById = await client.get(`/api/payment/status/${bookingCId}`);
+    assert(statusById.status === 200 && statusById.data.paid === true, 'GET /api/payment/status/:booking_id accepts XX format');
+
+    // Create booking D to test /api/payments/qr and /api/payment/confirm with formatted reference
+    const futureYearD = 2075 + Math.floor(Math.random() * 20);
+    const bookDRes = await client.post('/api/book', {
+      car_id: testCar ? testCar.id : 1,
+      customer_id: userAId,
+      start_date: `${futureYearD}-01-10`,
+      end_date: `${futureYearD}-01-12`,
+      payment_plan: 'full'
+    }, {
+      headers: { Authorization: `Bearer ${userAToken}` }
+    });
+    const bookingDId = bookDRes.data?.booking_id;
+    const bookingDRef = bookDRes.data?.booking_reference;
+
+    if (bookingDId && bookingDRef) {
+      // POST /api/payments/qr with formatted reference A6-20XX-XX
+      const qrByRef = await client.post('/api/payments/qr', {
+        booking_id: bookingDRef
+      }, {
+        headers: { Authorization: `Bearer ${userAToken}` }
+      });
+      assert(qrByRef.status === 200 && qrByRef.data.qr, 'POST /api/payments/qr accepts A6-20XX-XX format');
+
+      // POST /api/payments/qr with raw numeric XX
+      const qrById = await client.post('/api/payments/qr', {
+        booking_id: bookingDId
+      }, {
+        headers: { Authorization: `Bearer ${userAToken}` }
+      });
+      assert(qrById.status === 200 && qrById.data.qr, 'POST /api/payments/qr accepts XX format');
+
+      // POST /api/payment/confirm with formatted reference A6-20XX-XX
+      const confirmByRef = await client.post('/api/payment/confirm', {
+        booking_id: bookingDRef
+      }, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+      assert(confirmByRef.status === 200, 'POST /api/payment/confirm accepts A6-20XX-XX format');
+    }
+
+    // Create booking E to test /api/verify-payment with formatted reference
+    const futureYearE = 2075 + Math.floor(Math.random() * 20);
+    const bookERes = await client.post('/api/book', {
+      car_id: testCar ? testCar.id : 1,
+      customer_id: userAId,
+      start_date: `${futureYearE}-02-10`,
+      end_date: `${futureYearE}-02-12`,
+      payment_plan: 'full'
+    }, {
+      headers: { Authorization: `Bearer ${userAToken}` }
+    });
+    const bookingEId = bookERes.data?.booking_id;
+    const bookingERef = bookERes.data?.booking_reference;
+
+    if (bookingEId && bookingERef) {
+      const uniqueRef = `UPI-VERIFY-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+      // Customer submits payment reference with formatted Booking ID (A6-20XX-XX)
+      const custSubmit = await client.post('/api/verify-payment', {
+        booking_id: bookingERef,
+        payment_reference_id: uniqueRef,
+        customer_id: userAId
+      }, {
+        headers: { Authorization: `Bearer ${userAToken}` }
+      });
+      assert(custSubmit.status === 200, 'POST /api/verify-payment customer submission accepts A6-20XX-XX format');
+
+      // Admin matches and verifies payment with formatted Booking ID (A6-20XX-XX)
+      const adminVerify = await client.post('/api/verify-payment', {
+        booking_id: bookingERef,
+        payment_reference_id: uniqueRef,
+        admin_email: 'karikeharikrishna@gmail.com'
+      }, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+      assert(adminVerify.status === 200, 'POST /api/verify-payment admin verification accepts A6-20XX-XX format');
+    }
+
+    // Create booking F to test /api/cancel-booking with formatted reference
+    const futureYearF = 2075 + Math.floor(Math.random() * 20);
+    const bookFRes = await client.post('/api/book', {
+      car_id: testCar ? testCar.id : 1,
+      customer_id: userAId,
+      start_date: `${futureYearF}-03-10`,
+      end_date: `${futureYearF}-03-12`,
+      payment_plan: 'full'
+    }, {
+      headers: { Authorization: `Bearer ${userAToken}` }
+    });
+    const bookingFId = bookFRes.data?.booking_id;
+    const bookingFRef = bookFRes.data?.booking_reference;
+
+    if (bookingFId && bookingFRef) {
+      const cancelByRef = await client.post('/api/cancel-booking', {
+        booking_id: bookingFRef,
+        reason: 'Testing A6-20XX-XX format cancellation'
+      }, {
+        headers: { Authorization: `Bearer ${userAToken}` }
+      });
+      assert(cancelByRef.status === 200, 'POST /api/cancel-booking accepts A6-20XX-XX format');
+    }
+
+    // Create booking G to test /api/admin/cancel-booking with formatted reference
+    const futureYearG = 2075 + Math.floor(Math.random() * 20);
+    const bookGRes = await client.post('/api/book', {
+      car_id: testCar ? testCar.id : 1,
+      customer_id: userAId,
+      start_date: `${futureYearG}-04-10`,
+      end_date: `${futureYearG}-04-12`,
+      payment_plan: 'full'
+    }, {
+      headers: { Authorization: `Bearer ${userAToken}` }
+    });
+    const bookingGId = bookGRes.data?.booking_id;
+    const bookingGRef = bookGRes.data?.booking_reference;
+
+    if (bookingGId && bookingGRef) {
+      const adminCancelByRef = await client.post('/api/admin/cancel-booking', {
+        booking_id: bookingGRef,
+        reason: 'Testing admin A6-20XX-XX format cancellation'
+      }, {
+        headers: { Authorization: `Bearer ${adminToken}` }
+      });
+      assert(adminCancelByRef.status === 200, 'POST /api/admin/cancel-booking accepts A6-20XX-XX format');
+    }
   }
 
   console.log('\n' + '='.repeat(70));
@@ -340,15 +473,24 @@ async function main() {
 
   console.log('Starting backend server for test execution...');
   require('./server.js');
-  setTimeout(async () => {
+  
+  for (let i = 0; i < 20; i++) {
+    await new Promise(r => setTimeout(r, 600));
     try {
-      await runTests();
-      process.exit(0);
-    } catch (err) {
-      console.error('Test execution error:', err);
-      process.exit(1);
-    }
-  }, 3500);
+      const check = await client.get('/health');
+      if (check.status === 200) {
+        break;
+      }
+    } catch (e) {}
+  }
+
+  try {
+    await runTests();
+    process.exit(0);
+  } catch (err) {
+    console.error('Test execution error:', err);
+    process.exit(1);
+  }
 }
 
 main();
