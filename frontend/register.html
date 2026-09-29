@@ -3,31 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Create Account | A6 Cars</title>
+  <title>Create Customer Account | A6 Cars</title>
+  <meta name="description" content="Register with A6 Cars to access premium vehicle rentals, intercity carpooling, and instant PIN handoffs." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/user.css" />
 </head>
 <body data-page="register">
   <section class="auth-shell">
+    <div class="ambient-3d-orb-container">
+      <div class="ambient-3d-orb orb-orange"></div>
+      <div class="ambient-3d-orb orb-cyan"></div>
+      <div class="ambient-3d-orb orb-violet"></div>
+    </div>
     <div class="auth-card">
       <div class="auth-copy">
-        <span class="hero-chip">Create Customer Account</span>
+        <span class="hero-chip"><span class="badge-dot"></span> New Membership</span>
         <h1>Start booking without the messy handoff.</h1>
-        <p>The rebuilt customer flow is designed so your account, booking history, QR passes, and notifications all stay connected from the first reservation onward.</p>
+        <p>Our integrated customer mobility experience connects your account, booking timeline, QR passes, and notifications directly from your first reservation onward.</p>
         <div class="auth-points">
           <article class="auth-point">
-            <strong>Quick setup</strong>
-            <span>Just your name, email, phone, and password to get moving.</span>
+            <strong>60-Second Setup</strong>
+            <span>Quick registration with verified email and phone number to get you moving.</span>
           </article>
           <article class="auth-point">
-            <strong>Better follow-up</strong>
-            <span>Upcoming trips, pending payments, and admin-issued offers stay visible after signup.</span>
+            <strong>Integrated Carpooling</strong>
+            <span>Offer empty seats or split costs with verified community members across routes.</span>
           </article>
           <article class="auth-point">
-            <strong>Future-ready structure</strong>
-            <span>This route now uses the same shared system as the rest of the user-facing pages.</span>
+            <strong>10% Advance Deposit</strong>
+            <span>Lock dates with minimum deposit and transparent payment options.</span>
           </article>
         </div>
       </div>
@@ -35,30 +41,39 @@
       <div class="auth-form-card">
         <span class="eyebrow">A6 Cars Registration</span>
         <h2>Create your account</h2>
-        <p class="form-copy">Once you register, you can sign in, browse the fleet, and manage bookings from the upgraded customer workspace.</p>
-        <form id="registerForm" class="field-grid">
-          <label class="field-block">
-            <span>Full name</span>
-            <input class="input" name="name" type="text" placeholder="Your name" required />
-          </label>
-          <label class="field-block">
-            <span>Phone number</span>
-            <input class="input" name="phone" type="text" placeholder="Mobile number" required />
-          </label>
-          <label class="field-block" style="grid-column: 1 / -1;">
-            <span>Email address</span>
-            <input class="input" name="email" type="email" placeholder="you@example.com" required />
-          </label>
-          <label class="field-block" style="grid-column: 1 / -1;">
-            <span>Password</span>
-            <input class="input" name="password" type="password" placeholder="Create a password" required />
-          </label>
-          <div style="grid-column: 1 / -1;">
-            <button class="button button-primary" id="registerSubmitBtn" type="submit">Create Account</button>
+        <p class="form-copy">Join thousands of verified drivers and travelers enjoying modern mobility.</p>
+        <form id="registerForm" class="stack-list">
+          <div class="field-grid">
+            <label class="field-block">
+              <span>Full name</span>
+              <input class="input" name="name" type="text" placeholder="Your name" required autocomplete="name" />
+            </label>
+            <label class="field-block">
+              <span>Mobile phone</span>
+              <input class="input" name="phone" type="tel" placeholder="Mobile number" required autocomplete="tel" />
+            </label>
           </div>
-          <div class="feedback" id="registerFeedback" style="grid-column: 1 / -1;"></div>
+          <label class="field-block">
+            <span>Email address</span>
+            <input class="input" name="email" type="email" placeholder="you@example.com" required autocomplete="email" />
+          </label>
+          <label class="field-block">
+            <span>Create password</span>
+            <div style="position: relative;">
+              <input class="input" id="regPassword" name="password" type="password" placeholder="Minimum 6 characters" required autocomplete="new-password" />
+              <button type="button" onclick="const p = document.getElementById('regPassword'); p.type = p.type === 'password' ? 'text' : 'password'; this.textContent = p.type === 'password' ? '👁️' : '🔒';" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 1rem; opacity: 0.7;">👁️</button>
+            </div>
+          </label>
+          <div style="margin-top: 6px;">
+            <button class="button button-primary button-full" id="registerSubmitBtn" type="submit" style="padding: 13px;">
+              Create Member Account
+            </button>
+          </div>
+          <div class="feedback" id="registerFeedback"></div>
         </form>
-        <p class="form-copy" style="margin-top: 18px;">Already registered? <a href="/login.html"><strong>Sign in here</strong></a></p>
+        <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border);">
+          <p class="form-copy" style="margin: 0;">Already registered? <a href="/login.html" style="color: var(--accent); font-weight: 700;">Sign in to account</a></p>
+        </div>
       </div>
     </div>
   </section>

@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Carpooling & Shared Rides | A6 Cars</title>
+  <title>Carpooling & Shared Mobility | A6 Cars</title>
+  <meta name="description" content="Share the ride, split the cost. Verified intercity carpooling for personal cars and rented fleet vehicles." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/user.css" />
 </head>
 <body data-page="carpool">
@@ -16,7 +17,7 @@
         <span class="brand-mark"><img class="brand-logo" src="/assets/a6cars-logo.png" alt="A6 Cars logo" /></span>
         <span>
           <strong>A6 Cars</strong>
-          <small>Fleet & Carpool</small>
+          <small>Fleet & Carpooling</small>
         </span>
       </a>
       <div class="nav-cluster">
@@ -26,29 +27,76 @@
     </header>
 
     <main class="page-shell">
-      <!-- Carpool Hero -->
-      <section class="hero hero-grid">
+      <!-- 11. Dedicated Carpooling Hero Section -->
+      <section class="hero hero-grid carpool-hero">
+        <div class="ambient-3d-orb-container">
+          <div class="ambient-3d-orb orb-orange"></div>
+          <div class="ambient-3d-orb orb-cyan"></div>
+          <div class="ambient-3d-orb orb-violet"></div>
+        </div>
         <div class="hero-copy">
-          <span class="hero-chip">A6 Carpooling System</span>
-          <h1>Share empty seats, split fuel costs, and travel sustainably.</h1>
-          <p class="light-copy">Search available verified rides or offer seats on your own intercity journeys across Andhra Pradesh, Telangana, and beyond.</p>
+          <span class="hero-chip"><span class="badge-dot"></span> Community Shared Mobility</span>
+          <h1 class="hero-headline">
+            SHARE THE <span class="accent-text">RIDE.</span><br />
+            <span class="gradient-text-alt">SPLIT THE</span> COST.
+          </h1>
+          <p class="light-copy">
+            Connect with verified drivers and riders. Offer empty seats in your personal or rented vehicle, divide fuel and toll expenses fairly, and travel comfortably.
+          </p>
+
+          <!-- 3D Animated Neon Highway Route Visualizer (Hyderabad -> Goa) -->
+          <div class="hero-3d-route-highway">
+            <div class="route-city-station city-start">
+              <div class="station-pulse-beacon"></div>
+              <div class="station-glass-card">
+                <span class="station-tag">ORIGIN</span>
+                <strong>Hyderabad</strong>
+                <small>Gachibowli Hub</small>
+              </div>
+            </div>
+
+            <div class="route-highway-track">
+              <div class="highway-lane-line"></div>
+              <div class="highway-car-cruiser">🚗</div>
+              <div class="highway-distance-badge">305 KM &bull; 5h 20m</div>
+            </div>
+
+            <div class="route-city-station city-end">
+              <div class="station-pulse-beacon beacon-orange"></div>
+              <div class="station-glass-card">
+                <span class="station-tag">DESTINATION</span>
+                <strong>Goa</strong>
+                <small>Panaji Hub</small>
+              </div>
+            </div>
+          </div>
+
           <div class="hero-actions">
             <button class="button button-primary" type="button" data-action="switch-carpool-tab" data-tab="find">
-              🔍 Find a Ride
+              <span>🔍</span> Find a Ride
             </button>
-            <button class="button button-secondary" type="button" data-action="switch-carpool-tab" data-tab="offer">
-              🚗 Offer a Ride
+            <button class="button button-secondary" type="button" data-action="switch-carpool-tab" data-tab="create">
+              <span>🚗</span> Offer a Ride
             </button>
-            <button class="button button-warm" type="button" data-action="switch-carpool-tab" data-tab="myCarpools">
-              📋 My Carpools
+            <button class="button button-outline-light" type="button" data-action="switch-carpool-tab" data-tab="vehicles">
+              <span>🚘</span> My Vehicles
+            </button>
+            <button class="button button-outline-light" type="button" data-action="switch-carpool-tab" data-tab="dashboard">
+              <span>📊</span> Carpool Hub
             </button>
           </div>
         </div>
+
         <div class="hero-aside" id="carpoolSpotlight">
-          <div class="panel-card-highlight">
-            <span class="eyebrow">Smart Matching</span>
-            <h3>Safe, verified rides with mutual community ratings.</h3>
-            <p>Every trip features driver ratings, seat locks with zero overbooking, route previews, and direct contact options.</p>
+          <div class="carpool-spotlight-card">
+            <span class="eyebrow">Zero Overbooking Guarantee</span>
+            <h3>Safe, verified rides backed by atomic seat reservations.</h3>
+            <p>Every trip features driver ratings, atomic seat locking with zero overbooking, verified pickup points, and support for both personal and rented fleet cars.</p>
+            <div class="badge-row">
+              <span class="status-badge badge-success">✓ Verified Drivers</span>
+              <span class="status-badge badge-accent">⚡ Atomic Seats</span>
+              <span class="status-badge badge-neutral">🚗 Rented Car Ready</span>
+            </div>
           </div>
         </div>
       </section>
@@ -56,43 +104,53 @@
       <!-- Main Navigation Tabs -->
       <div class="carpool-tab-bar" id="carpoolTabBar">
         <button class="carpool-tab-btn active" type="button" data-tab="find">
-          <span>🔍 Find a Ride</span>
+          <span>🔍 Find Carpool</span>
         </button>
-        <button class="carpool-tab-btn" type="button" data-tab="offer">
-          <span>🚗 Offer a Ride</span>
+        <button class="carpool-tab-btn" type="button" data-tab="create">
+          <span>🚗 Offer Ride</span>
         </button>
-        <button class="carpool-tab-btn" type="button" data-tab="myCarpools">
-          <span>📋 My Carpools</span>
+        <button class="carpool-tab-btn" type="button" data-tab="vehicles">
+          <span>🚘 My Vehicles</span>
+        </button>
+        <button class="carpool-tab-btn" type="button" data-tab="add-vehicle">
+          <span>➕ Add Vehicle</span>
+        </button>
+        <button class="carpool-tab-btn" type="button" data-tab="dashboard">
+          <span>📊 Carpool Dashboard</span>
         </button>
       </div>
 
-      <!-- SECTION 1: FIND A RIDE -->
+      <!-- TAB 1: FIND CARPOOL -->
       <section class="panel carpool-section" id="findSection">
         <div class="panel-head">
           <div class="panel-title">
-            <span class="eyebrow">Available Rides</span>
-            <h2>Search matching carpool journeys</h2>
-            <p class="panel-copy">Filter by starting city, destination, travel date, seat count, and maximum price.</p>
+            <span class="eyebrow">Search Available Rides</span>
+            <h2>Find and join shared intercity journeys</h2>
+            <p class="panel-copy">Filter trips by origin, destination, travel date, time, passengers, and price.</p>
           </div>
         </div>
 
-        <!-- Search Toolbar -->
+        <!-- 8. Advanced Floating Search Toolbar -->
         <div class="carpool-search-toolbar">
-          <form id="carpoolSearchForm" class="carpool-search-grid">
+          <form id="carpoolSearchForm" class="field-grid" style="grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); align-items: end; background: var(--surface-alt); padding: 22px; border-radius: var(--radius-lg); border: 1px solid var(--border); gap: 14px;">
             <div class="field-block">
-              <label for="searchFrom">From (Origin)</label>
+              <label for="searchFrom"><span>📍</span> Source (Origin)</label>
               <input class="input" id="searchFrom" type="text" placeholder="e.g. Hyderabad" />
             </div>
             <div class="field-block">
-              <label for="searchTo">To (Destination)</label>
-              <input class="input" id="searchTo" type="text" placeholder="e.g. Vijayawada" />
+              <label for="searchTo"><span>🏁</span> Destination</label>
+              <input class="input" id="searchTo" type="text" placeholder="e.g. Vijayawada, Goa" />
             </div>
             <div class="field-block">
-              <label for="searchDate">Travel Date</label>
+              <label for="searchDate"><span>📅</span> Travel Date</label>
               <input class="input" id="searchDate" type="date" />
             </div>
             <div class="field-block">
-              <label for="searchPassengers">Passengers</label>
+              <label for="searchTime"><span>⏰</span> Departure Time</label>
+              <input class="input" id="searchTime" type="time" />
+            </div>
+            <div class="field-block">
+              <label for="searchPassengers"><span>👥</span> Passengers</label>
               <select class="select" id="searchPassengers">
                 <option value="1">1 Passenger</option>
                 <option value="2">2 Passengers</option>
@@ -101,65 +159,96 @@
               </select>
             </div>
             <div class="field-block">
-              <label for="searchMaxPrice">Max Price (₹)</label>
-              <input class="input" id="searchMaxPrice" type="number" min="0" placeholder="Optional max price" />
+              <label for="searchMaxPrice"><span>💰</span> Max Price (₹)</label>
+              <input class="input" id="searchMaxPrice" type="number" min="0" step="50" placeholder="e.g. 800" />
             </div>
             <div class="field-block">
-              <label for="searchVehicleType">Vehicle Type</label>
+              <label for="searchVehicleType"><span>🚗</span> Vehicle Type</label>
               <select class="select" id="searchVehicleType">
-                <option value="all">All Vehicles</option>
+                <option value="all">All Vehicle Types</option>
                 <option value="Sedan">Sedan</option>
                 <option value="SUV">SUV</option>
                 <option value="Hatchback">Hatchback</option>
                 <option value="MUV">MUV</option>
               </select>
             </div>
-            <div class="carpool-search-actions">
-              <button class="button button-primary" type="submit">Search Rides</button>
+            <div style="display: flex; gap: 8px;">
+              <button class="button button-primary" type="submit" style="flex: 1;">Search</button>
               <button class="button button-ghost" type="button" id="resetSearchBtn">Clear</button>
             </div>
           </form>
         </div>
 
         <!-- Results Grid -->
-        <div class="carpool-results-container" id="carpoolResultsContainer">
-          <div class="carpool-grid" id="carpoolTripGrid"></div>
+        <div class="carpool-results-container" id="carpoolResultsContainer" style="margin-top: 28px;">
+          <div class="carpool-grid" id="carpoolTripGrid">
+            <div class="empty-state">
+              <div class="skeleton-shimmer" style="height: 180px; width: 100%; border-radius: 16px; margin-bottom: 12px;"></div>
+              <p>Loading available verified journeys...</p>
+            </div>
+          </div>
         </div>
       </section>
 
-      <!-- SECTION 2: OFFER A RIDE -->
-      <section class="panel carpool-section hidden" id="offerSection">
+      <!-- TAB 2: CREATE CARPOOL TRIP -->
+      <section class="panel carpool-section hidden" id="createSection">
         <div class="panel-head">
           <div class="panel-title">
-            <span class="eyebrow">Driver Workspace</span>
-            <h2>Create and publish a new carpool trip</h2>
-            <p class="panel-copy">Share your travel itinerary, specify available seats, set your per-passenger price, and manage join requests.</p>
+            <span class="eyebrow">Trip Creator</span>
+            <h2>Create and Offer a Carpool Trip</h2>
+            <p class="panel-copy">Offer empty seats in your own vehicle or an active rented car. Rented cars are strictly validated against your rental window.</p>
           </div>
         </div>
 
         <div class="carpool-offer-layout">
-          <form id="offerRideForm" class="carpool-offer-form">
+          <!-- Active Rented Car Warning Banner -->
+          <div class="timeline-card hidden" id="rentedCarNoticeBanner" style="border-left: 4px solid var(--accent); background: #FFF1EB; margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 1.8rem;">🚗</span>
+              <div>
+                <strong style="color: var(--accent);">Rented Car Carpooling Mode Activated</strong>
+                <p id="rentedCarNoticeText" style="color: var(--text-primary); margin-top: 2px;">This trip uses your active rental booking. The trip date must be within your valid rental duration.</p>
+              </div>
+            </div>
+          </div>
+
+          <form id="offerRideForm" class="stack-list">
+            <!-- Vehicle Selector -->
+            <div class="field-block">
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="offerVehicleSelect">Select Vehicle for Trip *</label>
+                <button class="button-link" type="button" data-action="switch-carpool-tab" data-tab="add-vehicle">+ Register New Personal Vehicle</button>
+              </div>
+              <select class="select" id="offerVehicleSelect" required>
+                <option value="">Select a personal car or active rented vehicle...</option>
+              </select>
+              <small class="field-note" id="vehicleSelectionNote">Choose whether you are driving your personal car or a vehicle you rented through A6 Fleet.</small>
+            </div>
+
+            <!-- Route Details -->
             <div class="field-grid">
               <div class="field-block">
                 <label for="offerSource">Starting Location (Origin) *</label>
-                <input class="input" id="offerSource" type="text" placeholder="e.g. Hyderabad (Gachibowli)" required />
+                <input class="input" id="offerSource" type="text" placeholder="e.g. Hyderabad (Gachibowli / Hitec City)" required />
               </div>
               <div class="field-block">
                 <label for="offerDestination">Final Destination *</label>
-                <input class="input" id="offerDestination" type="text" placeholder="e.g. Vijayawada (Benz Circle)" required />
+                <input class="input" id="offerDestination" type="text" placeholder="e.g. Vijayawada (Benz Circle / Bus Station)" required />
               </div>
             </div>
 
             <div class="field-block">
               <label for="offerStops">Intermediate Pickup Points / Stops (Optional)</label>
-              <input class="input" id="offerStops" type="text" placeholder="e.g. LB Nagar, Nalgonda, Suryapet (comma separated)" />
-              <small class="field-note">Passengers can request pickup from these defined stops along your route.</small>
+              <input class="input" id="offerStops" type="text" placeholder="e.g. LB Nagar, Nalgonda Bypass, Suryapet Toll (comma separated)" />
+              <small class="field-note">Co-passengers can request pickups and drop-offs along these stops.</small>
             </div>
 
+            <!-- Date and Time -->
             <div class="field-grid">
               <div class="field-block">
                 <label for="offerDate">Travel Date *</label>
                 <input class="input" id="offerDate" type="date" required />
+                <small class="field-note" id="offerDateHelp">Must be today or a future date.</small>
               </div>
               <div class="field-block">
                 <label for="offerTime">Departure Time *</label>
@@ -167,102 +256,365 @@
               </div>
             </div>
 
+            <!-- Seats and Price -->
             <div class="field-grid">
               <div class="field-block">
                 <label for="offerSeats">Available Seats *</label>
                 <input class="input" id="offerSeats" type="number" min="1" max="15" value="3" required />
+                <small class="field-note">Number of co-passengers you can accommodate comfortably.</small>
               </div>
               <div class="field-block">
-                <label for="offerPrice">Price per Passenger (₹) *</label>
-                <input class="input" id="offerPrice" type="number" min="0" step="50" placeholder="e.g. 500" required />
+                <label for="offerPrice">Cost-Sharing Amount per Seat (₹) *</label>
+                <input class="input" id="offerPrice" type="number" min="0" step="50" placeholder="e.g. 450" required />
+                <small class="field-note">Suggested fair share based on distance, fuel, and tolls.</small>
               </div>
             </div>
 
             <div class="field-grid">
               <div class="field-block">
-                <div class="field-label-split">
-                  <label for="offerVehicleSelect">Vehicle *</label>
-                  <button class="button-link" type="button" data-action="open-register-vehicle-modal">+ Register New Vehicle</button>
-                </div>
-                <select class="select" id="offerVehicleSelect" required>
-                  <option value="">Select a registered vehicle or fleet car...</option>
+                <label for="offerContactPref">Preferred Contact Mode</label>
+                <select class="select" id="offerContactPref">
+                  <option value="phone">Phone & In-App Notification</option>
+                  <option value="in_app">In-App Notification Only (Phone hidden until accepted)</option>
                 </select>
               </div>
               <div class="field-block">
-                <label for="offerContactPref">Preferred Contact Mode</label>
-                <select class="select" id="offerContactPref">
-                  <option value="phone">Phone & In-App</option>
-                  <option value="in_app">In-App Notification Only</option>
-                </select>
+                <label for="offerVehicleTypeDisplay">Vehicle Type</label>
+                <input class="input" id="offerVehicleTypeDisplay" type="text" readonly placeholder="Auto-detected from vehicle" />
               </div>
             </div>
 
             <div class="field-block">
-              <label for="offerDescription">Trip Notes & Rules</label>
-              <textarea class="input input-textarea" id="offerDescription" rows="3" placeholder="e.g., Morning commute, AC ride, light luggage allowed, non-smoking vehicle."></textarea>
+              <label for="offerDescription">Trip Description & Travel Notes</label>
+              <textarea class="input input-textarea" id="offerDescription" rows="3" placeholder="e.g. AC ride, plenty of boot space for small bags, flexible pickup along Outer Ring Road, punctual departure."></textarea>
             </div>
 
             <!-- Route Calculation Summary Box -->
-            <div class="route-preview-card hidden" id="offerRoutePreviewCard">
-              <span class="eyebrow">Estimated Route</span>
-              <div class="route-preview-metrics">
-                <div><strong>Distance:</strong> <span id="routePreviewDistance">—</span></div>
+            <div class="timeline-card hidden" id="offerRoutePreviewCard" style="background: var(--surface-alt); border-color: var(--accent);">
+              <span class="eyebrow">Estimated Route Preview</span>
+              <div style="display: flex; gap: 24px; margin-top: 6px;">
+                <div><strong>Estimated Distance:</strong> <span id="routePreviewDistance">—</span></div>
                 <div><strong>Estimated Duration:</strong> <span id="routePreviewDuration">—</span></div>
               </div>
             </div>
 
-            <div class="form-actions">
-              <button class="button button-primary" id="publishTripBtn" type="submit">Publish Carpool Trip</button>
+            <div style="margin-top: 14px;">
+              <button class="button button-primary" id="publishTripBtn" type="submit" style="padding: 13px 28px;">
+                <span>🚀</span> Publish Carpool Trip
+              </button>
             </div>
           </form>
         </div>
       </section>
 
-      <!-- SECTION 3: MY CARPOOLS -->
-      <section class="panel carpool-section hidden" id="myCarpoolsSection">
+      <!-- TAB 3: MY VEHICLES -->
+      <section class="panel carpool-section hidden" id="vehiclesSection">
         <div class="panel-head">
           <div class="panel-title">
-            <span class="eyebrow">Personal Dashboard</span>
-            <h2>My Carpool Rides & Requests</h2>
-            <p class="panel-copy">Manage rides you have offered, review passenger join requests, and track rides you have joined.</p>
+            <span class="eyebrow">Fleet & Personal Hub</span>
+            <h2>My Registered Vehicles</h2>
+            <p class="panel-copy">Manage personal cars you have registered and active vehicles you have rented from the A6 fleet.</p>
+          </div>
+          <button class="button button-primary" type="button" data-action="switch-carpool-tab" data-tab="add-vehicle">
+            <span>+</span> Add Personal Vehicle
+          </button>
+        </div>
+
+        <div style="display: grid; gap: 32px;">
+          <!-- Section A: Personal Vehicles -->
+          <div>
+            <div style="margin-bottom: 16px;">
+              <h3>🚗 Personal Cars (<span id="personalVehiclesCount">0</span>)</h3>
+              <p class="support-copy">Vehicles you own and can offer for regular or weekend carpooling.</p>
+            </div>
+            <div class="fleet-grid" id="personalVehiclesGrid">
+              <div class="empty-state">
+                <h4>No personal vehicles registered yet</h4>
+                <p>Register your car with registration number, seating capacity, and images to offer rides.</p>
+                <button class="button button-secondary" type="button" data-action="switch-carpool-tab" data-tab="add-vehicle">+ Register Car</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section B: Rented Vehicles -->
+          <div>
+            <div style="margin-bottom: 16px;">
+              <h3>🚙 Active Rented Fleet Cars (<span id="rentedVehiclesCount">0</span>)</h3>
+              <p class="support-copy">Cars currently rented from A6 Fleet. You can offer extra seats for carpooling during your approved rental window.</p>
+            </div>
+            <div class="fleet-grid" id="rentedVehiclesGrid">
+              <div class="empty-state">
+                <h4>No active rental bookings</h4>
+                <p>When you rent a car from A6 Cars, it automatically appears here so you can split travel expenses.</p>
+                <a class="button button-secondary" href="/book.html">Browse Fleet Cars</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: ADD VEHICLE (STEP-BASED WIZARD) -->
+      <section class="panel carpool-section hidden" id="addVehicleSection">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="eyebrow">Vehicle Registration</span>
+            <h2>Add Your Personal Vehicle</h2>
+            <p class="panel-copy">Register your car specs and photos to offer empty seats for carpooling.</p>
           </div>
         </div>
 
-        <div class="carpool-subtab-bar">
-          <button class="carpool-subtab-btn active" type="button" data-subtab="offered">
-            Offered Rides (<span id="offeredCount">0</span>)
+        <div class="add-vehicle-container">
+          <!-- Multi-section progress indicators -->
+          <div class="vehicle-form-steps">
+            <div class="form-step active" data-step="1">
+              <span class="step-num">1</span>
+              <span class="step-text">Information</span>
+            </div>
+            <div class="form-step" data-step="2">
+              <span class="step-num">2</span>
+              <span class="step-text">Specifications</span>
+            </div>
+            <div class="form-step" data-step="3">
+              <span class="step-num">3</span>
+              <span class="step-text">Images</span>
+            </div>
+            <div class="form-step" data-step="4">
+              <span class="step-num">4</span>
+              <span class="step-text">Availability</span>
+            </div>
+          </div>
+
+          <form id="registerVehicleForm" class="stack-list">
+            <!-- Section 1: Vehicle Information -->
+            <fieldset style="border: none; padding: 0;">
+              <legend style="font-size: 1.1rem; font-weight: 700; margin-bottom: 14px; color: var(--accent);">1. Vehicle Information</legend>
+              <div class="field-grid">
+                <div class="field-block">
+                  <label for="vehRegNumber">Registration Number *</label>
+                  <input class="input" id="vehRegNumber" type="text" placeholder="e.g. TS09EA1234 or AP09BC5678" style="text-transform: uppercase;" required />
+                  <small class="field-note">Registration is masked on public carpool search cards for privacy.</small>
+                </div>
+                <div class="field-block">
+                  <label for="vehYear">Manufacturing Year *</label>
+                  <input class="input" id="vehYear" type="number" min="2000" max="2027" value="2023" required />
+                </div>
+              </div>
+              <div class="field-grid" style="margin-top: 14px;">
+                <div class="field-block">
+                  <label for="vehBrand">Brand / Make *</label>
+                  <input class="input" id="vehBrand" type="text" placeholder="e.g. Hyundai, Honda, Maruti, Tata" required />
+                </div>
+                <div class="field-block">
+                  <label for="vehModel">Model Name *</label>
+                  <input class="input" id="vehModel" type="text" placeholder="e.g. Verna, City, Nexon, Creta" required />
+                </div>
+              </div>
+            </fieldset>
+
+            <!-- Section 2: Specifications -->
+            <fieldset style="border: none; padding: 0; margin-top: 18px;">
+              <legend style="font-size: 1.1rem; font-weight: 700; margin-bottom: 14px; color: var(--accent);">2. Specifications & Capacity</legend>
+              <div class="field-grid">
+                <div class="field-block">
+                  <label for="vehType">Vehicle Body Type *</label>
+                  <select class="select" id="vehType" required>
+                    <option value="Sedan">Sedan</option>
+                    <option value="SUV">SUV</option>
+                    <option value="Hatchback">Hatchback</option>
+                    <option value="MUV">MUV / MPV</option>
+                  </select>
+                </div>
+                <div class="field-block">
+                  <label for="vehFuelType">Fuel Type *</label>
+                  <select class="select" id="vehFuelType" required>
+                    <option value="Petrol">Petrol</option>
+                    <option value="Diesel">Diesel</option>
+                    <option value="Electric">Electric (EV)</option>
+                    <option value="Hybrid">Hybrid</option>
+                    <option value="CNG">CNG</option>
+                  </select>
+                </div>
+              </div>
+              <div class="field-grid" style="margin-top: 14px;">
+                <div class="field-block">
+                  <label for="vehMileage">Mileage / Fuel Economy *</label>
+                  <input class="input" id="vehMileage" type="text" placeholder="e.g. 18 km/l or 350 km/charge" value="18 km/l" required />
+                </div>
+                <div class="field-block">
+                  <label for="vehCapacity">Total Seating Capacity *</label>
+                  <input class="input" id="vehCapacity" type="number" min="2" max="15" value="5" required />
+                  <small class="field-note">Total seats including the driver seat.</small>
+                </div>
+              </div>
+            </fieldset>
+
+            <!-- Section 3: Vehicle Images -->
+            <fieldset style="border: none; padding: 0; margin-top: 18px;">
+              <legend style="font-size: 1.1rem; font-weight: 700; margin-bottom: 14px; color: var(--accent);">3. Vehicle Images</legend>
+              <div class="field-block">
+                <label for="vehImageFile">Upload Vehicle Photo</label>
+                <div class="file-drop-area" id="vehFileDropArea">
+                  <input type="file" id="vehImageFile" accept="image/*" class="file-input-hidden" />
+                  <div class="file-drop-prompt">
+                    <span class="upload-icon">📷</span>
+                    <p><strong>Click to browse</strong> or drag & drop a photo of your car</p>
+                    <small style="color: var(--text-muted);">Supports PNG, JPG, WEBP up to 10MB</small>
+                  </div>
+                </div>
+              </div>
+
+              <div class="field-block" style="margin-top: 12px;">
+                <label for="vehImageUrl">Or Enter Image URL</label>
+                <input class="input" id="vehImageUrl" type="url" placeholder="https://example.com/my-car.jpg" />
+              </div>
+
+              <!-- Live Image Preview -->
+              <div class="image-preview-box hidden" id="vehImagePreviewBox">
+                <div class="preview-inner">
+                  <img id="vehPreviewImg" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E" alt="Vehicle preview" />
+                  <button type="button" class="preview-remove-btn" id="removeVehImageBtn">&times; Remove</button>
+                </div>
+              </div>
+            </fieldset>
+
+            <!-- Section 4: Current Location & Carpooling -->
+            <fieldset style="border: none; padding: 0; margin-top: 18px;">
+              <legend style="font-size: 1.1rem; font-weight: 700; margin-bottom: 14px; color: var(--accent);">4. Location & Carpooling Readiness</legend>
+              <div class="field-block">
+                <label for="vehLocation">Current Vehicle Location / City *</label>
+                <input class="input" id="vehLocation" type="text" placeholder="e.g. Hyderabad, Vijayawada, Guntur" required />
+              </div>
+
+              <div style="margin-top: 12px;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                  <input type="checkbox" id="vehOfferNowCheckbox" checked style="width: 18px; height: 18px; accent-color: var(--accent);" />
+                  <span><strong>Offer this car for carpooling immediately</strong> after registration</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <div style="display: flex; gap: 12px; margin-top: 24px;">
+              <button class="button button-primary" type="submit" id="saveVehicleBtn">
+                <span>💾</span> Save Vehicle
+              </button>
+              <button class="button button-ghost" type="button" data-action="switch-carpool-tab" data-tab="vehicles">Cancel</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- TAB 5: CARPOOL DASHBOARD -->
+      <section class="panel carpool-section hidden" id="dashboardSection">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="eyebrow">Dedicated Hub</span>
+            <h2>Carpool Dashboard</h2>
+            <p class="panel-copy">Comprehensive control center for trips you offered, rides you joined, passenger requests, and journeys in motion.</p>
+          </div>
+        </div>
+
+        <!-- 12. Dashboard Metrics Summary Grid -->
+        <div class="stats-grid" id="dashboardMetrics">
+          <article class="stat-card">
+            <span class="stat-label">Active Rentals</span>
+            <strong class="stat-value" id="dashActiveRentalsCount">00</strong>
+            <small>Current fleet rentals</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">My Vehicles</span>
+            <strong class="stat-value" id="dashMyVehiclesCount">00</strong>
+            <small>Registered personal cars</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Carpool Trips</span>
+            <strong class="stat-value" id="dashCreatedCount">00</strong>
+            <small>Rides you offered</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Trips Joined</span>
+            <strong class="stat-value" id="dashJoinedCount">00</strong>
+            <small>Rides as passenger</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Pending Requests</span>
+            <strong class="stat-value" id="dashPendingRequestsCount">00</strong>
+            <small>Awaiting response</small>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Upcoming Trips</span>
+            <strong class="stat-value" id="dashUpcomingCount">00</strong>
+            <small>Ready to travel</small>
+          </article>
+        </div>
+
+        <!-- Dashboard Subtabs Navigation -->
+        <div class="carpool-tab-bar" id="dashboardSubtabs" style="margin: 28px 0 20px;">
+          <button class="carpool-tab-btn active" type="button" data-dash-subtab="created">
+            <span>🚗 My Created Trips (<span id="dashSubtabCreatedBadge">0</span>)</span>
           </button>
-          <button class="carpool-subtab-btn" type="button" data-subtab="joined">
-            Joined Rides (<span id="joinedCount">0</span>)
+          <button class="carpool-tab-btn" type="button" data-dash-subtab="joined">
+            <span>👥 Trips I Joined (<span id="dashSubtabJoinedBadge">0</span>)</span>
+          </button>
+          <button class="carpool-tab-btn" type="button" data-dash-subtab="requests">
+            <span>📩 Join Requests (<span id="dashSubtabRequestsBadge">0</span>)</span>
+          </button>
+          <button class="carpool-tab-btn" type="button" data-dash-subtab="upcoming">
+            <span>🗓️ Upcoming Trips (<span id="dashSubtabUpcomingBadge">0</span>)</span>
+          </button>
+          <button class="carpool-tab-btn" type="button" data-dash-subtab="completed">
+            <span>✅ Completed Trips (<span id="dashSubtabCompletedBadge">0</span>)</span>
           </button>
         </div>
 
-        <!-- Offered Rides Subtab -->
-        <div class="carpool-subtab-content" id="offeredRidesContent">
-          <div class="carpool-manage-list" id="offeredRidesList"></div>
+        <!-- Dashboard Subtab 1: My Created Trips -->
+        <div class="dash-subtab-content" id="dashCreatedContent">
+          <div class="stack-list" id="dashCreatedList"></div>
         </div>
 
-        <!-- Joined Rides Subtab -->
-        <div class="carpool-subtab-content hidden" id="joinedRidesContent">
-          <div class="carpool-manage-list" id="joinedRidesList"></div>
+        <!-- Dashboard Subtab 2: Trips I Joined -->
+        <div class="dash-subtab-content hidden" id="dashJoinedContent">
+          <div class="stack-list" id="dashJoinedList"></div>
+        </div>
+
+        <!-- Dashboard Subtab 3: Join Requests -->
+        <div class="dash-subtab-content hidden" id="dashRequestsContent">
+          <div class="section-grid">
+            <div class="panel" style="padding: 24px;">
+              <h3>Incoming Requests for Your Trips</h3>
+              <p class="support-copy" style="margin-bottom: 14px;">Co-passengers wanting to join your rides. Accept to lock seats or reject.</p>
+              <div class="stack-list" id="dashIncomingRequestsList"></div>
+            </div>
+            <div class="panel" style="padding: 24px;">
+              <h3>Requests Sent by You</h3>
+              <p class="support-copy" style="margin-bottom: 14px;">Requests you made for other drivers' trips.</p>
+              <div class="stack-list" id="dashSentRequestsList"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dashboard Subtab 4: Upcoming Trips -->
+        <div class="dash-subtab-content hidden" id="dashUpcomingContent">
+          <div class="stack-list" id="dashUpcomingList"></div>
+        </div>
+
+        <!-- Dashboard Subtab 5: Completed Trips -->
+        <div class="dash-subtab-content hidden" id="dashCompletedContent">
+          <div class="stack-list" id="dashCompletedList"></div>
         </div>
       </section>
     </main>
 
     <footer class="site-footer">
-      <p>A6 Cars & Lucky Rentals Carpooling System. Verified journeys, shared costs, and community trust.</p>
-      <span>© 2026 A6 Cars</span>
+      <p>A6 Cars & Verified Carpooling Network. Zero markups, community trust, and sustainable mobility.</p>
+      <span>© 2026 A6 Cars. All rights reserved.</span>
     </footer>
   </div>
 
-  <!-- MODALS CONTAINER -->
   <div class="toast-root" id="toastRoot"></div>
   <div id="modalRoot"></div>
 
-  <!-- Application Scripts -->
   <script src="/api-config.js"></script>
   <script src="/voice-assistant.js"></script>
   <script src="/user.js"></script>
 </body>
 </html>
-

@@ -29,6 +29,16 @@ const pageState = {
     historySearch: "",
     historyFilter: "all",
   },
+  carpool: {
+    trips: [],
+    vehicles: [],
+    rentalVehicles: [],
+    activeTab: "find",
+    activeDashSubtab: "created",
+    searchFilters: {},
+    pendingUploadImageUrl: "",
+    dashboardData: null,
+  },
 };
 
 const PENDING_BOOKING_KEY = "pendingBookingContext";
@@ -52,6 +62,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   initializeVoiceAssistantIfAvailable();
+  init3DTiltEngine();
+  setTimeout(init3DTiltEngine, 400);
 });
 
 const pageInitializers = {
@@ -62,6 +74,7 @@ const pageInitializers = {
   book: initBookPage,
   history: initHistoryPage,
   "booking-alias": initBookingAliasPage,
+  carpool: initCarpoolPage,
 };
 
 function cacheCommonDom() {
@@ -99,6 +112,29 @@ function cacheCommonDom() {
     "discountStrip",
     "historyList",
     "redirectCopy",
+    "carpoolTabBar",
+    "carpoolSpotlight",
+    "findSection",
+    "createSection",
+    "vehiclesSection",
+    "addVehicleSection",
+    "dashboardSection",
+    "carpoolSearchForm",
+    "carpoolTripGrid",
+    "offerRideForm",
+    "offerVehicleSelect",
+    "rentedCarNoticeBanner",
+    "personalVehiclesGrid",
+    "rentedVehiclesGrid",
+    "registerVehicleForm",
+    "dashboardMetrics",
+    "dashboardSubtabs",
+    "dashCreatedList",
+    "dashJoinedList",
+    "dashIncomingRequestsList",
+    "dashSentRequestsList",
+    "dashUpcomingList",
+    "dashCompletedList",
   ].forEach((id) => {
     dom[id] = document.getElementById(id);
   });
@@ -118,6 +154,11 @@ function bindGlobalEvents() {
     const action = actionEl.dataset.action;
     if (action === "toggle-nav") {
       toggleResponsiveNavigation();
+      return;
+    }
+
+    if (action === "close-nav") {
+      closeResponsiveNavigation();
       return;
     }
 
@@ -159,6 +200,83 @@ function bindGlobalEvents() {
 
     if (action === "view-car-availability") {
       openCarAvailabilityModal(Number(actionEl.dataset.carId));
+      return;
+    }
+
+    if (action === "view-car-details") {
+      openCarDetailsModal(Number(actionEl.dataset.carId));
+      return;
+    }
+
+    if (action === "switch-carpool-tab") {
+      switchCarpoolTab(actionEl.dataset.tab);
+      return;
+    }
+
+    if (action === "join-carpool") {
+      const tripId = Number(actionEl.dataset.tripId);
+      const trip = (pageState.carpool?.trips || []).find((t) => t.id === tripId);
+      if (trip) {
+        openJoinCarpoolModal(trip);
+      } else {
+        fetchJson(`/api/carpool/trips/${tripId}`).then((res) => {
+          if (res?.trip) openJoinCarpoolModal(res.trip);
+        }).catch((err) => showToast(err.message || "Failed to load trip details.", "error"));
+      }
+      return;
+    }
+
+    if (action === "manage-trip-passengers") {
+      openManagePassengersModal(Number(actionEl.dataset.tripId));
+      return;
+    }
+
+    if (action === "update-trip-status") {
+      const tripId = Number(actionEl.dataset.tripId);
+      const newStatus = actionEl.dataset.status;
+      updateTripStatusFlow(tripId, newStatus);
+      return;
+    }
+
+    if (action === "accept-carpool-request") {
+      acceptJoinRequest(Number(actionEl.dataset.requestId));
+      return;
+    }
+
+    if (action === "reject-carpool-request") {
+      rejectJoinRequest(Number(actionEl.dataset.requestId));
+      return;
+    }
+
+    if (action === "cancel-carpool-request") {
+      cancelJoinRequest(Number(actionEl.dataset.requestId));
+      return;
+    }
+
+    if (action === "leave-carpool-trip") {
+      leaveCarpoolTrip(Number(actionEl.dataset.tripId));
+      return;
+    }
+
+    if (action === "review-carpool-driver") {
+      openReviewDriverModal(Number(actionEl.dataset.tripId), actionEl.dataset.driverName || "Driver");
+      return;
+    }
+
+    if (action === "offer-car-carpool") {
+      const vehId = actionEl.dataset.vehicleId;
+      switchCarpoolTab("create", { preselectVehicleId: vehId });
+      return;
+    }
+
+    if (action === "offer-rental-carpool") {
+      const bId = actionEl.dataset.bookingId;
+      switchCarpoolTab("create", { preselectVehicleId: `rental_${bId}` });
+      return;
+    }
+
+    if (action === "delete-user-vehicle") {
+      deleteUserVehicle(Number(actionEl.dataset.vehicleId));
       return;
     }
 
@@ -206,6 +324,7 @@ function bindGlobalEvents() {
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
       closeModal();
+      closeResponsiveNavigation();
     }
   });
 }
@@ -223,13 +342,32 @@ function setupResponsiveNavigation() {
     toggle.id = "siteNavToggle";
     toggle.className = "nav-toggle";
     toggle.dataset.action = "toggle-nav";
+    toggle.setAttribute("aria-label", "Toggle navigation menu");
     toggle.setAttribute("aria-controls", dom.siteNavCluster.id);
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.innerHTML = `
+      <span class="nav-toggle-bars" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </span>
+      <span class="sr-only">Toggle Menu</span>
+    `;
     dom.siteHeader.insertBefore(toggle, dom.siteNavCluster);
     dom.siteNavToggle = toggle;
   }
 
+  if (!dom.siteNavBackdrop) {
+    const backdrop = document.createElement("div");
+    backdrop.id = "siteNavBackdrop";
+    backdrop.className = "nav-backdrop";
+    backdrop.dataset.action = "close-nav";
+    document.body.appendChild(backdrop);
+    dom.siteNavBackdrop = backdrop;
+  }
+
   if (!siteNavMediaQuery) {
-    siteNavMediaQuery = window.matchMedia("(max-width: 760px)");
+    siteNavMediaQuery = window.matchMedia("(max-width: 768px)");
     const syncNav = () => syncResponsiveNavigation();
     if (typeof siteNavMediaQuery.addEventListener === "function") {
       siteNavMediaQuery.addEventListener("change", syncNav);
@@ -238,16 +376,54 @@ function setupResponsiveNavigation() {
     }
   }
 
+  dom.siteNavCluster.addEventListener("click", (e) => {
+    if (e.target.closest("a, button[data-action='logout']") && siteNavMediaQuery?.matches) {
+      closeResponsiveNavigation();
+    }
+  });
+
+  window.addEventListener("scroll", () => {
+    if (dom.siteHeader) {
+      dom.siteHeader.classList.toggle("is-scrolled", window.scrollY > 15);
+    }
+  }, { passive: true });
+
+  window.addEventListener("resize", () => {
+    if (window.innerWidth > 768 && dom.siteHeader.classList.contains("is-nav-open")) {
+      closeResponsiveNavigation();
+    }
+  }, { passive: true });
+
   syncResponsiveNavigation();
 }
 
 function toggleResponsiveNavigation() {
-  if (!siteNavMediaQuery?.matches || !dom.siteHeader) {
+  if (!dom.siteHeader) {
     return;
   }
 
-  dom.siteHeader.classList.toggle("is-nav-open");
-  syncResponsiveNavigation();
+  const willOpen = !dom.siteHeader.classList.contains("is-nav-open");
+  dom.siteHeader.classList.toggle("is-nav-open", willOpen);
+  document.body.classList.toggle("nav-drawer-open", willOpen);
+
+  if (dom.siteNavToggle) {
+    dom.siteNavToggle.setAttribute("aria-expanded", String(willOpen));
+    dom.siteNavToggle.classList.toggle("is-active", willOpen);
+  }
+}
+
+function closeResponsiveNavigation() {
+  if (!dom.siteHeader) {
+    return;
+  }
+
+  dom.siteHeader.classList.remove("is-nav-open");
+  document.body.classList.remove("nav-drawer-open");
+
+  if (dom.siteNavToggle) {
+    dom.siteNavToggle.setAttribute("aria-expanded", "false");
+    dom.siteNavToggle.classList.remove("is-active");
+  }
 }
 
 function syncResponsiveNavigation() {
@@ -257,13 +433,10 @@ function syncResponsiveNavigation() {
 
   const compact = Boolean(siteNavMediaQuery?.matches);
   if (!compact) {
-    dom.siteHeader.classList.remove("is-nav-open");
+    closeResponsiveNavigation();
   }
-
-  const expanded = compact && dom.siteHeader.classList.contains("is-nav-open");
   dom.siteNavToggle.hidden = !compact;
-  dom.siteNavToggle.textContent = expanded ? "Close" : "Menu";
-  dom.siteNavToggle.setAttribute("aria-expanded", compact ? String(expanded) : "false");
+  dom.siteNavToggle.style.display = compact ? "flex" : "none";
 }
 
 function getPageName() {
@@ -392,37 +565,43 @@ function renderNavigation() {
 
   const page = getPageName();
   const session = readUserSession();
-  const links = [];
-  let actions = "";
+  const urlSearch = window.location.search || "";
+  const isLogged = hasUserSession();
+  const isAdmin = hasAdminSession();
 
-  if (hasUserSession()) {
-    links.push(
-      navLink("/home.html", "Dashboard", page === "home"),
-      navLink("/book.html", "Book a Car", page === "book"),
-      navLink("/history.html", "My Bookings", page === "history" || page === "booking-alias")
-    );
+  const isCarpoolVehicles = page === "carpool" && (urlSearch.includes("tab=vehicles") || urlSearch.includes("tab=add-vehicle"));
+  const isCarpoolDashboard = page === "carpool" && urlSearch.includes("tab=dashboard");
+  const isCarpoolMain = page === "carpool" && !isCarpoolVehicles && !isCarpoolDashboard;
+
+  const links = [
+    navLink(isLogged ? "/home.html" : "/index.html", "Home", page === "home" || page === "landing"),
+    navLink("/book.html", "Cars", page === "book"),
+    navLink("/carpool.html", "Carpooling", isCarpoolMain),
+    navLink("/history.html", "My Rentals", page === "history" || page === "booking-alias"),
+    navLink("/carpool.html?tab=vehicles", "My Vehicles", isCarpoolVehicles),
+    navLink("/carpool.html?tab=dashboard", "My Trips", isCarpoolDashboard),
+    navLink(isLogged ? "/home.html#profile" : "/login.html", "Profile", false),
+  ];
+
+  let actions = "";
+  if (isLogged) {
     actions = `
-      <span class="user-pill">${escapeHtml(session.name || "Member")}</span>
-      <button class="button button-ghost" type="button" data-action="logout">Logout</button>
+      <span class="user-pill" title="Signed in as ${escapeHtml(session.email || session.name || 'Member')}">
+        <span class="user-avatar-dot"></span>
+        <span class="user-name-text">${escapeHtml(session.name || "Member")}</span>
+      </span>
+      <button class="button button-ghost button-logout" type="button" data-action="logout">Logout</button>
     `;
-  } else if (hasAdminSession()) {
-    links.push(
-      navLink("/index.html", "Customer View", page === "landing"),
-      navLink("/admin.html", "Admin Panel", false)
-    );
+  } else if (isAdmin) {
+    links.push(navLink("/admin.html", "Admin", false));
     actions = `
-      <button class="button button-ghost" type="button" data-action="logout">Logout</button>
+      <span class="user-pill">Admin</span>
+      <button class="button button-ghost button-logout" type="button" data-action="logout">Logout</button>
     `;
   } else {
-    links.push(
-      navLink("/index.html", "Overview", page === "landing"),
-      navLink("/book.html", "Browse Cars", page === "book"),
-      navLink("/login.html", "Sign In", page === "login"),
-      navLink("/register.html", "Create Account", page === "register")
-    );
     actions = `
-      <a class="button button-secondary" href="/admin.html">Admin</a>
-      <a class="button button-primary" href="/book.html">Start Booking</a>
+      <a class="nav-link nav-login-link" href="/login.html">Login</a>
+      <a class="button button-primary nav-signup-btn" href="/register.html">Sign Up</a>
     `;
   }
 
@@ -438,11 +617,11 @@ async function initLandingPage() {
   if (dom.landingGreeting) {
     if (hasUserSession()) {
       const session = readUserSession();
-      dom.landingGreeting.textContent = `Welcome back, ${session.name || "driver"}.`;
+      dom.landingGreeting.innerHTML = `Welcome back, <span class="accent-text">${escapeHtml(session.name || "Driver")}</span>.`;
     } else if (hasAdminSession()) {
-      dom.landingGreeting.textContent = "Admin session detected.";
+      dom.landingGreeting.innerHTML = `Admin Workspace <span class="accent-text">Active</span>.`;
     } else {
-      dom.landingGreeting.textContent = "Modern car rental, rebuilt around the customer flow.";
+      dom.landingGreeting.innerHTML = `YOUR <span class="accent-text">JOURNEY.</span><br />YOUR <span class="gradient-text-alt">CAR.</span><br />YOUR WAY.`;
     }
   }
 
@@ -739,6 +918,7 @@ function renderHomeDashboard() {
     emptyCopy: "Completed and cancelled bookings will move into this section automatically.",
     limit: 2,
   });
+  init3DTiltEngine();
 }
 
 function buildHomePriorityCard() {
@@ -938,35 +1118,52 @@ function renderCarGrid() {
 
   dom.carGrid.innerHTML = filteredCars.map(buildCarCardMarkup).join("");
   syncAllBookingForms();
+  init3DTiltEngine();
 }
 
 function buildCarCardMarkup(car) {
   const bookings = pageState.carBookings[Number(car.id)] || [];
-  const availabilityCopy = bookings.length
-    ? "Booked dates are blocked directly inside the calendar picker."
-    : "This car is fully open right now, so every future day is selectable.";
+  const isAvailable = bookings.length === 0;
+  const rating = car.rating || (4.6 + (Number(car.id) % 4) * 0.1).toFixed(1);
+  const fuel = car.fuel_type || "Petrol";
+  const mileage = car.mileage || "18 km/l";
+  const seats = car.seats || 5;
+  const carType = car.type || "Sedan";
 
   return `
-    <article class="vehicle-card">
-      <div class="vehicle-media">${getCarMediaMarkup(car)}</div>
+    <article class="vehicle-card modern-car-card">
+      <div class="vehicle-media">
+        ${getCarMediaMarkup(car)}
+        <span class="car-rating-chip"><span class="star-icon">★</span> ${rating}</span>
+        <span class="car-availability-chip ${isAvailable ? 'badge-success' : 'badge-warning'}">
+          ${isAvailable ? '● Available Now' : '● Dates Blocked'}
+        </span>
+      </div>
       <div class="vehicle-body">
         <div class="vehicle-head">
           <div>
-            <span class="eyebrow">${escapeHtml(String(car.year || "Ready"))}</span>
-            <h3>${escapeHtml(car.brand || "A6")} ${escapeHtml(car.model || "Vehicle")}</h3>
-            <p class="support-copy">${escapeHtml(car.location || "Location available after booking")}</p>
+            <span class="eyebrow">${escapeHtml(String(car.year || "2023"))} &bull; ${escapeHtml(carType)}</span>
+            <h3 class="car-title">${escapeHtml(car.brand || "A6")} ${escapeHtml(car.model || "Vehicle")}</h3>
+            <p class="support-copy"><span class="loc-pin">📍</span> ${escapeHtml(car.location || "Fleet Hub")}</p>
           </div>
-          <span class="price-chip">${formatCurrency(car.daily_rate || 0)}/day</span>
+          <div class="price-container">
+            <span class="price-chip">${formatCurrency(car.daily_rate || 0)}</span>
+            <small class="per-day-note">/ day</small>
+          </div>
         </div>
 
-        <p class="summary-line">${availabilityCopy}</p>
+        <div class="car-spec-chips">
+          <span class="spec-pill">⛽ ${escapeHtml(fuel)}</span>
+          <span class="spec-pill">⚡ ${escapeHtml(mileage)}</span>
+          <span class="spec-pill">👥 ${escapeHtml(String(seats))} Seats</span>
+        </div>
 
-        <form class="field-grid" data-car-form="${Number(car.id)}">
+        <form class="field-grid booking-inline-form" data-car-form="${Number(car.id)}">
           <label class="field-block">
             <span>Start date</span>
             <button class="date-trigger" type="button" data-action="open-date-picker" data-field="start">
               <span class="date-trigger-value" data-start-date-display>Select start date</span>
-              <span class="date-trigger-note" data-start-date-note>Booked dates are disabled.</span>
+              <span class="date-trigger-note" data-start-date-note>Booked dates disabled</span>
             </button>
             <input type="hidden" data-start-date value="" />
           </label>
@@ -974,14 +1171,13 @@ function buildCarCardMarkup(car) {
             <span>End date</span>
             <button class="date-trigger" type="button" data-action="open-date-picker" data-field="end">
               <span class="date-trigger-value" data-end-date-display>Select end date</span>
-              <span class="date-trigger-note" data-end-date-note>Select a start date first.</span>
+              <span class="date-trigger-note" data-end-date-note>Select start date first</span>
             </button>
             <input type="hidden" data-end-date value="" />
           </label>
           <div class="card-actions" style="grid-column: 1 / -1;">
-            <button class="button button-primary" type="submit" data-payment-plan="reserve">Reserve 10%</button>
-            <button class="button button-secondary" type="submit" data-payment-plan="full">Pay full amount</button>
-            <button class="button button-secondary" type="button" data-action="view-car-availability" data-car-id="${Number(car.id)}">View booked dates</button>
+            <button class="button button-primary" type="submit" data-payment-plan="reserve">Rent Now</button>
+            <button class="button button-navy" type="button" data-action="view-car-details" data-car-id="${Number(car.id)}">View Details</button>
           </div>
         </form>
       </div>
@@ -989,10 +1185,101 @@ function buildCarCardMarkup(car) {
   `;
 }
 
+function openCarDetailsModal(carId) {
+  const car = pageState.cars.find((item) => Number(item.id) === Number(carId));
+  if (!car) {
+    showToast("That vehicle could not be found.", "warning");
+    return;
+  }
+
+  const bookings = pageState.carBookings[Number(carId)] || [];
+  const images = Array.isArray(car.images) && car.images.length
+    ? car.images.map((img) => getAssetUrl(img))
+    : car.image_url
+    ? [getAssetUrl(car.image_url)]
+    : [];
+
+  const rating = car.rating || (4.6 + (Number(car.id) % 4) * 0.1).toFixed(1);
+
+  const content = document.createElement("div");
+  content.className = "car-details-split-layout";
+  content.innerHTML = `
+    <div class="car-gallery-column">
+      <div class="main-gallery-view">
+        ${images.length ? `<img id="carGalleryMainImg" src="${images[0]}" alt="${escapeHtml(`${car.brand} ${car.model}`)}" />` : `<div style="padding: 60px; text-align: center; background: #101828; color: #D0D5DD; border-radius: 16px;">🚗 No image available</div>`}
+      </div>
+      ${images.length > 1 ? `
+        <div class="gallery-thumbs-row">
+          ${images.map((img, idx) => `<img class="gallery-thumb ${idx === 0 ? 'active' : ''}" src="${img}" onclick="document.getElementById('carGalleryMainImg').src='${img}'; document.querySelectorAll('.gallery-thumb').forEach(t=>t.classList.remove('active')); this.classList.add('active');" />`).join("")}
+        </div>
+      ` : ""}
+      <div class="car-specs-pill-row">
+        <span class="spec-pill">⛽ ${escapeHtml(car.fuel_type || "Petrol")}</span>
+        <span class="spec-pill">⚡ ${escapeHtml(car.mileage || "18 km/l")}</span>
+        <span class="spec-pill">👥 ${escapeHtml(String(car.seats || 5))} Seats</span>
+        <span class="spec-pill">📍 ${escapeHtml(car.location || "Fleet Hub")}</span>
+      </div>
+    </div>
+
+    <div class="car-booking-panel-dark">
+      <div class="panel-rate-box">
+        <span class="panel-rate-label">Daily Rental Rate</span>
+        <div class="panel-price-row">
+          <span class="panel-price-val">${formatCurrency(car.daily_rate || 0)}</span>
+          <span class="panel-price-unit">/ day</span>
+        </div>
+      </div>
+
+      <div class="booking-terms-box">
+        <div class="term-line">
+          <span>Vehicle Type:</span>
+          <strong>${escapeHtml(car.type || "Sedan")}</strong>
+        </div>
+        <div class="term-line">
+          <span>Rating:</span>
+          <strong style="color: #F79009;">★ ${rating} / 5.0</strong>
+        </div>
+        <div class="term-line">
+          <span>Deposit Requirement:</span>
+          <strong style="color: var(--accent);">10% Advance Deposit</strong>
+        </div>
+        <div class="term-line">
+          <span>Collection:</span>
+          <strong>Instant PIN & QR Handoff</strong>
+        </div>
+      </div>
+
+      <div class="panel-availability-summary">
+        <h4>Availability Schedule</h4>
+        <p>${bookings.length ? `${bookings.length} upcoming reservation window(s). All other dates are open.` : "Completely available for immediate reservation."}</p>
+        ${bookings.length ? `
+          <div class="blocked-dates-list">
+            ${bookings.map(b => `<span class="blocked-chip">Blocked: ${formatDate(b.start_date)} - ${formatDate(b.end_date)}</span>`).join("")}
+          </div>
+        ` : ""}
+      </div>
+
+      <div class="panel-cta-actions">
+        <button class="button button-primary" type="button" data-action="close-modal" onclick="document.querySelector('[data-car-form=\\'${Number(car.id)}\\'] [data-field=\\'start\\']')?.focus();">
+          Rent This Car Now
+        </button>
+        <button class="button button-ghost" type="button" data-action="close-modal">Close</button>
+      </div>
+    </div>
+  `;
+
+  openModal({
+    title: `${car.brand || "A6"} ${car.model || "Vehicle"} (${car.year || "2023"})`,
+    subtitle: "Complete vehicle specifications, photos, and current rental terms.",
+    size: "wide",
+    content,
+  });
+}
+
 function getCarMediaMarkup(car) {
   const firstImage = Array.isArray(car.images) && car.images.length ? getAssetUrl(car.images[0]) : "";
   if (firstImage) {
-    return `<img src="${firstImage}" alt="${escapeHtml(`${car.brand || ""} ${car.model || ""}`.trim())}" />`;
+    return `<img src="${firstImage}" alt="${escapeHtml(`${car.brand || ""} ${car.model || ""}`.trim())}" loading="lazy" onerror="this.onerror=null;this.src='/assets/hero-car.jpg';" />`;
   }
 
   const shortLabel = escapeHtml(
@@ -1875,6 +2162,7 @@ function openPaymentSuccessModal(booking, payload) {
           : ""
       }
     <div class="modal-actions">
+      <a class="button button-accent" href="/carpool.html?action=offer-rental&booking_id=${bookingId}">🚗 Use This Rented Car for Carpooling</a>
       <a class="button button-primary" href="/history.html">Open Booking Center</a>
       <button class="button button-secondary" type="button" data-action="close-modal">Done</button>
     </div>
@@ -2049,6 +2337,7 @@ function renderBookingCards(container, bookings, options = {}) {
   }
 
   container.innerHTML = rows.map((booking) => buildBookingCardMarkup(booking)).join("");
+  init3DTiltEngine();
 }
 
 function buildBookingCardMarkup(booking) {
@@ -2109,6 +2398,15 @@ function buildBookingCardMarkup(booking) {
   ) {
     actions.push(
       `<button class="button button-secondary button-inline" type="button" data-action="show-return" data-booking-id="${bookingId}">Return QR</button>`
+    );
+  }
+  if (
+    !isCancelled(booking) &&
+    !isReturnedBooking(booking) &&
+    (booking.paid || booking.reserve_paid)
+  ) {
+    actions.push(
+      `<a class="button button-accent button-inline" href="/carpool.html?action=offer-rental&booking_id=${bookingId}" title="Offer this rented vehicle for carpooling during your rental period">🚗 Offer for Carpooling</a>`
     );
   }
   if (canCancelBooking(booking)) {
@@ -2209,21 +2507,29 @@ function statusBadge(label, tone) {
   return `<span class="status-badge ${toneClass}">${escapeHtml(label)}</span>`;
 }
 
+function formatMetricNumber(val) {
+  const num = Number(val);
+  if (!Number.isFinite(num)) return String(val || 0);
+  return num < 10 && num >= 0 ? `0${num}` : String(num);
+}
+
 function metricCard(label, value, note, accentClass) {
+  const formattedVal = formatMetricNumber(value);
   return `
-    <article class="stat-card ${accentClass}">
-      <span>${escapeHtml(label)}</span>
-      <strong>${escapeHtml(String(value))}</strong>
+    <article class="stat-card ${accentClass || ''}">
+      <span class="stat-label">${escapeHtml(label)}</span>
+      <strong class="stat-value">${escapeHtml(formattedVal)}</strong>
       <small>${escapeHtml(note)}</small>
     </article>
   `;
 }
 
-function emptyStateMarkup(title, copy) {
+function emptyStateMarkup(title, copy, icon = "🚗") {
   return `
     <div class="empty-state">
-      <strong>${escapeHtml(title || "Nothing to show")}</strong>
-      <p>${escapeHtml(copy || "Try again in a moment.")}</p>
+      <div class="empty-icon">${icon}</div>
+      <h3>${escapeHtml(title || "Nothing to show")}</h3>
+      <p>${escapeHtml(copy || "Try again in a moment or adjust your search filters.")}</p>
     </div>
   `;
 }
@@ -2233,7 +2539,26 @@ function setContainerLoading(container, label) {
     return;
   }
 
-  container.innerHTML = emptyStateMarkup(`${label || "Loading"}...`, "Please wait a moment while we pull the latest data.");
+  container.innerHTML = `
+    <div class="skeleton-card">
+      <div class="skeleton-shimmer" style="height: 180px; width: 100%; border-radius: 14px;"></div>
+      <div class="skeleton-shimmer" style="height: 24px; width: 65%; margin-top: 12px;"></div>
+      <div class="skeleton-shimmer" style="height: 16px; width: 45%;"></div>
+      <div class="skeleton-shimmer" style="height: 42px; width: 100%; margin-top: 10px;"></div>
+    </div>
+    <div class="skeleton-card">
+      <div class="skeleton-shimmer" style="height: 180px; width: 100%; border-radius: 14px;"></div>
+      <div class="skeleton-shimmer" style="height: 24px; width: 65%; margin-top: 12px;"></div>
+      <div class="skeleton-shimmer" style="height: 16px; width: 45%;"></div>
+      <div class="skeleton-shimmer" style="height: 42px; width: 100%; margin-top: 10px;"></div>
+    </div>
+    <div class="skeleton-card">
+      <div class="skeleton-shimmer" style="height: 180px; width: 100%; border-radius: 14px;"></div>
+      <div class="skeleton-shimmer" style="height: 24px; width: 65%; margin-top: 12px;"></div>
+      <div class="skeleton-shimmer" style="height: 16px; width: 45%;"></div>
+      <div class="skeleton-shimmer" style="height: 42px; width: 100%; margin-top: 10px;"></div>
+    </div>
+  `;
 }
 
 function openModal({ title, subtitle = "", content, size = "regular" }) {
@@ -3411,3 +3736,1517 @@ function ensureModalHost() {
   dom.modalRoot = root;
   return root;
 }
+
+// ============================================================================
+// CARPOOL SYSTEM MODULE (STANDALONE FLEET & USER CARPOOLING)
+// ============================================================================
+
+async function initCarpoolPage() {
+  cacheCarpoolDom();
+  bindCarpoolEvents();
+  initCarpoolTabBar();
+  initAddVehicleForm();
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const targetTab = urlParams.get("tab") || "find";
+  const action = urlParams.get("action");
+  const bookingId = urlParams.get("booking_id");
+
+  await Promise.all([
+    loadCarpoolTrips(),
+    hasUserSession() ? loadCarpoolVehicles() : Promise.resolve(),
+    hasUserSession() ? loadCarpoolDashboard() : Promise.resolve(),
+  ]);
+
+  if (action === "offer-rental" && bookingId) {
+    switchCarpoolTab("create", { preselectVehicleId: `rental_${bookingId}` });
+  } else {
+    switchCarpoolTab(targetTab);
+  }
+}
+
+function cacheCarpoolDom() {
+  [
+    "carpoolTabBar",
+    "carpoolSpotlight",
+    "findSection",
+    "createSection",
+    "vehiclesSection",
+    "addVehicleSection",
+    "dashboardSection",
+    "carpoolSearchForm",
+    "searchFrom",
+    "searchTo",
+    "searchDate",
+    "searchTime",
+    "searchPassengers",
+    "searchMaxPrice",
+    "searchVehicleType",
+    "resetSearchBtn",
+    "carpoolResultsContainer",
+    "carpoolTripGrid",
+    "offerRideForm",
+    "rentedCarNoticeBanner",
+    "rentedCarNoticeText",
+    "offerVehicleSelect",
+    "offerSource",
+    "offerDestination",
+    "offerStops",
+    "offerDate",
+    "offerTime",
+    "offerSeats",
+    "offerPrice",
+    "offerContactPref",
+    "offerVehicleTypeDisplay",
+    "offerDescription",
+    "offerRoutePreviewCard",
+    "routePreviewDistance",
+    "routePreviewDuration",
+    "publishTripBtn",
+    "personalVehiclesCount",
+    "rentedVehiclesCount",
+    "personalVehiclesGrid",
+    "rentedVehiclesGrid",
+    "registerVehicleForm",
+    "vehRegNumber",
+    "vehYear",
+    "vehBrand",
+    "vehModel",
+    "vehType",
+    "vehFuelType",
+    "vehMileage",
+    "vehCapacity",
+    "vehFileDropArea",
+    "vehImageFile",
+    "vehImageUrl",
+    "vehImagePreviewBox",
+    "vehPreviewImg",
+    "removeVehImageBtn",
+    "vehLocation",
+    "vehOfferNowCheckbox",
+    "saveVehicleBtn",
+    "dashboardMetrics",
+    "dashActiveRentalsCount",
+    "dashMyVehiclesCount",
+    "dashCreatedCount",
+    "dashJoinedCount",
+    "dashPendingRequestsCount",
+    "dashUpcomingCount",
+    "dashCompletedCount",
+    "dashboardSubtabs",
+    "dashSubtabCreatedBadge",
+    "dashSubtabJoinedBadge",
+    "dashSubtabRequestsBadge",
+    "dashSubtabUpcomingBadge",
+    "dashSubtabCompletedBadge",
+    "dashCreatedContent",
+    "dashJoinedContent",
+    "dashRequestsContent",
+    "dashUpcomingContent",
+    "dashCompletedContent",
+    "dashCreatedList",
+    "dashJoinedList",
+    "dashIncomingRequestsList",
+    "dashSentRequestsList",
+    "dashUpcomingList",
+    "dashCompletedList",
+  ].forEach((id) => {
+    dom[id] = document.getElementById(id);
+  });
+}
+
+function bindCarpoolEvents() {
+  dom.carpoolSearchForm?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    loadCarpoolTrips();
+  });
+
+  dom.resetSearchBtn?.addEventListener("click", () => {
+    dom.carpoolSearchForm?.reset();
+    loadCarpoolTrips();
+  });
+
+  dom.offerVehicleSelect?.addEventListener("change", handleOfferVehicleChange);
+
+  let routeDebounceTimer = null;
+  const triggerRoutePreview = () => {
+    clearTimeout(routeDebounceTimer);
+    routeDebounceTimer = setTimeout(checkOfferRoutePreview, 400);
+  };
+  dom.offerSource?.addEventListener("input", triggerRoutePreview);
+  dom.offerDestination?.addEventListener("input", triggerRoutePreview);
+  dom.offerStops?.addEventListener("input", triggerRoutePreview);
+
+  dom.offerRideForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await submitOfferTrip(dom.offerRideForm);
+  });
+
+  dom.dashboardSubtabs?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-dash-subtab]");
+    if (btn) {
+      switchDashboardSubtab(btn.dataset.dashSubtab);
+    }
+  });
+}
+
+function initCarpoolTabBar() {
+  document.addEventListener("click", (e) => {
+    const tabBtn = e.target.closest("[data-action='switch-carpool-tab'], .carpool-tab-btn");
+    if (tabBtn && tabBtn.dataset.tab) {
+      switchCarpoolTab(tabBtn.dataset.tab);
+    }
+  });
+}
+
+function switchCarpoolTab(tabName, options = {}) {
+  const validTabs = ["find", "create", "vehicles", "add-vehicle", "dashboard"];
+  const target = validTabs.includes(tabName) ? tabName : "find";
+
+  if (target !== "find" && !hasUserSession()) {
+    showToast("Please sign in or create an account to access this carpooling feature.", "warning");
+    sessionStorage.setItem("postLoginRedirect", `/carpool.html?tab=${target}`);
+    window.location.href = "/login.html";
+    return;
+  }
+
+  pageState.carpool.activeTab = target;
+
+  document.querySelectorAll(".carpool-tab-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.tab === target);
+  });
+
+  const sectionMap = {
+    find: dom.findSection,
+    create: dom.createSection,
+    vehicles: dom.vehiclesSection,
+    "add-vehicle": dom.addVehicleSection,
+    dashboard: dom.dashboardSection,
+  };
+
+  Object.entries(sectionMap).forEach(([key, sectionEl]) => {
+    if (sectionEl) {
+      sectionEl.classList.toggle("hidden", key !== target);
+    }
+  });
+
+  if (target === "create" && options.preselectVehicleId && dom.offerVehicleSelect) {
+    dom.offerVehicleSelect.value = options.preselectVehicleId;
+    handleOfferVehicleChange();
+  }
+
+  if (target === "dashboard") {
+    loadCarpoolDashboard();
+  } else if (target === "vehicles") {
+    loadCarpoolVehicles();
+  }
+
+  const url = new URL(window.location);
+  url.searchParams.set("tab", target);
+  window.history.replaceState({}, "", url);
+  renderNavigation();
+}
+
+async function loadCarpoolTrips(customQuery = null) {
+  if (!dom.carpoolTripGrid) return;
+  dom.carpoolTripGrid.innerHTML = `
+    <div class="empty-state">
+      <div class="skeleton-pulse" style="height: 180px; border-radius: 18px; margin-bottom: 12px; background: rgba(15,23,42,0.06);"></div>
+      <p style="color: #64748b;">Finding open carpools...</p>
+    </div>
+  `;
+
+  try {
+    const params = new URLSearchParams();
+    if (customQuery) {
+      Object.entries(customQuery).forEach(([k, v]) => {
+        if (v) params.set(k, v);
+      });
+    } else {
+      if (dom.searchFrom?.value.trim()) params.set("from", dom.searchFrom.value.trim());
+      if (dom.searchTo?.value.trim()) params.set("to", dom.searchTo.value.trim());
+      if (dom.searchDate?.value) params.set("date", dom.searchDate.value);
+      if (dom.searchTime?.value) params.set("time", dom.searchTime.value);
+      if (dom.searchPassengers?.value) params.set("passengers", dom.searchPassengers.value);
+      if (dom.searchMaxPrice?.value) params.set("maxPrice", dom.searchMaxPrice.value);
+      if (dom.searchVehicleType?.value && dom.searchVehicleType.value !== "all") {
+        params.set("vehicleType", dom.searchVehicleType.value);
+      }
+    }
+
+    const data = await fetchJson(`/api/carpool/trips?${params.toString()}`);
+    pageState.carpool.trips = Array.isArray(data.trips) ? data.trips : [];
+    renderCarpoolCards(pageState.carpool.trips);
+  } catch (error) {
+    dom.carpoolTripGrid.innerHTML = emptyStateMarkup(
+      "Could not load rides",
+      error.message || "Failed to search carpools. Please try again."
+    );
+  }
+}
+
+function renderCarpoolCards(trips) {
+  if (!dom.carpoolTripGrid) return;
+
+  if (!trips.length) {
+    dom.carpoolTripGrid.innerHTML = `
+      <div class="empty-state carpool-empty-state">
+        <div class="empty-icon">🚗</div>
+        <h3>No matching carpool rides found</h3>
+        <p>No open rides currently match your selected filters. Try widening your date or search parameters, or offer a ride yourself!</p>
+        <button class="button button-primary" type="button" data-action="switch-carpool-tab" data-tab="create">+ Offer a Ride Now</button>
+      </div>
+    `;
+    return;
+  }
+
+  dom.carpoolTripGrid.innerHTML = trips.map(buildCarpoolCardMarkup).join("");
+  init3DTiltEngine();
+}
+
+function buildCarpoolCardMarkup(trip) {
+  const currentUserId = Number(readUserSession().customerId || 0);
+  const isDriver = currentUserId && trip.driver_id === currentUserId;
+  const isFull = trip.available_seats <= 0 || trip.status === "FULL";
+  const isStarted = trip.status === "STARTED";
+  const isCompleted = trip.status === "COMPLETED";
+  const isCancelled = trip.status === "CANCELLED";
+
+  let statusBadgeMarkup = "";
+  if (isCancelled) {
+    statusBadgeMarkup = '<span class="status-badge badge-danger">Cancelled</span>';
+  } else if (isCompleted) {
+    statusBadgeMarkup = '<span class="status-badge badge-neutral">Completed</span>';
+  } else if (isStarted) {
+    statusBadgeMarkup = '<span class="status-badge badge-sky">On Trip</span>';
+  } else if (isFull) {
+    statusBadgeMarkup = '<span class="status-badge badge-warning">Full</span>';
+  } else if (trip.available_seats === 1) {
+    statusBadgeMarkup = '<span class="status-badge badge-warning">Almost Full (1 Left)</span>';
+  } else {
+    statusBadgeMarkup = '<span class="status-badge badge-success">Available</span>';
+  }
+
+  const defaultCarImg = "/assets/a6cars-logo.png";
+  const vehicleImg = trip.vehicle_image ? getAssetUrl(trip.vehicle_image) : defaultCarImg;
+  const driverRating = Number(trip.driver_rating || 5.0).toFixed(1);
+  const driverReviews = trip.driver_reviews_count || 0;
+  const stopsText = Array.isArray(trip.stops) && trip.stops.length ? trip.stops.join(" &bull; ") : "";
+  const totalSeats = trip.total_seats || trip.available_seats || 4;
+
+  let actionButton = "";
+  if (isDriver) {
+    actionButton = `<button class="button button-ghost" type="button" data-action="switch-carpool-tab" data-tab="dashboard">Your Offered Trip</button>`;
+  } else if (isCancelled) {
+    actionButton = `<button class="button button-ghost" disabled>Trip Cancelled</button>`;
+  } else if (isCompleted) {
+    actionButton = `<button class="button button-ghost" disabled>Trip Completed</button>`;
+  } else if (isFull) {
+    actionButton = `<button class="button button-ghost" disabled>Fully Booked</button>`;
+  } else {
+    actionButton = `<button class="button button-primary" type="button" data-action="join-carpool" data-trip-id="${trip.id}">Join Carpool</button>`;
+  }
+
+  return `
+    <article class="carpool-card">
+      <div class="carpool-card-head">
+        <div class="route-header-main">
+          <span class="route-cities-title">${escapeHtml(trip.source)} &rarr; ${escapeHtml(trip.destination)}</span>
+          <div class="route-indicator-orange">
+            <span class="route-dot-orange">●</span>
+            <span class="route-line-orange">─────────</span>
+            <span class="route-dot-orange">●</span>
+            ${trip.estimated_distance_km ? `<span class="route-dist">${trip.estimated_distance_km} km</span>` : ""}
+          </div>
+        </div>
+        <div class="carpool-card-status">
+          ${statusBadgeMarkup}
+        </div>
+      </div>
+
+      ${stopsText ? `<div class="route-stops-tag"><span>Via:</span> ${escapeHtml(stopsText)}</div>` : ""}
+
+      <div class="carpool-card-body">
+        <div class="carpool-vehicle-thumb">
+          <img src="${vehicleImg}" alt="${escapeHtml(trip.vehicle_name || 'Vehicle')}" loading="lazy" onerror="this.onerror=null;this.src='/assets/hero-car.jpg';" />
+          ${trip.is_rental ? '<span class="rental-badge-chip">A6 Rented Car</span>' : ''}
+        </div>
+
+        <div class="carpool-driver-info">
+          <div class="driver-avatar-circle">${escapeHtml((trip.driver_name || "D").slice(0, 1).toUpperCase())}</div>
+          <div>
+            <strong class="driver-name">${escapeHtml(trip.driver_name || "Verified Driver")}</strong>
+            <div class="driver-meta">
+              <span class="star-rating">★ ${driverRating}</span>
+              <span class="reviews-count">(${driverReviews} rides)</span>
+            </div>
+            <p class="vehicle-model-line">${escapeHtml(trip.vehicle_name || trip.vehicle_model || 'Sedan')} &bull; <span class="masked-reg">${escapeHtml(trip.vehicle_reg_number_masked || 'Private')}</span></p>
+          </div>
+        </div>
+
+        <div class="carpool-trip-schedule">
+          <div class="schedule-item">
+            <span class="meta-label">Travel Date & Time</span>
+            <strong class="schedule-time">📅 ${formatDate(trip.travel_date)} &bull; ⏰ ${escapeHtml(trip.departure_time)}</strong>
+          </div>
+          <div class="schedule-item">
+            <span class="meta-label">Seats Available</span>
+            <div class="seat-availability-indicator">
+              <span class="seat-fraction">${trip.available_seats} / ${totalSeats} Seats Available</span>
+              <div class="seat-dots">
+                ${Array.from({ length: totalSeats }).map((_, i) => `<span class="seat-dot ${i < trip.available_seats ? 'open' : 'filled'}"></span>`).join("")}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        ${trip.pickup_points ? `
+          <div class="pickup-point-row">
+            <span style="color: var(--accent); font-weight: 700;">📍 Pickup:</span>
+            <span>${escapeHtml(trip.pickup_points)}</span>
+          </div>
+        ` : ""}
+
+        <div class="carpool-card-footer">
+          <div class="price-block">
+            <span class="price-val">${formatCurrency(trip.price_per_seat)}</span>
+            <small class="price-per">/ seat cost share</small>
+          </div>
+          <div class="card-action-box">
+            ${actionButton}
+          </div>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function openJoinCarpoolModal(trip) {
+  if (!ensureUserSession()) return;
+
+  const currentUserId = Number(readUserSession().customerId || 0);
+  if (trip.driver_id === currentUserId) {
+    showToast("You are the driver of this trip.", "warning");
+    return;
+  }
+
+  if (trip.available_seats <= 0 || trip.status === "FULL") {
+    showToast("This trip is fully booked.", "warning");
+    return;
+  }
+
+  const content = document.createElement("div");
+  content.className = "join-carpool-modal-layout";
+  content.innerHTML = `
+    <div class="modal-trip-summary-box">
+      <div class="summary-route">
+        <strong>${escapeHtml(trip.source)} ➔ ${escapeHtml(trip.destination)}</strong>
+        <p>📅 ${formatDate(trip.travel_date)} at ${escapeHtml(trip.departure_time)}</p>
+      </div>
+      <div class="summary-driver">
+        <span>Driver: <strong>${escapeHtml(trip.driver_name)}</strong></span>
+        <span>Vehicle: <strong>${escapeHtml(trip.vehicle_name || trip.vehicle_model)}</strong> (${escapeHtml(trip.vehicle_type)})</span>
+        <span>Available: <strong>${trip.available_seats} seat(s)</strong></span>
+        <span>Cost per seat: <strong class="accent-cost">${formatCurrency(trip.price_per_seat)}</strong></span>
+      </div>
+    </div>
+
+    <form id="joinTripForm" class="stack-list" style="margin-top: 14px;">
+      <div class="field-grid">
+        <div class="field-block">
+          <label for="joinSeatsInput">Seats to Book *</label>
+          <input class="input" id="joinSeatsInput" type="number" min="1" max="${trip.available_seats}" value="1" required />
+          <small class="field-note">Maximum ${trip.available_seats} seat(s) open.</small>
+        </div>
+        <div class="field-block">
+          <label>Estimated Total Share</label>
+          <div class="computed-price-box" id="joinTotalDisplay">${formatCurrency(trip.price_per_seat)}</div>
+        </div>
+      </div>
+
+      <div class="field-block">
+        <label for="joinPickupPoint">Pickup Location *</label>
+        <input class="input" id="joinPickupPoint" type="text" value="${escapeHtml(trip.source)}" placeholder="Specify exact pickup landmark" required />
+      </div>
+
+      <div class="field-block">
+        <label for="joinDropoffPoint">Drop-off Location *</label>
+        <input class="input" id="joinDropoffPoint" type="text" value="${escapeHtml(trip.destination)}" placeholder="Specify exact drop-off landmark" required />
+      </div>
+
+      <div class="field-block">
+        <label for="joinMessage">Message for Driver (Optional)</label>
+        <textarea class="input input-textarea" id="joinMessage" rows="2" placeholder="e.g. Traveling with a backpack, will wait near the metro station entrance."></textarea>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 16px;">
+        <button class="button button-primary" type="submit" id="submitJoinRequestBtn">
+          <span>📩</span> Send Join Request
+        </button>
+        <button class="button button-secondary" type="button" data-action="close-modal">Cancel</button>
+      </div>
+    </form>
+  `;
+
+  const seatsInput = content.querySelector("#joinSeatsInput");
+  const totalDisplay = content.querySelector("#joinTotalDisplay");
+  seatsInput?.addEventListener("input", () => {
+    const s = Math.max(1, Math.min(trip.available_seats, Number(seatsInput.value) || 1));
+    totalDisplay.textContent = formatCurrency(trip.price_per_seat * s);
+  });
+
+  const form = content.querySelector("#joinTripForm");
+  form?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector("#submitJoinRequestBtn");
+    setButtonBusy(btn, true, "Submitting...");
+
+    try {
+      const seats = Number(seatsInput.value) || 1;
+      const pickup = content.querySelector("#joinPickupPoint").value.trim();
+      const dropoff = content.querySelector("#joinDropoffPoint").value.trim();
+      const message = content.querySelector("#joinMessage").value.trim();
+
+      const result = await fetchJson(`/api/carpool/trips/${trip.id}/request`, {
+        method: "POST",
+        body: JSON.stringify({
+          seats_requested: seats,
+          pickup_point: pickup,
+          dropoff_point: dropoff,
+          message,
+        }),
+      });
+
+      closeModal();
+      showToast(result.message || "Join request sent! The driver has been notified.", "success");
+      await loadCarpoolTrips();
+      switchCarpoolTab("dashboard");
+      switchDashboardSubtab("requests");
+    } catch (err) {
+      showToast(err.message || "Failed to submit join request.", "error");
+    } finally {
+      setButtonBusy(btn, false);
+    }
+  });
+
+  openModal({
+    title: "Join Carpool Ride",
+    subtitle: `Request to join ${trip.driver_name}'s carpool journey.`,
+    size: "wide",
+    content,
+  });
+}
+
+async function loadCarpoolVehicles() {
+  if (!hasUserSession()) return;
+  try {
+    const data = await fetchJson("/api/carpool/vehicles");
+    pageState.carpool.vehicles = Array.isArray(data.vehicles) ? data.vehicles : [];
+    pageState.carpool.rentalVehicles = Array.isArray(data.rental_vehicles) ? data.rental_vehicles : [];
+
+    if (dom.personalVehiclesCount) dom.personalVehiclesCount.textContent = String(pageState.carpool.vehicles.length);
+    if (dom.rentedVehiclesCount) dom.rentedVehiclesCount.textContent = String(pageState.carpool.rentalVehicles.length);
+    if (dom.dashActiveRentalsCount) dom.dashActiveRentalsCount.textContent = formatMetricNumber(pageState.carpool.rentalVehicles.length);
+    if (dom.dashMyVehiclesCount) dom.dashMyVehiclesCount.textContent = formatMetricNumber(pageState.carpool.vehicles.length);
+
+    populateOfferVehicleSelect();
+    renderVehiclesHub();
+  } catch (error) {
+    console.error("Failed to load user vehicles:", error);
+  }
+}
+
+function populateOfferVehicleSelect() {
+  if (!dom.offerVehicleSelect) return;
+  const userVehicles = pageState.carpool.vehicles || [];
+  const rentalVehicles = pageState.carpool.rentalVehicles || [];
+
+  if (!userVehicles.length && !rentalVehicles.length) {
+    dom.offerVehicleSelect.innerHTML = `
+      <option value="">No registered or rented vehicles found</option>
+    `;
+    return;
+  }
+
+  const options = ['<option value="">-- Choose vehicle for trip --</option>'];
+
+  if (userVehicles.length) {
+    options.push('<optgroup label="🚗 User\'s Own Vehicles">');
+    userVehicles.forEach((v) => {
+      options.push(
+        `<option value="${v.id}" data-type="${escapeHtml(v.vehicle_type || 'Sedan')}" data-seats="${v.seating_capacity || 4}">
+          ${escapeHtml(v.brand)} ${escapeHtml(v.model)} (${escapeHtml(v.reg_number)})
+        </option>`
+      );
+    });
+    options.push('</optgroup>');
+  }
+
+  if (rentalVehicles.length) {
+    options.push('<optgroup label="🚙 Active Rented Fleet Cars">');
+    rentalVehicles.forEach((r) => {
+      options.push(
+        `<option value="rental_${r.booking_id}" data-type="${escapeHtml(r.vehicle_type || 'Sedan')}" data-seats="${r.seating_capacity || 5}" data-start="${r.start_date}" data-end="${r.end_date}" data-ref="${r.booking_reference}">
+          [Rented] ${escapeHtml(r.brand)} ${escapeHtml(r.model)} (Valid: ${r.start_date} to ${r.end_date})
+        </option>`
+      );
+    });
+    options.push('</optgroup>');
+  }
+
+  dom.offerVehicleSelect.innerHTML = options.join("");
+}
+
+function handleOfferVehicleChange() {
+  const select = dom.offerVehicleSelect;
+  if (!select) return;
+
+  const val = select.value;
+  const opt = select.selectedOptions[0];
+  const noticeBanner = dom.rentedCarNoticeBanner;
+  const noticeText = dom.rentedCarNoticeText;
+  const dateInput = dom.offerDate;
+  const dateHelp = dom.offerDateHelp;
+  const typeDisplay = dom.offerVehicleTypeDisplay;
+
+  if (val.startsWith("rental_") && opt) {
+    const start = opt.dataset.start;
+    const end = opt.dataset.end;
+    const ref = opt.dataset.ref || val.replace("rental_", "");
+
+    if (noticeBanner) noticeBanner.classList.remove("hidden");
+    if (noticeText) {
+      noticeText.innerHTML = `
+        <strong>Active Rental Carpool Window:</strong> This vehicle is valid for carpool trips strictly from <strong>${formatDate(start)}</strong> to <strong>${formatDate(end)}</strong> (Booking #${ref}).
+      `;
+    }
+    if (dateInput) {
+      dateInput.min = start;
+      dateInput.max = end;
+      if (!dateInput.value || dateInput.value < start || dateInput.value > end) {
+        dateInput.value = start;
+      }
+    }
+    if (dateHelp) {
+      dateHelp.textContent = `Allowed trip dates: ${formatDate(start)} to ${formatDate(end)}`;
+    }
+    if (typeDisplay && opt.dataset.type) {
+      typeDisplay.value = opt.dataset.type;
+    }
+  } else if (val && opt) {
+    if (noticeBanner) noticeBanner.classList.add("hidden");
+    if (dateInput) {
+      dateInput.min = todayAsInput();
+      dateInput.removeAttribute("max");
+    }
+    if (dateHelp) {
+      dateHelp.textContent = "Must be today or a future date.";
+    }
+    if (typeDisplay && opt.dataset.type) {
+      typeDisplay.value = opt.dataset.type;
+    }
+  } else {
+    if (noticeBanner) noticeBanner.classList.add("hidden");
+    if (dateInput) {
+      dateInput.min = todayAsInput();
+      dateInput.removeAttribute("max");
+    }
+    if (typeDisplay) typeDisplay.value = "";
+  }
+}
+
+async function checkOfferRoutePreview() {
+  const from = dom.offerSource?.value.trim();
+  const to = dom.offerDestination?.value.trim();
+  const stops = dom.offerStops?.value.trim() || "";
+
+  if (!from || !to) {
+    dom.offerRoutePreviewCard?.classList.add("hidden");
+    return;
+  }
+
+  try {
+    const res = await fetchJson(`/api/carpool/route-preview?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&stops=${encodeURIComponent(stops)}`);
+    if (res && res.distanceKm) {
+      if (dom.routePreviewDistance) dom.routePreviewDistance.textContent = `${res.distanceKm} km`;
+      if (dom.routePreviewDuration) dom.routePreviewDuration.textContent = res.formattedDuration || "—";
+      dom.offerRoutePreviewCard?.classList.remove("hidden");
+    }
+  } catch (err) {
+    dom.offerRoutePreviewCard?.classList.add("hidden");
+  }
+}
+
+async function submitOfferTrip(form) {
+  if (!ensureUserSession()) return;
+  const submitBtn = dom.publishTripBtn;
+  setButtonBusy(submitBtn, true, "Publishing Trip...");
+
+  try {
+    const vehicleVal = dom.offerVehicleSelect?.value;
+    if (!vehicleVal) {
+      throw new Error("Please select a vehicle for this carpool trip.");
+    }
+
+    const source = dom.offerSource?.value.trim();
+    const destination = dom.offerDestination?.value.trim();
+    const stopsStr = dom.offerStops?.value.trim() || "";
+    const travelDate = dom.offerDate?.value;
+    const departureTime = dom.offerTime?.value;
+    const availableSeats = Number(dom.offerSeats?.value) || 1;
+    const price = Number(dom.offerPrice?.value) || 0;
+    const contactPref = dom.offerContactPref?.value || "phone";
+    const description = dom.offerDescription?.value.trim() || "";
+
+    const isRental = vehicleVal.startsWith("rental_");
+    let bookingId = null;
+    let vehicleId = null;
+
+    if (isRental) {
+      bookingId = Number(vehicleVal.replace("rental_", ""));
+    } else {
+      vehicleId = Number(vehicleVal);
+    }
+
+    const payload = {
+      source,
+      destination,
+      stops: stopsStr.split(",").map((s) => s.trim()).filter(Boolean),
+      travel_date: travelDate,
+      departure_time: departureTime,
+      available_seats: availableSeats,
+      price_per_seat: price,
+      contact_preference: contactPref,
+      description,
+      vehicle_id: vehicleVal,
+      is_rental: isRental,
+      booking_id: bookingId,
+    };
+
+    const res = await fetchJson("/api/carpool/trips", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    showToast(res.message || "Carpool trip created successfully!", "success");
+    form.reset();
+    dom.offerRoutePreviewCard?.classList.add("hidden");
+    dom.rentedCarNoticeBanner?.classList.add("hidden");
+
+    await Promise.all([loadCarpoolTrips(), loadCarpoolDashboard()]);
+    switchCarpoolTab("dashboard");
+    switchDashboardSubtab("created");
+  } catch (error) {
+    showToast(error.message || "Failed to publish trip.", "error");
+  } finally {
+    setButtonBusy(submitBtn, false);
+  }
+}
+
+function renderVehiclesHub() {
+  const personal = pageState.carpool.vehicles || [];
+  const rentals = pageState.carpool.rentalVehicles || [];
+
+  if (dom.personalVehiclesGrid) {
+    if (!personal.length) {
+      dom.personalVehiclesGrid.innerHTML = `
+        <div class="empty-state">
+          <h4>No personal vehicles registered</h4>
+          <p>Add your car to start offering rides and sharing commute costs.</p>
+          <button class="button button-primary" type="button" data-action="switch-carpool-tab" data-tab="add-vehicle">+ Register Personal Car</button>
+        </div>
+      `;
+    } else {
+      dom.personalVehiclesGrid.innerHTML = personal
+        .map((v) => {
+          const img = v.image_url || v.images?.[0] ? getAssetUrl(v.image_url || v.images[0]) : "/assets/a6cars-logo.png";
+          return `
+            <article class="vehicle-hub-card">
+              <div class="veh-card-img">
+                <img src="${img}" alt="${escapeHtml(v.brand)} ${escapeHtml(v.model)}" loading="lazy" onerror="this.onerror=null;this.src='/assets/hero-car.jpg';" />
+              </div>
+              <div class="veh-card-body">
+                <span class="eyebrow">${escapeHtml(v.vehicle_type)} &bull; ${escapeHtml(String(v.year || 2022))}</span>
+                <h3>${escapeHtml(v.brand)} ${escapeHtml(v.model)}</h3>
+                <p class="reg-tag">🚗 ${escapeHtml(v.reg_number)}</p>
+                <div class="veh-specs-row">
+                  <span>⛽ ${escapeHtml(v.fuel_type)}</span>
+                  <span>⚡ ${escapeHtml(v.mileage)}</span>
+                  <span>👥 ${v.seating_capacity} Seats</span>
+                  <span>📍 ${escapeHtml(v.location || 'Local')}</span>
+                </div>
+                <div class="veh-actions">
+                  <button class="button button-primary" type="button" data-action="offer-car-carpool" data-vehicle-id="${v.id}">
+                    🚗 Offer This Car for Carpooling
+                  </button>
+                  <button class="button button-ghost button-danger-text" type="button" data-action="delete-user-vehicle" data-vehicle-id="${v.id}">
+                    Remove
+                  </button>
+                </div>
+              </div>
+            </article>
+          `;
+        })
+        .join("");
+    }
+  }
+
+  if (dom.rentedVehiclesGrid) {
+    if (!rentals.length) {
+      dom.rentedVehiclesGrid.innerHTML = `
+        <div class="empty-state">
+          <h4>No active rented cars found</h4>
+          <p>Book a fleet vehicle from A6 Cars to use it for both self-drive travel and carpooling.</p>
+          <a class="button button-secondary" href="/book.html">Browse Fleet Cars</a>
+        </div>
+      `;
+    } else {
+      dom.rentedVehiclesGrid.innerHTML = rentals
+        .map((r) => {
+          const img = r.image_url || r.images?.[0] ? getAssetUrl(r.image_url || r.images[0]) : "/assets/a6cars-logo.png";
+          return `
+            <article class="vehicle-hub-card is-rental-card">
+              <div class="veh-card-img">
+                <img src="${img}" alt="${escapeHtml(r.brand)} ${escapeHtml(r.model)}" loading="lazy" onerror="this.onerror=null;this.src='/assets/hero-car.jpg';" />
+                <span class="rental-badge-chip">A6 Fleet Rental</span>
+              </div>
+              <div class="veh-card-body">
+                <span class="eyebrow">${escapeHtml(r.vehicle_type)} &bull; Booking #${r.booking_id}</span>
+                <h3>${escapeHtml(r.brand)} ${escapeHtml(r.model)}</h3>
+                <div class="rental-period-box">
+                  <span>Valid Rental Window:</span>
+                  <strong>📅 ${formatDate(r.start_date)} to ${formatDate(r.end_date)}</strong>
+                </div>
+                <div class="veh-specs-row">
+                  <span>⛽ ${escapeHtml(r.fuel_type)}</span>
+                  <span>⚡ ${escapeHtml(r.mileage)}</span>
+                  <span>👥 ${r.seating_capacity} Seats</span>
+                </div>
+                <div class="veh-actions">
+                  <button class="button button-accent" type="button" data-action="offer-rental-carpool" data-booking-id="${r.booking_id}">
+                    🚙 Use This Rented Car for Carpooling
+                  </button>
+                </div>
+              </div>
+            </article>
+          `;
+        })
+        .join("");
+    }
+  }
+  init3DTiltEngine();
+}
+
+function initAddVehicleForm() {
+  const dropArea = dom.vehFileDropArea;
+  const fileInput = dom.vehImageFile;
+  const previewBox = dom.vehImagePreviewBox;
+  const previewImg = dom.vehPreviewImg;
+  const removeBtn = dom.removeVehImageBtn;
+  const urlInput = dom.vehImageUrl;
+
+  dropArea?.addEventListener("click", () => fileInput?.click());
+
+  fileInput?.addEventListener("change", async () => {
+    if (fileInput.files && fileInput.files[0]) {
+      await handleVehicleImageUpload(fileInput.files[0]);
+    }
+  });
+
+  urlInput?.addEventListener("input", () => {
+    const val = urlInput.value.trim();
+    if (val) {
+      pageState.carpool.pendingUploadImageUrl = val;
+      if (previewImg) previewImg.src = val;
+      previewBox?.classList.remove("hidden");
+    }
+  });
+
+  removeBtn?.addEventListener("click", () => {
+    pageState.carpool.pendingUploadImageUrl = "";
+    if (fileInput) fileInput.value = "";
+    if (urlInput) urlInput.value = "";
+    previewBox?.classList.add("hidden");
+  });
+
+  dom.registerVehicleForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await submitRegisterVehicle(dom.registerVehicleForm);
+  });
+}
+
+async function handleVehicleImageUpload(file) {
+  try {
+    showToast("Uploading vehicle photo...", "warning");
+    const formData = new FormData();
+    formData.append("image", file);
+
+    const token = readUserSession().token;
+    const res = await fetch("/api/carpool/vehicles/upload-image", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to upload image.");
+
+    pageState.carpool.pendingUploadImageUrl = data.imageUrl || data.image_url;
+    if (dom.vehPreviewImg) dom.vehPreviewImg.src = getAssetUrl(pageState.carpool.pendingUploadImageUrl);
+    dom.vehImagePreviewBox?.classList.remove("hidden");
+    showToast("Vehicle image uploaded successfully!", "success");
+  } catch (error) {
+    showToast(error.message || "Failed to upload image.", "error");
+  }
+}
+
+async function submitRegisterVehicle(form) {
+  if (!ensureUserSession()) return;
+  const submitBtn = dom.saveVehicleBtn;
+  setButtonBusy(submitBtn, true, "Saving Vehicle...");
+
+  try {
+    const regNumber = dom.vehRegNumber?.value.trim().toUpperCase();
+    const year = Number(dom.vehYear?.value) || 2022;
+    const brand = dom.vehBrand?.value.trim();
+    const model = dom.vehModel?.value.trim();
+    const vehicleType = dom.vehType?.value || "Sedan";
+    const fuelType = dom.vehFuelType?.value || "Petrol";
+    const mileage = dom.vehMileage?.value.trim() || "18 km/l";
+    const seatingCapacity = Number(dom.vehCapacity?.value) || 4;
+    const location = dom.vehLocation?.value.trim() || "Hyderabad";
+    const offerNow = dom.vehOfferNowCheckbox?.checked;
+
+    const imageUrl = pageState.carpool.pendingUploadImageUrl || dom.vehImageUrl?.value.trim() || "";
+
+    const payload = {
+      reg_number: regNumber,
+      year,
+      brand,
+      model,
+      name: `${brand} ${model}`,
+      vehicle_type: vehicleType,
+      fuel_type: fuelType,
+      mileage,
+      seating_capacity: seatingCapacity,
+      location,
+      image_url: imageUrl,
+      images: imageUrl ? [imageUrl] : [],
+    };
+
+    const result = await fetchJson("/api/carpool/vehicles", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    showToast(result.message || "Vehicle registered successfully! You can now offer this car for carpooling.", "success");
+    form.reset();
+    pageState.carpool.pendingUploadImageUrl = "";
+    dom.vehImagePreviewBox?.classList.add("hidden");
+
+    await loadCarpoolVehicles();
+
+    if (offerNow && result.vehicle) {
+      switchCarpoolTab("create", { preselectVehicleId: String(result.vehicle.id) });
+    } else {
+      switchCarpoolTab("vehicles");
+    }
+  } catch (error) {
+    showToast(error.message || "Failed to register vehicle.", "error");
+  } finally {
+    setButtonBusy(submitBtn, false);
+  }
+}
+
+async function deleteUserVehicle(vehicleId) {
+  const confirmed = window.confirm("Are you sure you want to remove this personal vehicle?");
+  if (!confirmed) return;
+
+  try {
+    const res = await fetchJson(`/api/carpool/vehicles/${vehicleId}`, { method: "DELETE" });
+    showToast(res.message || "Vehicle removed successfully.", "success");
+    await loadCarpoolVehicles();
+  } catch (error) {
+    showToast(error.message || "Failed to remove vehicle.", "error");
+  }
+}
+
+async function loadCarpoolDashboard() {
+  if (!hasUserSession()) return;
+  try {
+    const data = await fetchJson("/api/carpool/dashboard-summary");
+    pageState.carpool.dashboardData = data;
+
+    renderDashboardMetrics(data.summary || {});
+    renderDashCreatedTrips(data.created_trips || []);
+    renderDashJoinedTrips(data.joined_trips || []);
+    renderDashRequests(data.incoming_requests || [], data.sent_requests || []);
+    renderDashUpcomingTrips(data.upcoming || { host: [], passenger: [] });
+    renderDashCompletedTrips(data.completed || { host: [], passenger: [] });
+  } catch (error) {
+    console.error("Dashboard load failed:", error);
+  }
+}
+
+function renderDashboardMetrics(summary) {
+  const activeRentals = pageState.carpool?.rentalVehicles ? pageState.carpool.rentalVehicles.length : 0;
+  const myVehicles = pageState.carpool?.vehicles ? pageState.carpool.vehicles.length : 0;
+
+  if (dom.dashActiveRentalsCount) dom.dashActiveRentalsCount.textContent = formatMetricNumber(activeRentals);
+  if (dom.dashMyVehiclesCount) dom.dashMyVehiclesCount.textContent = formatMetricNumber(myVehicles);
+  if (dom.dashCreatedCount) dom.dashCreatedCount.textContent = formatMetricNumber(summary.created_count || 0);
+  if (dom.dashJoinedCount) dom.dashJoinedCount.textContent = formatMetricNumber(summary.joined_count || 0);
+  if (dom.dashPendingRequestsCount) dom.dashPendingRequestsCount.textContent = formatMetricNumber((summary.pending_incoming_count || 0) + (summary.pending_sent_count || 0));
+  if (dom.dashUpcomingCount) dom.dashUpcomingCount.textContent = formatMetricNumber(summary.upcoming_count || 0);
+  if (dom.dashCompletedCount) dom.dashCompletedCount.textContent = formatMetricNumber(summary.completed_count || 0);
+
+  if (dom.dashSubtabCreatedBadge) dom.dashSubtabCreatedBadge.textContent = String(summary.created_count || 0);
+  if (dom.dashSubtabJoinedBadge) dom.dashSubtabJoinedBadge.textContent = String(summary.joined_count || 0);
+  if (dom.dashSubtabRequestsBadge) dom.dashSubtabRequestsBadge.textContent = String(summary.pending_incoming_count || 0);
+  if (dom.dashSubtabUpcomingBadge) dom.dashSubtabUpcomingBadge.textContent = String(summary.upcoming_count || 0);
+  if (dom.dashSubtabCompletedBadge) dom.dashSubtabCompletedBadge.textContent = String(summary.completed_count || 0);
+}
+
+function switchDashboardSubtab(subtabName) {
+  pageState.carpool.activeDashSubtab = subtabName;
+  document.querySelectorAll("[data-dash-subtab]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.dashSubtab === subtabName);
+  });
+
+  const subtabContentMap = {
+    created: dom.dashCreatedContent,
+    joined: dom.dashJoinedContent,
+    requests: dom.dashRequestsContent,
+    upcoming: dom.dashUpcomingContent,
+    completed: dom.dashCompletedContent,
+  };
+
+  Object.entries(subtabContentMap).forEach(([k, el]) => {
+    if (el) el.classList.toggle("hidden", k !== subtabName);
+  });
+}
+
+function renderDashCreatedTrips(trips) {
+  if (!dom.dashCreatedList) return;
+  if (!trips.length) {
+    dom.dashCreatedList.innerHTML = `
+      <div class="empty-state">
+        <p>You haven't offered any carpool rides yet.</p>
+        <button class="button button-primary" type="button" data-action="switch-carpool-tab" data-tab="create">+ Offer a Ride</button>
+      </div>
+    `;
+    return;
+  }
+
+  dom.dashCreatedList.innerHTML = trips
+    .map((trip) => {
+      const isCancelled = trip.status === "CANCELLED";
+      const isCompleted = trip.status === "COMPLETED";
+      const isStarted = trip.status === "STARTED";
+
+      let statusBadge = "";
+      if (isCancelled) statusBadge = '<span class="status-badge badge-danger">Cancelled</span>';
+      else if (isCompleted) statusBadge = '<span class="status-badge badge-neutral">Completed</span>';
+      else if (isStarted) statusBadge = '<span class="status-badge badge-sky">Started</span>';
+      else if (trip.available_seats === 0 || trip.status === "FULL") statusBadge = '<span class="status-badge badge-warning">Full</span>';
+      else statusBadge = '<span class="status-badge badge-success">Open</span>';
+
+      return `
+        <article class="dash-trip-card">
+          <div class="dash-trip-header">
+            <div>
+              <span class="eyebrow">Trip #${trip.id} &bull; ${escapeHtml(trip.vehicle_name || 'Vehicle')}</span>
+              <h3>${escapeHtml(trip.source)} ➔ ${escapeHtml(trip.destination)}</h3>
+              <p class="support-copy">📅 ${formatDate(trip.travel_date)} at ${escapeHtml(trip.departure_time)} &bull; ${formatCurrency(trip.price_per_seat)}/seat</p>
+            </div>
+            <div>${statusBadge}</div>
+          </div>
+
+          <div class="dash-trip-meta">
+            <span>Occupied Seats: <strong>${trip.occupied_seats || 0} / ${trip.total_seats || trip.available_seats}</strong></span>
+            <span>Pending Requests: <strong>${trip.pending_requests_count || 0}</strong></span>
+          </div>
+
+          <div class="dash-trip-actions">
+            <button class="button button-secondary" type="button" data-action="manage-trip-passengers" data-trip-id="${trip.id}">
+              👥 Manage Passengers & Requests (${trip.pending_requests_count || 0} new)
+            </button>
+            ${!isCancelled && !isCompleted && !isStarted ? `
+              <button class="button button-primary" type="button" data-action="update-trip-status" data-trip-id="${trip.id}" data-status="STARTED">
+                ▶ Start Trip
+              </button>
+            ` : ""}
+            ${isStarted ? `
+              <button class="button button-success" type="button" data-action="update-trip-status" data-trip-id="${trip.id}" data-status="COMPLETED">
+                ✓ Mark Completed
+              </button>
+            ` : ""}
+            ${!isCancelled && !isCompleted ? `
+              <button class="button button-danger" type="button" data-action="update-trip-status" data-trip-id="${trip.id}" data-status="CANCELLED">
+                ✕ Cancel Trip
+              </button>
+            ` : ""}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderDashJoinedTrips(rides) {
+  if (!dom.dashJoinedList) return;
+  if (!rides.length) {
+    dom.dashJoinedList.innerHTML = `
+      <div class="empty-state">
+        <p>You haven't joined any carpool rides yet.</p>
+        <button class="button button-primary" type="button" data-action="switch-carpool-tab" data-tab="find">🔍 Find a Ride</button>
+      </div>
+    `;
+    return;
+  }
+
+  dom.dashJoinedList.innerHTML = rides
+    .map((item) => {
+      const trip = item.trip;
+      if (!trip) return "";
+      const isCompleted = item.status === "COMPLETED" || trip.status === "COMPLETED";
+      const isCancelled = item.status === "CANCELLED" || trip.status === "CANCELLED";
+
+      return `
+        <article class="dash-trip-card">
+          <div class="dash-trip-header">
+            <div>
+              <span class="eyebrow">Joined as Passenger &bull; ${item.seats} Seat(s)</span>
+              <h3>${escapeHtml(trip.source)} ➔ ${escapeHtml(trip.destination)}</h3>
+              <p class="support-copy">Driver: <strong>${escapeHtml(trip.driver_name)}</strong> &bull; 📅 ${formatDate(trip.travel_date)} at ${escapeHtml(trip.departure_time)}</p>
+            </div>
+            <div>
+              <span class="status-badge ${isCompleted ? 'badge-neutral' : isCancelled ? 'badge-danger' : 'badge-success'}">
+                ${isCompleted ? 'Completed' : isCancelled ? 'Cancelled' : 'Confirmed'}
+              </span>
+            </div>
+          </div>
+
+          <div class="dash-trip-meta">
+            <span>Pickup: <strong>${escapeHtml(item.pickup_point || trip.source)}</strong></span>
+            <span>Total Share: <strong>${formatCurrency(trip.price_per_seat * item.seats)}</strong></span>
+          </div>
+
+          <div class="dash-trip-actions">
+            ${isCompleted ? `
+              <button class="button button-accent" type="button" data-action="review-carpool-driver" data-trip-id="${trip.id}" data-driver-name="${escapeHtml(trip.driver_name)}">
+                ★ Rate & Review Driver
+              </button>
+            ` : ""}
+            ${!isCompleted && !isCancelled ? `
+              <button class="button button-ghost button-danger-text" type="button" data-action="leave-carpool-trip" data-trip-id="${trip.id}">
+                Leave Carpool
+              </button>
+            ` : ""}
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderDashRequests(incoming, sent) {
+  if (dom.dashIncomingRequestsList) {
+    if (!incoming.length) {
+      dom.dashIncomingRequestsList.innerHTML = '<p class="empty-note">No pending join requests from co-passengers.</p>';
+    } else {
+      dom.dashIncomingRequestsList.innerHTML = incoming
+        .map((r) => `
+          <div class="request-item-card">
+            <div class="req-header">
+              <strong>👤 ${escapeHtml(r.passenger_name)}</strong>
+              <span class="status-badge badge-warning">Requested ${r.seats_requested} Seat(s)</span>
+            </div>
+            <p class="req-trip-note">Trip: ${escapeHtml(r.trip_source)} ➔ ${escapeHtml(r.trip_destination)} (${formatDate(r.travel_date)})</p>
+            <p class="req-pickup-note">Pickup: <strong>${escapeHtml(r.pickup_point)}</strong> &bull; Drop: <strong>${escapeHtml(r.dropoff_point)}</strong></p>
+            ${r.message ? `<p class="req-msg">"${escapeHtml(r.message)}"</p>` : ""}
+            <div class="req-actions">
+              <button class="button button-primary button-sm" type="button" data-action="accept-carpool-request" data-request-id="${r.id}">✓ Accept</button>
+              <button class="button button-ghost button-sm" type="button" data-action="reject-carpool-request" data-request-id="${r.id}">✕ Reject</button>
+            </div>
+          </div>
+        `)
+        .join("");
+    }
+  }
+
+  if (dom.dashSentRequestsList) {
+    if (!sent.length) {
+      dom.dashSentRequestsList.innerHTML = '<p class="empty-note">You have not sent any pending requests.</p>';
+    } else {
+      dom.dashSentRequestsList.innerHTML = sent
+        .map((r) => `
+          <div class="request-item-card">
+            <div class="req-header">
+              <strong>${r.trip ? `${escapeHtml(r.trip.source)} ➔ ${escapeHtml(r.trip.destination)}` : 'Trip Request'}</strong>
+              <span class="status-badge ${r.status === 'ACCEPTED' ? 'badge-success' : r.status === 'REJECTED' ? 'badge-danger' : 'badge-warning'}">${r.status}</span>
+            </div>
+            <p class="req-trip-note">Seats: ${r.seats_requested} &bull; Pickup: ${escapeHtml(r.pickup_point)}</p>
+            ${r.status === 'PENDING' ? `
+              <div class="req-actions">
+                <button class="button button-ghost button-sm button-danger-text" type="button" data-action="cancel-carpool-request" data-request-id="${r.id}">Cancel Request</button>
+              </div>
+            ` : ""}
+          </div>
+        `)
+        .join("");
+    }
+  }
+}
+
+function renderDashUpcomingTrips(upcoming) {
+  if (!dom.dashUpcomingList) return;
+  const host = upcoming.host || [];
+  const passenger = upcoming.passenger || [];
+  const allUpcoming = [...host.map(t => ({ ...t, role: 'driver' })), ...passenger.map(j => ({ ...j.trip, role: 'passenger', seats_joined: j.seats }))];
+
+  if (!allUpcoming.length) {
+    dom.dashUpcomingList.innerHTML = `
+      <div class="empty-state">
+        <p>No upcoming carpool journeys on your schedule.</p>
+        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 10px;">
+          <button class="button button-primary" type="button" data-action="switch-carpool-tab" data-tab="find">Find a Ride</button>
+          <button class="button button-secondary" type="button" data-action="switch-carpool-tab" data-tab="create">Offer a Ride</button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  dom.dashUpcomingList.innerHTML = allUpcoming
+    .map((item) => `
+      <article class="dash-trip-card">
+        <div class="dash-trip-header">
+          <div>
+            <span class="eyebrow">${item.role === 'driver' ? '🚗 You are Driving' : '👥 You are Riding'} &bull; ${formatDate(item.travel_date)} at ${escapeHtml(item.departure_time)}</span>
+            <h3>${escapeHtml(item.source)} ➔ ${escapeHtml(item.destination)}</h3>
+            <p class="support-copy">Vehicle: ${escapeHtml(item.vehicle_name || 'Vehicle')} &bull; Status: ${item.status}</p>
+          </div>
+          <span class="status-badge badge-sky">Upcoming</span>
+        </div>
+      </article>
+    `)
+    .join("");
+}
+
+function renderDashCompletedTrips(completed) {
+  if (!dom.dashCompletedList) return;
+  const host = completed.host || [];
+  const passenger = completed.passenger || [];
+  const allCompleted = [...host.map(t => ({ ...t, role: 'driver' })), ...passenger.map(j => ({ ...j.trip, role: 'passenger', seats_joined: j.seats }))];
+
+  if (!allCompleted.length) {
+    dom.dashCompletedList.innerHTML = '<div class="empty-state"><p>No completed carpool trips yet.</p></div>';
+    return;
+  }
+
+  dom.dashCompletedList.innerHTML = allCompleted
+    .map((item) => `
+      <article class="dash-trip-card">
+        <div class="dash-trip-header">
+          <div>
+            <span class="eyebrow">${item.role === 'driver' ? '🚗 Driven by You' : '👥 Joined as Passenger'} &bull; Completed</span>
+            <h3>${escapeHtml(item.source)} ➔ ${escapeHtml(item.destination)}</h3>
+            <p class="support-copy">Date: ${formatDate(item.travel_date)} &bull; Vehicle: ${escapeHtml(item.vehicle_name || 'Vehicle')}</p>
+          </div>
+          <span class="status-badge badge-neutral">Finished</span>
+        </div>
+      </article>
+    `)
+    .join("");
+}
+
+async function updateTripStatusFlow(tripId, newStatus) {
+  let reason = "";
+  if (newStatus === "CANCELLED") {
+    const promptReason = window.prompt("Reason for cancelling this trip (passengers will be notified):", "Change of schedule");
+    if (promptReason === null) return;
+    reason = promptReason.trim();
+  } else {
+    const confirm = window.confirm(`Update trip status to ${newStatus}?`);
+    if (!confirm) return;
+  }
+
+  try {
+    const res = await fetchJson(`/api/carpool/trips/${tripId}/status`, {
+      method: "PUT",
+      body: JSON.stringify({ status: newStatus, reason }),
+    });
+    showToast(res.message || `Trip status updated to ${newStatus}.`, "success");
+    await Promise.all([loadCarpoolDashboard(), loadCarpoolTrips()]);
+  } catch (error) {
+    showToast(error.message || "Failed to update trip status.", "error");
+  }
+}
+
+async function openManagePassengersModal(tripId) {
+  try {
+    const data = await fetchJson(`/api/carpool/trips/${tripId}/requests`);
+    const trip = data.trip;
+    const passengers = data.passengers || [];
+    const requests = data.requests || [];
+
+    const content = document.createElement("div");
+    content.className = "stack-list";
+    content.innerHTML = `
+      <div class="summary-route" style="margin-bottom: 12px;">
+        <strong>${escapeHtml(trip.source)} ➔ ${escapeHtml(trip.destination)}</strong>
+        <p>Available Seats: <strong>${trip.available_seats}</strong> / Total: ${trip.total_seats || 4}</p>
+      </div>
+
+      <div style="border-bottom: 1px solid rgba(15,23,42,0.1); padding-bottom: 12px; margin-bottom: 12px;">
+        <h4>Confirmed Passengers (${passengers.length})</h4>
+        ${!passengers.length ? '<p style="color: #64748b; font-size: 0.9rem;">No confirmed passengers on this trip yet.</p>' : `
+          <div class="stack-list">
+            ${passengers.map(p => `
+              <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(15,23,42,0.03); border-radius: 10px;">
+                <div>
+                  <strong>👤 ${escapeHtml(p.passenger_name)}</strong>
+                  <span style="font-size: 0.85rem; color: #64748b; display: block;">${p.seats} seat(s) &bull; Pickup: ${escapeHtml(p.pickup_point)} &bull; Phone: ${escapeHtml(p.passenger_phone || 'Private')}</span>
+                </div>
+                <span class="status-badge badge-success">Confirmed</span>
+              </div>
+            `).join("")}
+          </div>
+        `}
+      </div>
+
+      <div>
+        <h4>Pending Requests (${requests.filter(r => r.status === 'PENDING').length})</h4>
+        ${!requests.filter(r => r.status === 'PENDING').length ? '<p style="color: #64748b; font-size: 0.9rem;">No pending requests awaiting approval.</p>' : `
+          <div class="stack-list">
+            ${requests.filter(r => r.status === 'PENDING').map(r => `
+              <div style="padding: 12px; border: 1px solid rgba(37,99,235,0.2); border-radius: 12px; background: rgba(37,99,235,0.03);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <strong>👤 ${escapeHtml(r.passenger_name)}</strong>
+                  <span class="status-badge badge-warning">${r.seats_requested} Seat(s) Requested</span>
+                </div>
+                <p style="font-size: 0.85rem; color: #64748b; margin: 4px 0;">Pickup: ${escapeHtml(r.pickup_point)} &bull; Drop: ${escapeHtml(r.dropoff_point)}</p>
+                ${r.message ? `<p style="font-style: italic; font-size: 0.85rem; color: #334155;">"${escapeHtml(r.message)}"</p>` : ""}
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                  <button class="button button-primary button-inline" type="button" onclick="acceptJoinRequest(${r.id}); closeModal();">✓ Accept & Lock Seat</button>
+                  <button class="button button-ghost button-inline" type="button" onclick="rejectJoinRequest(${r.id}); closeModal();">✕ Reject</button>
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        `}
+      </div>
+
+      <div class="modal-actions" style="margin-top: 16px;">
+        <button class="button button-secondary" type="button" data-action="close-modal">Close</button>
+      </div>
+    `;
+
+    openModal({
+      title: "Manage Trip Passengers",
+      subtitle: `Review passengers and pending requests for trip #${tripId}.`,
+      size: "wide",
+      content,
+    });
+  } catch (error) {
+    showToast(error.message || "Failed to load trip passengers.", "error");
+  }
+}
+
+async function acceptJoinRequest(requestId) {
+  try {
+    const res = await fetchJson(`/api/carpool/requests/${requestId}/accept`, { method: "PUT" });
+    showToast(res.message || "Passenger request accepted!", "success");
+    await Promise.all([loadCarpoolDashboard(), loadCarpoolTrips()]);
+  } catch (error) {
+    showToast(error.message || "Failed to accept request.", "error");
+  }
+}
+
+async function rejectJoinRequest(requestId) {
+  try {
+    const res = await fetchJson(`/api/carpool/requests/${requestId}/reject`, { method: "PUT" });
+    showToast(res.message || "Request rejected.", "warning");
+    await loadCarpoolDashboard();
+  } catch (error) {
+    showToast(error.message || "Failed to reject request.", "error");
+  }
+}
+
+async function cancelJoinRequest(requestId) {
+  try {
+    const res = await fetchJson(`/api/carpool/requests/${requestId}/cancel`, { method: "PUT" });
+    showToast(res.message || "Join request cancelled.", "success");
+    await loadCarpoolDashboard();
+  } catch (error) {
+    showToast(error.message || "Failed to cancel request.", "error");
+  }
+}
+
+async function leaveCarpoolTrip(tripId) {
+  const confirm = window.confirm("Are you sure you want to leave this carpool? Your reserved seat will be returned to the driver.");
+  if (!confirm) return;
+
+  try {
+    const res = await fetchJson(`/api/carpool/trips/${tripId}/leave`, { method: "DELETE" });
+    showToast(res.message || "You have left the carpool trip.", "success");
+    await Promise.all([loadCarpoolDashboard(), loadCarpoolTrips()]);
+  } catch (error) {
+    showToast(error.message || "Failed to leave carpool trip.", "error");
+  }
+}
+
+function openReviewDriverModal(tripId, driverName) {
+  const content = document.createElement("div");
+  content.className = "stack-list";
+  content.innerHTML = `
+    <p>Share your travel experience with <strong>${escapeHtml(driverName)}</strong>.</p>
+    <div class="field-block">
+      <label>Rating (1 to 5 Stars)</label>
+      <select class="select" id="reviewRatingInput">
+        <option value="5">★★★★★ - Excellent (5 Stars)</option>
+        <option value="4">★★★★☆ - Very Good (4 Stars)</option>
+        <option value="3">★★★☆☆ - Average (3 Stars)</option>
+        <option value="2">★★☆☆☆ - Poor (2 Stars)</option>
+        <option value="1">★☆☆☆☆ - Very Bad (1 Star)</option>
+      </select>
+    </div>
+    <div class="field-block">
+      <label for="reviewCommentsInput">Comments & Feedback</label>
+      <textarea class="input input-textarea" id="reviewCommentsInput" rows="3" placeholder="Punctual driver, smooth ride, clean car..."></textarea>
+    </div>
+    <div class="modal-actions" style="margin-top: 14px;">
+      <button class="button button-primary" type="button" id="submitReviewBtn">Submit Review</button>
+      <button class="button button-secondary" type="button" data-action="close-modal">Cancel</button>
+    </div>
+  `;
+
+  content.querySelector("#submitReviewBtn")?.addEventListener("click", async () => {
+    const rating = Number(content.querySelector("#reviewRatingInput").value) || 5;
+    const comments = content.querySelector("#reviewCommentsInput").value.trim();
+
+    try {
+      const res = await fetchJson("/api/carpool/reviews", {
+        method: "POST",
+        body: JSON.stringify({
+          trip_id: tripId,
+          rating,
+          comment: comments,
+          role: "passenger_to_driver",
+        }),
+      });
+      closeModal();
+      showToast(res.message || "Thank you! Your review has been submitted.", "success");
+    } catch (err) {
+      showToast(err.message || "Failed to submit review.", "error");
+    }
+  });
+
+  openModal({
+    title: "Rate Your Carpool Journey",
+    subtitle: `Review driver ${escapeHtml(driverName)}.`,
+    content,
+  });
+}
+
+/**
+ * Advanced 3D Interactive Tilt & Specular Glare Engine
+ * Brings physics-based depth, cursor tracking, and glossy light glare
+ * to cards, hero showcases, and panels.
+ */
+function init3DTiltEngine() {
+  if (typeof window === "undefined") return;
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (window.matchMedia && window.matchMedia("(max-width: 768px)").matches) return;
+  if (window.matchMedia && window.matchMedia("(hover: none)").matches) return;
+
+  const selector = [
+    ".modern-car-card:not([data-tilt-bound])",
+    ".vehicle-card:not([data-tilt-bound])",
+    ".carpool-card:not([data-tilt-bound])",
+    ".feature-card:not([data-tilt-bound])",
+    ".hero-car-stage:not([data-tilt-bound])",
+    ".floating-search-panel:not([data-tilt-bound])",
+    ".home-priority-card:not([data-tilt-bound])",
+    ".stat-card:not([data-tilt-bound])",
+    ".metric-card:not([data-tilt-bound])",
+    ".vehicle-hub-card:not([data-tilt-bound])",
+    ".hero-3d-route-highway:not([data-tilt-bound])",
+    ".glass-spotlight:not([data-tilt-bound])",
+    ".benefit-card:not([data-tilt-bound])"
+  ].join(", ");
+
+  const targets = document.querySelectorAll(selector);
+
+  targets.forEach((card) => {
+    card.setAttribute("data-tilt-bound", "true");
+    card.style.transformStyle = "preserve-3d";
+
+    const isStage = card.classList.contains("hero-car-stage");
+    const isSearch = card.classList.contains("floating-search-panel");
+    const isHighway = card.classList.contains("hero-3d-route-highway");
+
+    // Create dynamic specular reflection glare layer
+    let glare = card.querySelector(".tilt-specular-glare");
+    if (!glare && !isStage && !isSearch) {
+      glare = document.createElement("div");
+      glare.className = "tilt-specular-glare";
+      card.appendChild(glare);
+    }
+
+    let rect = null;
+    let rafId = null;
+
+    function onMouseEnter() {
+      rect = card.getBoundingClientRect();
+      card.style.transition = "transform 0.12s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.12s ease";
+      if (glare) {
+        glare.style.opacity = "1";
+        glare.style.transition = "opacity 0.2s ease";
+      }
+    }
+
+    function onMouseMove(e) {
+      if (!rect) rect = card.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const xPct = Math.max(0, Math.min(1, x / rect.width));
+      const yPct = Math.max(0, Math.min(1, y / rect.height));
+
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        const tiltMax = isStage ? 6 : isHighway ? 5 : 10;
+        const tiltX = (0.5 - yPct) * tiltMax;
+        const tiltY = (xPct - 0.5) * tiltMax;
+        const lift = isStage ? 0 : -8;
+        const scale = isStage ? 1.01 : 1.02;
+
+        card.style.transform = `perspective(1000px) rotateX(${tiltX.toFixed(2)}deg) rotateY(${tiltY.toFixed(2)}deg) translateY(${lift}px) scale3d(${scale}, ${scale}, ${scale})`;
+
+        if (glare) {
+          glare.style.background = `radial-gradient(circle at ${(xPct * 100).toFixed(1)}% ${(yPct * 100).toFixed(1)}%, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.08) 45%, transparent 75%)`;
+        }
+      });
+    }
+
+    function onMouseLeave() {
+      if (rafId) cancelAnimationFrame(rafId);
+      card.style.transition = "transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.65s ease";
+      card.style.transform = "perspective(1000px) rotateX(0deg) rotateY(0deg) translateY(0) scale3d(1, 1, 1)";
+      if (glare) {
+        glare.style.opacity = "0";
+        glare.style.transition = "opacity 0.5s ease";
+      }
+      rect = null;
+    }
+
+    card.addEventListener("mouseenter", onMouseEnter);
+    card.addEventListener("mousemove", onMouseMove);
+    card.addEventListener("mouseleave", onMouseLeave);
+  });
+}
+
+

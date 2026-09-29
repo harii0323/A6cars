@@ -71,9 +71,9 @@ function validateJoinRequest(req, res, next) {
 }
 
 function validateVehicle(req, res, next) {
-  const { name, reg_number, seating_capacity } = req.body || {};
-  if (!name || !String(name).trim()) {
-    return res.status(400).json({ message: "Vehicle name/brand is required." });
+  const { name, brand, reg_number, seating_capacity } = req.body || {};
+  if ((!name || !String(name).trim()) && (!brand || !String(brand).trim())) {
+    return res.status(400).json({ message: "Vehicle brand / name is required." });
   }
   if (!reg_number || !String(reg_number).trim()) {
     return res.status(400).json({ message: "Vehicle registration number is required." });

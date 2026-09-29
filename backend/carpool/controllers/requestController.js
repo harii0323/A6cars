@@ -186,7 +186,7 @@ async function acceptRequest(req, res) {
       {
         id: trip.id,
         available_seats: { $gte: seatsToBook },
-        status: { $in: ["ACTIVE", "FULL"] },
+        status: { $in: ["OPEN", "ACTIVE", "FULL"] },
       },
       {
         $inc: { available_seats: -seatsToBook },
@@ -373,7 +373,7 @@ async function leaveCarpool(req, res) {
       {
         $inc: { available_seats: seatsToRestore },
         $set: {
-          status: "ACTIVE", // Reopen if it was FULL
+          status: "OPEN", // Reopen if it was FULL
           updated_at: new Date().toISOString(),
         },
       },

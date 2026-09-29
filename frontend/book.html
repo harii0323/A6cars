@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Book a Car | A6 Cars</title>
+  <title>Browse Fleet & Book a Car | A6 Cars</title>
+  <meta name="description" content="Explore our pristine self-drive fleet. Lock open dates, pay securely with 10% advance deposit, and collect with instant contactless PIN." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/user.css" />
 </head>
 <body data-page="book">
@@ -16,7 +17,7 @@
         <span class="brand-mark"><img class="brand-logo" src="/assets/a6cars-logo.png" alt="A6 Cars logo" /></span>
         <span>
           <strong>A6 Cars</strong>
-          <small>Browse the fleet</small>
+          <small>Fleet & Booking Center</small>
         </span>
       </a>
       <div class="nav-cluster">
@@ -26,41 +27,85 @@
     </header>
 
     <main class="page-shell">
+      <!-- Hero Section -->
       <section class="hero hero-grid">
+        <div class="ambient-3d-orb-container">
+          <div class="ambient-3d-orb orb-orange"></div>
+          <div class="ambient-3d-orb orb-cyan"></div>
+          <div class="ambient-3d-orb orb-violet"></div>
+        </div>
         <div class="hero-copy">
-          <span class="hero-chip">Booking Workspace</span>
-          <h1>Pick dates, lock a car, and finish payment in one place.</h1>
-          <p class="light-copy" id="bookingHeroNote">We are loading the latest cars and disabling booked dates inside each calendar now.</p>
+          <span class="hero-chip"><span class="badge-dot"></span> Premium Fleet Hub</span>
+          <h1 class="hero-headline">
+            RESERVE YOUR <span class="accent-text">VEHICLE.</span><br />
+            ZERO HIDDEN FEES.
+          </h1>
+          <p class="light-copy" id="bookingHeroNote">
+            Select trip dates, review transparent daily rates, pay securely, and collect your car using an instant PIN and QR handoff.
+          </p>
           <div class="hero-actions">
-            <a class="button button-secondary" href="/history.html">Open Booking Center</a>
+            <a class="button button-outline-light" href="/history.html">
+              <span>📋</span> My Rentals & Booking Center
+            </a>
+            <a class="button button-secondary" href="/carpool.html?tab=find">
+              <span>👥</span> Find Carpool Rides
+            </a>
           </div>
         </div>
         <div class="hero-aside" id="discountSpotlight"></div>
       </section>
 
+      <!-- Fleet Search & Available Vehicles -->
       <section class="panel">
         <div class="panel-head">
           <div class="panel-title">
-            <span class="eyebrow">Fleet Search</span>
-            <h2>Available cars and date windows</h2>
-            <p class="panel-copy">Booked dates are disabled directly inside the date picker so you only choose open days.</p>
+            <span class="eyebrow">Enterprise Fleet</span>
+            <h2>Available Cars & Date Windows</h2>
+            <p class="panel-copy">Booked dates are dynamically disabled inside the calendar so you only choose open schedules.</p>
           </div>
         </div>
-        <div class="toolbar">
+
+        <div class="toolbar" style="background: var(--surface-alt); padding: 18px 20px; border-radius: var(--radius-lg); border: 1px solid var(--border);">
           <div class="field-cluster">
-            <input class="search-input" id="carSearchInput" type="search" placeholder="Search by brand, model, or location" />
-            <select class="select" id="carLocationSelect">
-              <option value="all">All locations</option>
-            </select>
+            <div style="flex: 1; min-width: min(100%, 200px); position: relative;">
+              <input class="search-input" id="carSearchInput" type="search" placeholder="Search by brand, model, or city location..." />
+            </div>
+            <div style="flex: 0 1 240px; min-width: min(100%, 180px);">
+              <select class="select" id="carLocationSelect" style="width: 100%;">
+                <option value="all">All Fleet Locations</option>
+              </select>
+            </div>
           </div>
         </div>
-        <div class="fleet-grid" id="carGrid"></div>
+
+        <!-- 9. Car Cards Grid -->
+        <div class="fleet-grid" id="carGrid">
+          <!-- Premium Skeletons during loading -->
+          <div class="skeleton-card">
+            <div class="skeleton-shimmer" style="height: 180px; width: 100%; border-radius: 14px;"></div>
+            <div class="skeleton-shimmer" style="height: 24px; width: 60%;"></div>
+            <div class="skeleton-shimmer" style="height: 16px; width: 40%;"></div>
+            <div class="skeleton-shimmer" style="height: 40px; width: 100%;"></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-shimmer" style="height: 180px; width: 100%; border-radius: 14px;"></div>
+            <div class="skeleton-shimmer" style="height: 24px; width: 60%;"></div>
+            <div class="skeleton-shimmer" style="height: 16px; width: 40%;"></div>
+            <div class="skeleton-shimmer" style="height: 40px; width: 100%;"></div>
+          </div>
+          <div class="skeleton-card">
+            <div class="skeleton-shimmer" style="height: 180px; width: 100%; border-radius: 14px;"></div>
+            <div class="skeleton-shimmer" style="height: 24px; width: 60%;"></div>
+            <div class="skeleton-shimmer" style="height: 16px; width: 40%;"></div>
+            <div class="skeleton-shimmer" style="height: 40px; width: 100%;"></div>
+          </div>
+        </div>
       </section>
     </main>
 
     <footer class="site-footer">
-      <p>The booking page now shares the same customer-side payment, modal, and session logic as the dashboard and booking center.</p>
-      <span>© 2026 A6 Cars</span>
+      <p>A6 Cars Fleet Booking System. Contactless collection, verified fleet, and 24/7 road assistance.</p>
+      <span>© 2026 A6 Cars. All rights reserved.</span>
     </footer>
   </div>
 
@@ -72,4 +117,3 @@
   <script src="/user.js"></script>
 </body>
 </html>
-

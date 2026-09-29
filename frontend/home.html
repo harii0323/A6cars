@@ -4,9 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Customer Dashboard | A6 Cars</title>
+  <meta name="description" content="View active rentals, carpool journeys, QR passes, and notifications from your personal A6 Cars dashboard." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/user.css" />
 </head>
 <body data-page="home">
@@ -16,7 +17,7 @@
         <span class="brand-mark"><img class="brand-logo" src="/assets/a6cars-logo.png" alt="A6 Cars logo" /></span>
         <span>
           <strong>A6 Cars</strong>
-          <small>Customer dashboard</small>
+          <small>Customer Dashboard</small>
         </span>
       </a>
       <div class="nav-cluster">
@@ -26,28 +27,68 @@
     </header>
 
     <main class="page-shell">
+      <!-- 12. Dashboard Hero Section -->
       <section class="hero hero-grid">
+        <div class="ambient-3d-orb-container">
+          <div class="ambient-3d-orb orb-orange"></div>
+          <div class="ambient-3d-orb orb-cyan"></div>
+          <div class="ambient-3d-orb orb-violet"></div>
+        </div>
         <div class="hero-copy">
-          <span class="hero-chip">Customer Dashboard</span>
-          <h1 id="homeGreeting">Loading your dashboard.</h1>
-          <p class="light-copy" id="homeSubtitle">We are pulling your bookings, notifications, and offer status now.</p>
+          <span class="hero-chip"><span class="badge-dot"></span> Customer Control Center</span>
+          <h1 id="homeGreeting" class="hero-headline">Loading your dashboard...</h1>
+          <p class="light-copy" id="homeSubtitle">We are pulling your active reservations, collection QR codes, and notifications now.</p>
           <div class="hero-actions">
-            <a class="button button-primary" href="/book.html">Book a Car</a>
-            <a class="button button-secondary" href="/history.html">Open Booking Center</a>
+            <a class="button button-primary" href="/book.html">
+              <span>🚗</span> Book a Fleet Car
+            </a>
+            <a class="button button-secondary" href="/carpool.html?tab=create">
+              <span>➕</span> Offer a Ride
+            </a>
+            <a class="button button-outline-light" href="/history.html">
+              <span>📋</span> Open Booking Center
+            </a>
           </div>
         </div>
         <div class="hero-aside" id="homePriorityCard"></div>
       </section>
 
-      <section class="stats-grid" id="homeMetrics"></section>
+      <!-- Metrics Summary Grid -->
+      <section class="stats-grid" id="homeMetrics">
+        <article class="stat-card">
+          <div class="skeleton-shimmer" style="height: 16px; width: 50%; margin-bottom: 8px;"></div>
+          <div class="skeleton-shimmer" style="height: 38px; width: 40%;"></div>
+        </article>
+        <article class="stat-card">
+          <div class="skeleton-shimmer" style="height: 16px; width: 50%; margin-bottom: 8px;"></div>
+          <div class="skeleton-shimmer" style="height: 38px; width: 40%;"></div>
+        </article>
+        <article class="stat-card">
+          <div class="skeleton-shimmer" style="height: 16px; width: 50%; margin-bottom: 8px;"></div>
+          <div class="skeleton-shimmer" style="height: 38px; width: 40%;"></div>
+        </article>
+      </section>
 
+      <!-- Active Trips & Bookings in Motion -->
+      <section class="panel">
+        <div class="panel-head">
+          <div class="panel-title">
+            <span class="eyebrow">Active Reservations</span>
+            <h2>Bookings in Motion</h2>
+            <p class="panel-copy">Upcoming and active reservations stay here with payment status, Collection PIN, and Return QR passes.</p>
+          </div>
+        </div>
+        <div class="booking-grid" id="homeActiveList"></div>
+      </section>
+
+      <!-- Offers & Notifications Split -->
       <section class="section-grid">
         <article class="panel">
           <div class="panel-head">
             <div class="panel-title">
-              <span class="eyebrow">Offers</span>
-              <h2>Unused discounts</h2>
-              <p class="panel-copy">Any available booking discounts appear here before checkout.</p>
+              <span class="eyebrow">Discounts & Vouchers</span>
+              <h2>Available Offers</h2>
+              <p class="panel-copy">Active booking discount codes you can apply directly at checkout.</p>
             </div>
           </div>
           <div class="offer-grid" id="homeOffers"></div>
@@ -56,32 +97,22 @@
         <article class="panel">
           <div class="panel-head">
             <div class="panel-title">
-              <span class="eyebrow">Notifications</span>
-              <h2>Recent updates</h2>
-              <p class="panel-copy">Admin decisions, cancellation notes, and payment updates come through this stream.</p>
+              <span class="eyebrow">Live Activity</span>
+              <h2>Recent Updates</h2>
+              <p class="panel-copy">Rental approval decisions, return verifications, and payment notifications.</p>
             </div>
           </div>
           <div class="notification-list" id="homeNotifications"></div>
         </article>
       </section>
 
+      <!-- Past & Closed Trips -->
       <section class="panel">
         <div class="panel-head">
           <div class="panel-title">
-            <span class="eyebrow">Active Trips</span>
-            <h2>Bookings in motion</h2>
-            <p class="panel-copy">Upcoming and active reservations stay here with their payment and QR actions.</p>
-          </div>
-        </div>
-        <div class="booking-grid" id="homeActiveList"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <div class="panel-title">
-            <span class="eyebrow">Recent History</span>
-            <h2>Closed or older bookings</h2>
-            <p class="panel-copy">Completed and cancelled trips stay visible so nothing disappears after the trip ends.</p>
+            <span class="eyebrow">Trip History</span>
+            <h2>Closed & Past Bookings</h2>
+            <p class="panel-copy">Completed and cancelled journeys stay archived here for easy reference.</p>
           </div>
         </div>
         <div class="booking-grid" id="homePastList"></div>
@@ -89,8 +120,8 @@
     </main>
 
     <footer class="site-footer">
-      <p>The dashboard now shares the same customer-side system as booking and history, so session state and actions stay aligned.</p>
-      <span>© 2026 A6 Cars</span>
+      <p>A6 Cars Unified Customer Experience. Real-time updates and seamless trip coordination.</p>
+      <span>© 2026 A6 Cars. All rights reserved.</span>
     </footer>
   </div>
 
@@ -102,4 +133,3 @@
   <script src="/user.js"></script>
 </body>
 </html>
-

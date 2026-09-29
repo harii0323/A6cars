@@ -4,30 +4,36 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Customer Login | A6 Cars</title>
+  <meta name="description" content="Sign in to your A6 Cars customer account to manage active trips, payments, and QR passes." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/user.css" />
 </head>
 <body data-page="login">
   <section class="auth-shell">
+    <div class="ambient-3d-orb-container">
+      <div class="ambient-3d-orb orb-orange"></div>
+      <div class="ambient-3d-orb orb-cyan"></div>
+      <div class="ambient-3d-orb orb-violet"></div>
+    </div>
     <div class="auth-card">
       <div class="auth-copy">
-        <span class="hero-chip">Customer Sign In</span>
+        <span class="hero-chip"><span class="badge-dot"></span> Secure Member Access</span>
         <h1>Pick up where you left off.</h1>
-        <p>Use the upgraded customer workspace to check active trips, finish payments, review notifications, and pull your collection or return QR without hunting across multiple pages.</p>
+        <p>Use your customer workspace to inspect active fleet rentals, finish payments, review notifications, and access your collection and return QR passes.</p>
         <div class="auth-points">
           <article class="auth-point">
-            <strong>Dashboard first</strong>
-            <span>Open straight into the customer overview with live bookings and offers.</span>
+            <strong>Unified Dashboard</strong>
+            <span>Open straight into live bookings, vehicle statuses, and available discounts.</span>
           </article>
           <article class="auth-point">
-            <strong>Payment follow-through</strong>
-            <span>Pending reservations stay visible until you verify payment and receive your QR passes.</span>
+            <strong>Contactless Keyless Handoff</strong>
+            <span>Instant PIN & QR pass available as soon as your booking is confirmed.</span>
           </article>
           <article class="auth-point">
-            <strong>One booking center</strong>
-            <span>Collection, return, cancellation, and refund context now live in one route.</span>
+            <strong>Integrated Carpooling Hub</strong>
+            <span>Offer empty seats or join shared rides with verified drivers.</span>
           </article>
         </div>
       </div>
@@ -35,23 +41,30 @@
       <div class="auth-form-card">
         <span class="eyebrow">A6 Cars Login</span>
         <h2>Sign in to your account</h2>
-        <p class="form-copy">Enter the email and password you used when you registered.</p>
-        <form id="loginForm" class="field-grid">
-          <label class="field-block" style="grid-column: 1 / -1;">
+        <p class="form-copy">Enter the email and password you used during registration.</p>
+        <form id="loginForm" class="stack-list">
+          <label class="field-block">
             <span>Email address</span>
-            <input class="input" id="email" name="email" type="email" placeholder="you@example.com" required />
+            <input class="input" id="email" name="email" type="email" placeholder="you@example.com" required autocomplete="email" />
           </label>
-          <label class="field-block" style="grid-column: 1 / -1;">
+          <label class="field-block">
             <span>Password</span>
-            <input class="input" id="password" name="password" type="password" placeholder="Enter your password" required />
+            <div style="position: relative;">
+              <input class="input" id="password" name="password" type="password" placeholder="Enter your password" required autocomplete="current-password" />
+              <button type="button" onclick="const p = document.getElementById('password'); p.type = p.type === 'password' ? 'text' : 'password'; this.textContent = p.type === 'password' ? '👁️' : '🔒';" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 1rem; opacity: 0.7;">👁️</button>
+            </div>
           </label>
-          <div style="grid-column: 1 / -1;">
-            <button class="button button-primary" id="loginSubmitBtn" type="submit">Sign In</button>
+          <div style="margin-top: 6px;">
+            <button class="button button-primary button-full" id="loginSubmitBtn" type="submit" style="padding: 13px;">
+              Sign In to Account
+            </button>
           </div>
-          <div class="feedback" id="loginFeedback" style="grid-column: 1 / -1;"></div>
+          <div class="feedback" id="loginFeedback"></div>
         </form>
-        <p class="form-copy" style="margin-top: 18px;">New here? <a href="/register.html"><strong>Create your account</strong></a></p>
-        <p class="form-copy" style="margin-top: 8px;">Need admin access instead? <a href="/admin.html"><strong>Open admin login</strong></a></p>
+        <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px;">
+          <p class="form-copy" style="margin: 0;">New to A6 Cars? <a href="/register.html" style="color: var(--accent); font-weight: 700;">Create an account</a></p>
+          <p class="form-copy" style="margin: 0;">Staff or administrator? <a href="/admin.html" style="color: var(--text-secondary); text-decoration: underline;">Open admin login</a></p>
+        </div>
       </div>
     </div>
   </section>

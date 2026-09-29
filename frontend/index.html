@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>A6 Cars | Customer Experience</title>
+  <title>A6 Cars | Premium Car Rental & Carpooling Platform</title>
+  <meta name="description" content="Experience high-end automotive rentals and verified intercity carpooling with instant PIN handoffs and zero overbooking." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/user.css" />
 </head>
 <body data-page="landing">
@@ -16,7 +17,7 @@
         <span class="brand-mark"><img class="brand-logo" src="/assets/a6cars-logo.png" alt="A6 Cars logo" /></span>
         <span>
           <strong>A6 Cars</strong>
-          <small>Book, pay, and manage trips in one flow</small>
+          <small>Premium Fleet & Carpooling</small>
         </span>
       </a>
       <div class="nav-cluster">
@@ -26,51 +27,161 @@
     </header>
 
     <main class="page-shell">
+      <!-- 5. Hero Section (Layered Layout) -->
       <section class="hero hero-grid">
+        <div class="ambient-3d-orb-container">
+          <div class="ambient-3d-orb orb-orange"></div>
+          <div class="ambient-3d-orb orb-cyan"></div>
+          <div class="ambient-3d-orb orb-violet"></div>
+        </div>
+
         <div class="hero-copy">
-          <span class="hero-chip">Customer Side Rebuilt</span>
-          <h1 id="landingGreeting">Modern car rental, rebuilt around the customer flow.</h1>
-          <p class="light-copy">The user side now follows the same cleanup approach as admin: one shared design system, one shared app script, and a consistent route structure across landing, auth, dashboard, booking, and history.</p>
+          <span class="hero-chip"><span class="badge-dot"></span> Next-Gen Commercial Mobility</span>
+          <h1 id="landingGreeting" class="hero-headline">
+            YOUR <span class="accent-text">JOURNEY.</span><br />
+            YOUR <span class="gradient-text-alt">CAR.</span><br />
+            YOUR WAY.
+          </h1>
+          <p class="light-copy">
+            Rent pristine self-drive fleet vehicles, offer empty seats, or join verified intercity journeys. Transparent pricing, contactless collection PINs, and zero overbooking.
+          </p>
+          <div class="hero-actions" id="landingHeroActions">
+            <a class="button button-primary" href="/book.html">
+              <span>🚗</span> Explore Fleet
+            </a>
+            <a class="button button-outline-light" href="/carpool.html?tab=find">
+              <span>🔍</span> Find a Carpool
+            </a>
+            <a class="button button-secondary" href="/carpool.html?tab=add-vehicle">
+              <span>➕</span> Offer Your Car
+            </a>
+          </div>
           <div class="landing-actions" id="landingActions"></div>
         </div>
-        <div class="hero-aside" id="landingStatusCard"></div>
+
+        <div class="hero-aside">
+          <div class="hero-car-stage">
+            <div class="hero-3d-hologram-grid"></div>
+            <div class="hero-radar-ring"></div>
+            <div class="hero-car-glow"></div>
+            <div class="hero-scan-beam"></div>
+            <img class="hero-car-img" src="/assets/hero-car.jpg" alt="A6 Luxury Fleet Vehicle" />
+            
+            <div class="floating-3d-badge badge-top-right">
+              <span class="badge-icon">⚡</span>
+              <div>
+                <strong>HyperDrive Fleet</strong>
+                <small>100% Telematics Verified</small>
+              </div>
+            </div>
+
+            <div class="floating-3d-badge badge-top-left">
+              <span class="badge-icon">🚀</span>
+              <div>
+                <strong>Sport Aero Pack</strong>
+                <small>0-100 in 3.3s Dynamic</small>
+              </div>
+            </div>
+
+            <div class="floating-3d-badge badge-bottom-left">
+              <span class="badge-icon">🛡️</span>
+              <div>
+                <strong>Atomic Allocation</strong>
+                <small>Zero Overbooking Guarantee</small>
+              </div>
+            </div>
+          </div>
+          <div class="hero-floating-glass-card" id="landingStatusCard">
+            <span class="eyebrow">Enterprise Fleet Status</span>
+            <h3>Instant contactless keyless handoff ready across all hubs.</h3>
+            <p>100% verified vehicle maintenance, atomic seat allocation, and live reservation tracking.</p>
+            <div class="badge-row">
+              <span class="status-badge badge-success">● Fleet Active</span>
+              <span class="status-badge badge-neutral">⚡ Instant PIN</span>
+              <span class="status-badge badge-neutral">⭐ 4.9 Rating</span>
+            </div>
+          </div>
+        </div>
       </section>
 
+      <!-- 8. Advanced Floating Search Panel -->
+      <section class="floating-search-bar-wrap">
+        <form class="floating-search-panel" onsubmit="event.preventDefault(); const loc = document.getElementById('quickSearchLoc').value; const to = document.getElementById('quickSearchTo').value; if (to) { window.location.href = `/carpool.html?tab=find&from=${encodeURIComponent(loc)}&to=${encodeURIComponent(to)}`; } else { window.location.href = `/book.html?location=${encodeURIComponent(loc)}`; }">
+          <div class="search-field-segment">
+            <label for="quickSearchLoc"><span>📍</span> Pick-up / Origin</label>
+            <input id="quickSearchLoc" type="text" placeholder="e.g. Hyderabad, Bangalore, Mumbai" />
+          </div>
+          <div class="search-divider-line"></div>
+          <div class="search-field-segment">
+            <label for="quickSearchTo"><span>🏁</span> Destination (Carpool)</label>
+            <input id="quickSearchTo" type="text" placeholder="e.g. Vijayawada, Goa, Pune" />
+          </div>
+          <div class="search-divider-line"></div>
+          <div class="search-field-segment">
+            <label for="quickSearchDate"><span>📅</span> Travel Date</label>
+            <input id="quickSearchDate" type="date" />
+          </div>
+          <div class="search-divider-line"></div>
+          <div class="search-field-segment">
+            <label for="quickSearchGuests"><span>👥</span> Passengers / Seats</label>
+            <select id="quickSearchGuests">
+              <option value="1">1 Passenger</option>
+              <option value="2">2 Passengers</option>
+              <option value="3">3 Passengers</option>
+              <option value="4">4+ Passengers</option>
+            </select>
+          </div>
+          <button class="button button-primary" type="submit" style="padding: 14px 28px;">
+            <span>🔍</span> Search
+          </button>
+        </form>
+      </section>
+
+      <!-- Mobility Feature Grid -->
       <section class="feature-grid">
         <article class="feature-card">
-          <strong>Clear entry points</strong>
-          <p>Guests land on one focused welcome page, then move into login or signup without carrying page-specific logic everywhere.</p>
+          <div class="feature-icon">🚗</div>
+          <strong>Pristine Rental Fleet</strong>
+          <p>Instant reservation from our verified fleet with transparent pricing, contactless collection PINs, and zero waiting.</p>
         </article>
         <article class="feature-card">
-          <strong>One booking center</strong>
-          <p>Payments, cancellation actions, collection QR, return QR, and refund visibility all live inside the same booking timeline.</p>
+          <div class="feature-icon">📅</div>
+          <strong>Flexible Booking Model</strong>
+          <p>Book with just a 10% advance deposit or pay in full. Modify or cancel according to clear, fair travel policies.</p>
         </article>
         <article class="feature-card">
-          <strong>Shared customer shell</strong>
-          <p>Navbar state, feedback messages, session checks, modals, and API handling are now consistent across the user-facing experience.</p>
+          <div class="feature-icon">👥</div>
+          <strong>Verified Carpooling</strong>
+          <p>Split travel and toll expenses with verified drivers and riders across major intercity and suburban corridors.</p>
+        </article>
+        <article class="feature-card">
+          <div class="feature-icon">🛡️</div>
+          <strong>Zero Overbooking Guarantee</strong>
+          <p>Atomic seat reservation, verified driving credentials, mutual reviews, and 24/7 dedicated operational assistance.</p>
         </article>
       </section>
 
+      <!-- Section Grid: Architecture & Travel Options -->
       <section class="section-grid">
         <article class="panel">
           <div class="panel-head">
             <div class="panel-title">
-              <span class="eyebrow">Customer Journey</span>
-              <h2>From first visit to pickup</h2>
+              <span class="eyebrow">How It Works</span>
+              <h2>Two Ways to Travel</h2>
             </div>
           </div>
           <div class="stack-list">
             <article class="timeline-card">
-              <strong>1. Create an account or sign in</strong>
-              <p>Auth pages now plug into the same session layer instead of each page inventing its own version.</p>
+              <strong>1. Rent From Our Fleet</strong>
+              <p>Browse available cars, pick your trip dates with zero conflict, pay securely, and collect using your unique Collection PIN and QR pass.</p>
             </article>
             <article class="timeline-card">
-              <strong>2. Browse the fleet and lock dates</strong>
-              <p>Cars, blocked dates, and discount messaging all flow through one booking script.</p>
+              <strong>2. Offer or Join a Carpool</strong>
+              <p>Offer seats in your personal car or active rented vehicle. Or search open routes, send join requests, and travel comfortably.</p>
             </article>
             <article class="timeline-card">
-              <strong>3. Manage the trip after checkout</strong>
-              <p>Your dashboard and booking center keep payment verification, cancellation, and QR access in sync.</p>
+              <strong>3. Rate and Build Community Trust</strong>
+              <p>Leave transparent driver and co-passenger reviews after each journey to keep the community dependable and welcoming.</p>
             </article>
           </div>
         </article>
@@ -78,22 +189,22 @@
         <article class="panel">
           <div class="panel-head">
             <div class="panel-title">
-              <span class="eyebrow">Why This Upgrade Helps</span>
-              <h2>Less duplication, fewer surprises</h2>
+              <span class="eyebrow">Smart Flexibility</span>
+              <h2>Rented Car Carpooling</h2>
             </div>
           </div>
           <div class="stack-list">
             <article class="timeline-card">
-              <strong>Same UI language everywhere</strong>
-              <p>Moving between landing, booking, and history no longer feels like leaving one app for another.</p>
+              <strong>Valid Rental Window Protection</strong>
+              <p>When you rent an A6 car, you can seamlessly offer extra seats for carpooling strictly during your approved rental window.</p>
             </article>
             <article class="timeline-card">
-              <strong>Stronger route cleanup</strong>
-              <p>The old split between `booking.html` and `history.html` is resolved with one real booking surface and a redirect for old links.</p>
+              <strong>Recover Up to 60% of Rental Costs</strong>
+              <p>Cost-sharing lets you offset rental fees and toll charges while connecting with colleagues or fellow commuters.</p>
             </article>
             <article class="timeline-card">
-              <strong>Easier future changes</strong>
-              <p>When we update customer session logic or payment flow again, we only need to do it in one place.</p>
+              <strong>Unified Customer Dashboard</strong>
+              <p>Track your rental bookings, carpool trips created, rides joined, and passenger requests in one centralized interface.</p>
             </article>
           </div>
         </article>
@@ -101,8 +212,8 @@
     </main>
 
     <footer class="site-footer">
-      <p>Customer journeys now match the upgraded admin side: simpler structure, cleaner flows, and less duplicate code.</p>
-      <span>© 2026 A6 Cars</span>
+      <p>A6 Cars Commercial Fleet & Carpooling Platform. High-end mobility infrastructure.</p>
+      <span>© 2026 A6 Cars. All rights reserved.</span>
     </footer>
   </div>
 
@@ -113,4 +224,3 @@
   <script src="/user.js"></script>
 </body>
 </html>
-

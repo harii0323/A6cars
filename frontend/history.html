@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Booking Center | A6 Cars</title>
+  <title>Booking Center & Timeline | A6 Cars</title>
+  <meta name="description" content="Manage your car rentals, collection and return QR passes, payment status, and cancellation history in one centralized hub." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/user.css" />
 </head>
 <body data-page="history">
@@ -16,7 +17,7 @@
         <span class="brand-mark"><img class="brand-logo" src="/assets/a6cars-logo.png" alt="A6 Cars logo" /></span>
         <span>
           <strong>A6 Cars</strong>
-          <small>Booking center</small>
+          <small>Booking Center</small>
         </span>
       </a>
       <div class="nav-cluster">
@@ -26,58 +27,77 @@
     </header>
 
     <main class="page-shell">
+      <!-- Hero Section -->
       <section class="hero hero-grid">
+        <div class="ambient-3d-orb-container">
+          <div class="ambient-3d-orb orb-orange"></div>
+          <div class="ambient-3d-orb orb-cyan"></div>
+          <div class="ambient-3d-orb orb-violet"></div>
+        </div>
         <div class="hero-copy">
-          <span class="hero-chip">Booking Center</span>
-          <h1>One timeline for payments, cancellations, and QR access.</h1>
-          <p class="light-copy">This replaces the earlier split between multiple booking pages. Every reservation now sits in one filtered view with shared actions and summary cards.</p>
+          <span class="hero-chip"><span class="badge-dot"></span> Central Booking Center</span>
+          <h1 class="hero-headline">
+            ONE TIMELINE FOR <span class="accent-text">QR PASSES</span> & PAYMENTS.
+          </h1>
+          <p class="light-copy">
+            Every reservation sits in one filtered view with instant access to your contactless Collection PIN, return verification QR code, and cancellation refund tracking.
+          </p>
           <div class="hero-actions">
-            <a class="button button-primary" href="/book.html">Book Another Car</a>
+            <a class="button button-primary" href="/book.html">
+              <span>🚗</span> Book Another Fleet Car
+            </a>
+            <a class="button button-secondary" href="/carpool.html?tab=dashboard">
+              <span>👥</span> Open Carpool Hub
+            </a>
           </div>
         </div>
         <div class="hero-aside" id="historySummary"></div>
       </section>
 
+      <!-- Metrics -->
       <section class="stats-grid" id="historyMetrics"></section>
 
+      <!-- Available Discounts -->
       <section class="panel">
         <div class="panel-head">
           <div class="panel-title">
-            <span class="eyebrow">Discounts</span>
-            <h2>Offers still available</h2>
-            <p class="panel-copy">Unused discounts stay visible here so you can apply them before the next booking.</p>
+            <span class="eyebrow">Discounts & Credits</span>
+            <h2>Active Offers for Next Rental</h2>
+            <p class="panel-copy">Any discount granted by admin or from previous adjustments is ready for your checkout.</p>
           </div>
         </div>
         <div class="offer-grid" id="discountStrip"></div>
       </section>
 
+      <!-- Timeline & Filter Section -->
       <section class="panel">
         <div class="panel-head">
           <div class="panel-title">
-            <span class="eyebrow">Booking Timeline</span>
-            <h2>Filter and manage every reservation</h2>
-            <p class="panel-copy">Search by car or booking number, then filter by payment state or cancellation state.</p>
+            <span class="eyebrow">Trip Timeline</span>
+            <h2>Filter & Manage Every Reservation</h2>
+            <p class="panel-copy">Search by booking reference, vehicle brand, model, or location.</p>
           </div>
         </div>
-        <div class="toolbar">
-          <div class="field-cluster">
-            <input class="search-input" id="historySearchInput" type="search" placeholder="Search by booking (e.g. A6-2026-32 or 32), brand, model, or location" />
+
+        <div class="toolbar" style="background: var(--surface-alt); padding: 18px 24px; border-radius: var(--radius-lg); border: 1px solid var(--border); flex-direction: column; align-items: stretch; gap: 14px;">
+          <input class="search-input" id="historySearchInput" type="search" placeholder="Search by booking reference (e.g. A6-2026-32 or 32), brand, model, or city..." />
+
+          <div class="carpool-tab-bar" id="historyFilterBar" style="padding: 6px; box-shadow: none;">
+            <button class="carpool-tab-btn active" type="button" data-filter="all">All Trips</button>
+            <button class="carpool-tab-btn" type="button" data-filter="active">Active</button>
+            <button class="carpool-tab-btn" type="button" data-filter="awaiting-payment">Awaiting Payment</button>
+            <button class="carpool-tab-btn" type="button" data-filter="confirmed">Confirmed</button>
+            <button class="carpool-tab-btn" type="button" data-filter="cancelled">Cancelled</button>
           </div>
         </div>
-        <div class="filter-bar" id="historyFilterBar">
-          <button class="filter-pill active" type="button" data-filter="all">All</button>
-          <button class="filter-pill" type="button" data-filter="active">Active</button>
-          <button class="filter-pill" type="button" data-filter="awaiting-payment">Awaiting payment</button>
-          <button class="filter-pill" type="button" data-filter="confirmed">Confirmed</button>
-          <button class="filter-pill" type="button" data-filter="cancelled">Cancelled</button>
-        </div>
-        <div class="booking-grid" id="historyList"></div>
+
+        <div class="booking-grid" id="historyList" style="margin-top: 24px;"></div>
       </section>
     </main>
 
     <footer class="site-footer">
-      <p>The booking center now replaces duplicate history screens with one customer-owned route and one shared action model.</p>
-      <span>© 2026 A6 Cars</span>
+      <p>A6 Cars Centralized Booking Center. Frictionless payments and transparent digital receipts.</p>
+      <span>© 2026 A6 Cars. All rights reserved.</span>
     </footer>
   </div>
 
@@ -89,4 +109,3 @@
   <script src="/user.js"></script>
 </body>
 </html>
-
