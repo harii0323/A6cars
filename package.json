@@ -5,7 +5,8 @@
   "main": "frontend-server.js",
   "scripts": {
     "start": "node frontend-server.js",
-    "dev": "node frontend-server.js"
+    "dev": "node frontend-server.js",
+    "build": "echo \"Static frontend ready - no build step required\""
   },
   "dependencies": {
     "cors": "^2.8.5",

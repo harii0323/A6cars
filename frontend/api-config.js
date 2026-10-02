@@ -13,12 +13,12 @@
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     // Local development
     BACKEND_URL = 'http://localhost:10000';
-  } else if (hostname.includes('onrender.com')) {
-  // On Render platform - use the actual backend URL
-  BACKEND_URL = 'https://a6cars-backend-ylx7.onrender.com';
+  } else if (hostname.includes('onrender.com') || hostname.includes('amplifyapp.com')) {
+    // On Render platform or AWS Amplify - connect to backend hosted on Render
+    BACKEND_URL = 'https://a6cars-backend-ylx7.onrender.com';
   } else {
-    // Production with custom domain or other platform
-    BACKEND_URL = `${protocol}//api.${hostname}` || `${protocol}//backend.${hostname}`;
+    // Custom domain or other hosting platform (falls back to Render backend)
+    BACKEND_URL = window.CUSTOM_BACKEND_URL || 'https://a6cars-backend-ylx7.onrender.com';
   }
   
   // Store in window object for all scripts to access
